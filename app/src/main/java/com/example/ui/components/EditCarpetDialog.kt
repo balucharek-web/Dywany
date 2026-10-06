@@ -294,10 +294,21 @@ fun EditCarpetDialog(
                 if (product.pricePln != null && product.pricePln > 0.0) {
                     priceText = product.pricePln.toInt().toString()
                 }
+                if (product.promoPricePln != null && product.promoPricePln > 0.0) {
+                    promoPriceText = product.promoPricePln.toInt().toString()
+                }
                 if (product.collection.isNotBlank()) collection = product.collection
                 if (product.composition.isNotBlank()) composition = product.composition
-                val refInfo = if (product.refCode.isNotBlank()) " [Ref LM: ${product.refCode}]" else ""
-                notes = "Pobrano z Leroy Merlin (${barcode.trim()})$refInfo"
+                if (product.patternSuggestion in 0..5) patternType = product.patternSuggestion
+
+                val details = mutableListOf<String>()
+                if (product.refCode.isNotBlank()) details.add("Ref LM: ${product.refCode}")
+                if (product.color.isNotBlank()) details.add("Kolor: ${product.color}")
+                if (product.pileHeightMm.isNotBlank()) details.add("Runa: ${product.pileHeightMm}")
+                if (product.weightGsm.isNotBlank()) details.add("Waga: ${product.weightGsm}")
+
+                val detailsStr = if (details.isNotEmpty()) " [${details.joinToString(" • ")}]" else ""
+                notes = "Pobrano z Leroy Merlin (${barcode.trim()})$detailsStr"
                 showLeroyLookup = false
             },
             onDismiss = { showLeroyLookup = false }

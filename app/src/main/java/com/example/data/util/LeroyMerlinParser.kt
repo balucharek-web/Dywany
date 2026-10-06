@@ -102,6 +102,63 @@ object LeroyMerlinParser {
         }
     }
 
+    fun extractColor(text: String): String {
+        val lower = text.lowercase(Locale.ROOT)
+        val colors = listOf(
+            "beżowy" to "Beżowy",
+            "bezowy" to "Beżowy",
+            "szary" to "Szary",
+            "antracyt" to "Antracyt",
+            "kremowy" to "Kremowy",
+            "biały" to "Biały",
+            "bialy" to "Biały",
+            "zielony" to "Zielony",
+            "niebieski" to "Niebieski",
+            "granatowy" to "Granatowy",
+            "brązowy" to "Brązowy",
+            "brazowy" to "Brązowy",
+            "czarny" to "Czarny",
+            "terakota" to "Terakota",
+            "różowy" to "Różowy",
+            "rozowy" to "Różowy",
+            "musztardowy" to "Musztardowy",
+            "wielokolorowy" to "Wielokolorowy"
+        )
+        for ((pattern, name) in colors) {
+            val reg = Regex("\\b$pattern\\b", RegexOption.IGNORE_CASE)
+            if (reg.containsMatchIn(lower)) return name
+        }
+        return ""
+    }
+
+    fun extractPileHeight(text: String): String {
+        val reg = Regex("(?:wysokość runa|grubość)[:\\s]*(\\d{1,2}(?:[.,]\\d)?)\\s*mm", RegexOption.IGNORE_CASE)
+        val match = reg.find(text)
+        if (match != null) return "${match.groupValues[1]} mm"
+        val generalMm = Regex("\\b(\\d{1,2})\\s*mm\\b", RegexOption.IGNORE_CASE).find(text)
+        return generalMm?.value ?: ""
+    }
+
+    fun extractWeight(text: String): String {
+        val reg = Regex("(?:gramatura|waga)[:\\s]*(\\d{3,4})\\s*g/m[²2]?", RegexOption.IGNORE_CASE)
+        val match = reg.find(text)
+        if (match != null) return "${match.groupValues[1]} g/m²"
+        val generalGsm = Regex("\\b(\\d{3,4})\\s*g/m[²2]?\\b", RegexOption.IGNORE_CASE).find(text)
+        return generalGsm?.value ?: ""
+    }
+
+    fun extractPatternSuggestion(title: String, description: String = ""): Int {
+        val text = "$title $description".lowercase(Locale.ROOT)
+        return when {
+            text.contains("shaggy") || text.contains("rabbit") || text.contains("plusz") -> 4 // Shaggy / Plusz
+            text.contains("pers") || text.contains("vintage") || text.contains("orient") || text.contains("tradycyjn") -> 1 // Perski / Vintage
+            text.contains("geometr") || text.contains("romb") || text.contains("marokańsk") -> 0 // Geometryczny
+            text.contains("juta") || text.contains("sznurkow") || text.contains("płaskotkan") || text.contains("boho") -> 3 // Juta / Płaskotkany
+            text.contains("klasycz") || text.contains("ornament") -> 2 // Klasyczny
+            else -> 0
+        }
+    }
+
     fun extractRefCode(input: String): String {
         // Find 8-digit Leroy Merlin product code (Ref)
         val urlMatch = Regex("-(\\d{7,9})\\.html").find(input)
@@ -137,6 +194,10 @@ object LeroyMerlinParser {
                 val size = extractSize(title)
                 val collection = extractCollection(title)
                 val composition = extractComposition(title)
+                val color = extractColor(title)
+                val pile = extractPileHeight(trimmed)
+                val weight = extractWeight(trimmed)
+                val pattern = extractPatternSuggestion(title)
 
                 return LeroyMerlinProduct(
                     title = title,
@@ -146,7 +207,11 @@ object LeroyMerlinParser {
                     composition = composition,
                     barcode = fallbackBarcode,
                     productUrl = trimmed,
-                    refCode = refCode
+                    refCode = refCode,
+                    color = color,
+                    pileHeightMm = pile,
+                    weightGsm = weight,
+                    patternSuggestion = pattern
                 )
             }
         }
@@ -162,6 +227,10 @@ object LeroyMerlinParser {
             val collection = extractCollection(fullText).ifBlank { extractCollection(cleanTitle) }
             val composition = extractComposition(fullText).ifBlank { extractComposition(cleanTitle) }
             val ref = extractRefCode(fullText)
+            val color = extractColor(fullText).ifBlank { extractColor(cleanTitle) }
+            val pile = extractPileHeight(fullText)
+            val weight = extractWeight(fullText)
+            val pattern = extractPatternSuggestion(cleanTitle, fullText)
 
             return LeroyMerlinProduct(
                 title = cleanTitle,
@@ -171,7 +240,11 @@ object LeroyMerlinParser {
                 composition = composition,
                 barcode = fallbackBarcode,
                 productUrl = if (trimmed.startsWith("http")) trimmed else "",
-                refCode = ref
+                refCode = ref,
+                color = color,
+                pileHeightMm = pile,
+                weightGsm = weight,
+                patternSuggestion = pattern
             )
         }
 

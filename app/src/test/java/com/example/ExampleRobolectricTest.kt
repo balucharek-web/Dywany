@@ -157,5 +157,29 @@ class ExampleRobolectricTest {
         assertEquals("160x230 cm", parsed?.size)
         assertEquals("Inspire", parsed?.collection)
         assertEquals("100% Wełna", parsed?.composition)
+        assertEquals("Beżowy", parsed?.color)
+    }
+
+    @Test
+    fun `leroy merlin parser extracts full specifications from text`() {
+        val parser = com.example.data.util.LeroyMerlinParser
+        val text = """
+            Dywan Inspire Agnus 200x300 cm szary
+            Cena: 799,00 zł
+            Wysokość runa: 12 mm
+            Gramatura: 2400 g/m²
+            Skład: 100% Wełna
+            Ref: 82112233
+        """.trimIndent()
+        val parsed = parser.parsePastedTextOrUrl(text, fallbackBarcode = "5909999999999")
+        assertNotNull(parsed)
+        assertEquals("Dywan Inspire Agnus 200x300 cm szary", parsed?.title)
+        assertEquals(799.0, parsed?.pricePln ?: 0.0, 0.01)
+        assertEquals("200x300 cm", parsed?.size)
+        assertEquals("Inspire", parsed?.collection)
+        assertEquals("Szary", parsed?.color)
+        assertEquals("12 mm", parsed?.pileHeightMm)
+        assertEquals("2400 g/m²", parsed?.weightGsm)
+        assertEquals("82112233", parsed?.refCode)
     }
 }
