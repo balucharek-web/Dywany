@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,40 +17,43 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.FactCheck
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Carpet
-import com.example.data.model.DisplayStand
 import com.example.ui.MainViewModel
+import com.example.ui.components.CarpetPatternBadge
 import com.example.ui.scanner.CameraScannerView
 import kotlinx.coroutines.delay
 
@@ -62,188 +66,169 @@ fun ScannerScreen(
     val stands by viewModel.stands.collectAsState()
     val carpets by viewModel.carpets.collectAsState()
 
-    val carpetsById = remember(carpets) { carpets.associateBy { it.id } }
+    val standsById = remember(stands) { stands.associateBy { it.id } }
 
-    var scannerMode by remember { mutableIntStateOf(0) } // 0 = Szybkie skanowanie, 1 = Audyt ekspozycji
-    var selectedAuditStand by remember { mutableStateOf<DisplayStand?>(null) }
-    var auditAuditMessage by remember { mutableStateOf<String?>(null) }
-    var auditMisplacedCarpet by remember { mutableStateOf<Carpet?>(null) }
-    var auditTargetSlot by remember { mutableIntStateOf(1) }
+    var lastScannedBarcode by remember { mutableStateOf("") }
+    var detectedCarpet by remember { mutableStateOf<Carpet?>(null) }
+    var manualInput by remember { mutableStateOf("") }
 
-    LaunchedEffect(stands) {
-        if (selectedAuditStand == null && stands.isNotEmpty()) {
-            selectedAuditStand = stands.first()
+    LaunchedEffect(lastScannedBarcode, carpets) {
+        if (lastScannedBarcode.isNotBlank()) {
+            val clean = lastScannedBarcode.trim()
+            detectedCarpet = carpets.firstOrNull { it.barcode.equals(clean, ignoreCase = true) }
         }
     }
 
     LaunchedEffect(scanBannerMessage) {
         if (scanBannerMessage != null) {
-            delay(5000)
+            delay(6000)
             viewModel.scanBannerMessage.value = null
         }
     }
 
+    fun handleBarcode(code: String) {
+        val clean = code.trim()
+        if (clean.isBlank()) return
+        lastScannedBarcode = clean
+        viewModel.onBarcodeDetected(clean)
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
+        // Podgląd kamery
         CameraScannerView(
             onBarcodeDetected = { barcode ->
-                if (scannerMode == 0) {
-                    viewModel.onBarcodeDetected(barcode)
-                } else {
-                    // Tryb Audytu ekspozycji
-                    val stand = selectedAuditStand
-                    if (stand != null) {
-                        val scannedCarpet = carpets.find { it.barcode.equals(barcode.trim(), ignoreCase = true) }
-                        if (scannedCarpet != null) {
-                            val expectedCarpet1 = stand.slot1CarpetId?.let { carpetsById[it] }
-                            val expectedCarpet2 = stand.slot2CarpetId?.let { carpetsById[it] }
-
-                            if (scannedCarpet.id == expectedCarpet1?.id) {
-                                auditAuditMessage = "✓ ZGODNY: ${scannedCarpet.name} prawidłowo wisi w Slocie 1!"
-                                auditMisplacedCarpet = null
-                            } else if (scannedCarpet.id == expectedCarpet2?.id) {
-                                auditAuditMessage = "✓ ZGODNY: ${scannedCarpet.name} prawidłowo wisi w Slocie 2!"
-                                auditMisplacedCarpet = null
-                            } else {
-                                auditAuditMessage = "⚠️ Zauważono inny dywan: ${scannedCarpet.name}!"
-                                auditMisplacedCarpet = scannedCarpet
-                            }
-                        } else {
-                            viewModel.onBarcodeDetected(barcode)
-                        }
-                    } else {
-                        viewModel.onBarcodeDetected(barcode)
-                    }
-                }
+                handleBarcode(barcode)
             },
             modifier = Modifier.fillMaxSize()
         )
 
-        // Przełącznik trybu na górze ekranu
+        // Górna belka informacyjna i wyniki
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .padding(top = 90.dp, start = 16.dp, end = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(top = 80.dp, start = 16.dp, end = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = Color.Black.copy(alpha = 0.75f)
-            ) {
-                TabRow(
-                    selectedTabIndex = scannerMode,
-                    containerColor = Color.Transparent,
-                    contentColor = Color.White,
-                    modifier = Modifier.height(44.dp)
-                ) {
-                    Tab(
-                        selected = scannerMode == 0,
-                        onClick = { scannerMode = 0 },
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Szybkie sprawdzanie", fontSize = 12.sp)
-                            }
-                        }
-                    )
-                    Tab(
-                        selected = scannerMode == 1,
-                        onClick = { scannerMode = 1 },
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.FactCheck, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Audyt ekspozycji", fontSize = 12.sp)
-                            }
-                        }
-                    )
-                }
-            }
-
-            // Panel Audytu: wybór stanowiska i weryfikacja
-            AnimatedVisibility(visible = scannerMode == 1 && selectedAuditStand != null) {
-                val stand = selectedAuditStand
-                if (stand != null) {
-                    val exp1 = stand.slot1CarpetId?.let { carpetsById[it] }
-                    val exp2 = stand.slot2CarpetId?.let { carpetsById[it] }
+            // Wynik skanowania: Karta z lokalizacją dywanu w kontenerze
+            AnimatedVisibility(visible = detectedCarpet != null) {
+                detectedCarpet?.let { carpet ->
+                    val stand = carpet.currentStandId?.let { standsById[it] }
+                    val placeText = if (stand != null && carpet.currentSlot != null) {
+                        "Kontener ${stand.code} • Miejsce ${stand.code}${if (carpet.currentSlot == 1) "a" else "b"}"
+                    } else {
+                        "Nieprzypisany do żadnego kontenera"
+                    }
 
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("scanned_carpet_card"),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                     ) {
                         Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = "Audyt: ${stand.name} (${stand.code})",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
-                                )
-
-                                // Wybór innego stanowiska
-                                Text(
-                                    text = "Następne ➔",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.clickable {
-                                        val idx = stands.indexOf(stand)
-                                        selectedAuditStand = stands[(idx + 1) % stands.size]
-                                        auditAuditMessage = null
-                                        auditMisplacedCarpet = null
-                                    }
-                                )
-                            }
-
-                            Text(
-                                text = "Slot 1: ${exp1?.name ?: "(Pusty)"} | Slot 2: ${exp2?.name ?: "(Pusty)"}",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-
-                            if (auditAuditMessage != null) {
-                                Text(
-                                    text = auditAuditMessage ?: "",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (auditMisplacedCarpet == null) Color(0xFF2E7D32) else Color(0xFFD84315)
-                                )
-                            }
-
-                            // Przycisk szybkiej korekty niezgodności
-                            if (auditMisplacedCarpet != null) {
-                                val misplaced = auditMisplacedCarpet!!
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (stand != null) Color(0xFFE8F5E9) else Color(0xFFFFF3E0)
                                 ) {
-                                    Button(
-                                        onClick = {
-                                            viewModel.assignCarpetToStand(misplaced.id, stand.id, 1)
-                                            auditAuditMessage = "✓ Zaktualizowano! ${misplaced.name} przypisany do Slot 1."
-                                            auditMisplacedCarpet = null
-                                        },
-                                        modifier = Modifier.weight(1f)
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text("Wstaw w Slot 1", fontSize = 11.sp)
+                                        Icon(
+                                            imageVector = Icons.Default.LocationOn,
+                                            contentDescription = null,
+                                            tint = if (stand != null) Color(0xFF2E7D32) else Color(0xFFE65100),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = placeText,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (stand != null) Color(0xFF2E7D32) else Color(0xFFE65100)
+                                        )
                                     }
+                                }
+
+                                IconButton(
+                                    onClick = { detectedCarpet = null },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "Zamknij", modifier = Modifier.size(16.dp))
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CarpetPatternBadge(patternType = carpet.patternType, size = 44.dp)
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = carpet.name,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Wymiary: ${carpet.size} • Kod: ${carpet.barcode}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "Cena: ${carpet.pricePln.toInt()} zł",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+
+                            // Przyciski akcji
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = { viewModel.selectedCarpetForDetail.value = carpet },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Szczegóły", fontSize = 12.sp)
+                                }
+
+                                if (stand != null && carpet.currentSlot != null) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            viewModel.clearStandSlot(stand.id, carpet.currentSlot!!)
+                                            detectedCarpet = null
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                                    ) {
+                                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Zwolnij miejsce", fontSize = 12.sp)
+                                    }
+                                } else {
                                     Button(
                                         onClick = {
-                                            viewModel.assignCarpetToStand(misplaced.id, stand.id, 2)
-                                            auditAuditMessage = "✓ Zaktualizowano! ${misplaced.name} przypisany do Slot 2."
-                                            auditMisplacedCarpet = null
+                                            viewModel.carpetForAssignment.value = carpet
                                         },
-                                        modifier = Modifier.weight(1f)
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                                     ) {
-                                        Text("Wstaw w Slot 2", fontSize = 11.sp)
+                                        Text("Przypisz do miejsca", fontSize = 12.sp)
                                     }
                                 }
                             }
@@ -252,15 +237,13 @@ fun ScannerScreen(
                 }
             }
 
-            // Normalny banner z wynikiem
-            AnimatedVisibility(visible = scannerMode == 0 && scanBannerMessage != null) {
+            // Normalny baner systemowy (gdy np. zeskanowano coś innego)
+            AnimatedVisibility(visible = detectedCarpet == null && scanBannerMessage != null) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF1B5E20).copy(alpha = 0.95f),
+                    color = Color.Black.copy(alpha = 0.85f),
                     shadowElevation = 8.dp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("scan_result_banner")
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
                         text = scanBannerMessage ?: "",
@@ -269,6 +252,58 @@ fun ScannerScreen(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(14.dp)
                     )
+                }
+            }
+        }
+
+        // Dolny pasek ręcznego wprowadzania kodu / miejsca (np. gdy użytkownik wpisuje numer ręcznie)
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+            shadowElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Skieruj aparat na kod kreskowy lub wpisz ręcznie:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = manualInput,
+                        onValueChange = { manualInput = it },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("manual_barcode_input"),
+                        placeholder = { Text("Kod lub miejsce (np. 1a)...", fontSize = 12.sp) },
+                        leadingIcon = { Icon(Icons.Default.QrCode, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Button(
+                        onClick = {
+                            if (manualInput.isNotBlank()) {
+                                handleBarcode(manualInput)
+                                manualInput = ""
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Szukaj", fontSize = 12.sp)
+                    }
                 }
             }
         }

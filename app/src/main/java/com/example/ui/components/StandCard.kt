@@ -15,12 +15,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material.icons.filled.Unarchive
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -30,7 +29,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,12 +53,44 @@ fun StandCard(
     carpet1: Carpet?,
     carpet2: Carpet?,
     onSlotClick: (standId: String, slotNumber: Int, currentCarpet: Carpet?) -> Unit,
-    onRemoveFromSlot: (carpetId: String) -> Unit,
+    onClearSlot: (standId: String, slotNumber: Int) -> Unit,
     onSwapSlots: (standId: String) -> Unit,
-    onEditStand: (stand: DisplayStand) -> Unit,
+    onDeleteStand: (standId: String) -> Unit,
     onCarpetClick: (Carpet) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+
+    val placeAName = "Miejsce ${stand.code}a"
+    val placeBName = "Miejsce ${stand.code}b"
+
+    if (showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            title = {
+                Text("Usunąć ${stand.name}?", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Text("Czy na pewno chcesz usunąć ten kontener? Miejsca ${stand.code}a i ${stand.code}b zostaną usunięte, a ewentualne dywany zostaną zdjęte z ekspozycji.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirmDialog = false
+                        onDeleteStand(stand.id)
+                    }
+                ) {
+                    Text("Usuń kontener", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text("Anuluj")
+                }
+            }
+        )
+    }
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -70,27 +106,30 @@ fun StandCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Nagłówek stanowiska
+            // Nagłówek kontenera
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.padding(end = 8.dp)
-                        ) {
-                            Text(
-                                text = stand.code,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.padding(end = 10.dp)
+                    ) {
+                        Text(
+                            text = "Nr ${stand.code}",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                    Column {
                         Text(
                             text = stand.name,
                             style = MaterialTheme.typography.titleMedium,
@@ -98,118 +137,115 @@ fun StandCard(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                    }
-
-                    if (stand.section.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = stand.section,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            text = "Miejsca: ${stand.code}a oraz ${stand.code}b",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
-                // Wskaźnik zapełnienia stanowiska (max 2)
-                val statusBg = when {
-                    stand.isFull -> Color(0xFFE8F5E9)
-                    stand.occupiedCount == 1 -> Color(0xFFFFF8E1)
-                    else -> Color(0xFFECEFF1)
-                }
-                val statusTextCol = when {
-                    stand.isFull -> Color(0xFF2E7D32)
-                    stand.occupiedCount == 1 -> Color(0xFFF57F17)
-                    else -> Color(0xFF546E7A)
-                }
-                val statusLabel = when {
-                    stand.isFull -> "Pełne (2/2)"
-                    stand.occupiedCount == 1 -> "1 wolne (1/2)"
-                    else -> "Puste (0/2)"
-                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Wskaźnik zapełnienia
+                    val statusBg = when {
+                        stand.isFull -> Color(0xFFE8F5E9)
+                        stand.occupiedCount == 1 -> Color(0xFFFFF8E1)
+                        else -> Color(0xFFECEFF1)
+                    }
+                    val statusTextCol = when {
+                        stand.isFull -> Color(0xFF2E7D32)
+                        stand.occupiedCount == 1 -> Color(0xFFF57F17)
+                        else -> Color(0xFF546E7A)
+                    }
+                    val statusLabel = when {
+                        stand.isFull -> "Pełne (2/2)"
+                        stand.occupiedCount == 1 -> "1 wolne (1/2)"
+                        else -> "Puste (0/2)"
+                    }
 
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = statusBg
-                ) {
-                    Text(
-                        text = statusLabel,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = statusTextCol
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = statusBg,
+                        modifier = Modifier.padding(end = 4.dp)
+                    ) {
+                        Text(
+                            text = statusLabel,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = statusTextCol
+                        )
+                    }
+
+                    // Przycisk usunięcia kontenera
+                    IconButton(
+                        onClick = { showDeleteConfirmDialog = true },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .testTag("delete_stand_btn_${stand.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Usuń kontener",
+                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Dwa sloty ekspozycyjne (Slot 1 i Slot 2)
+            // Dwa miejsca kontenera: Miejsce Xa i Miejsce Xb
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // SLOT 1 (Lewe / Przód)
+                // MIEJSCE A (Slot 1)
                 SlotView(
-                    slotTitle = "Miejsce 1 (Lewe)",
-                    slotNumber = 1,
+                    placeName = placeAName,
+                    placeLetter = "a",
                     carpet = carpet1,
                     onAssignClick = { onSlotClick(stand.id, 1, carpet1) },
-                    onRemoveClick = { carpet1?.let { onRemoveFromSlot(it.id) } },
+                    onClearClick = { onClearSlot(stand.id, 1) },
                     onCarpetClick = { carpet1?.let { onCarpetClick(it) } },
                     modifier = Modifier.weight(1f)
                 )
 
-                // SLOT 2 (Prawe / Tył)
+                // MIEJSCE B (Slot 2)
                 SlotView(
-                    slotTitle = "Miejsce 2 (Prawe)",
-                    slotNumber = 2,
+                    placeName = placeBName,
+                    placeLetter = "b",
                     carpet = carpet2,
                     onAssignClick = { onSlotClick(stand.id, 2, carpet2) },
-                    onRemoveClick = { carpet2?.let { onRemoveFromSlot(it.id) } },
+                    onClearClick = { onClearSlot(stand.id, 2) },
                     onCarpetClick = { carpet2?.let { onCarpetClick(it) } },
                     modifier = Modifier.weight(1f)
                 )
             }
 
-            // Pasek narzędziowy stanowiska
-            if (carpet1 != null || carpet2 != null || stand.notes.isNotBlank()) {
+            // Pasek zamiany miejsc (a <-> b)
+            if (carpet1 != null || carpet2 != null) {
                 Spacer(modifier = Modifier.height(10.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (stand.notes.isNotBlank()) {
-                        Text(
-                            text = "ℹ ${stand.notes}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
+                    OutlinedButton(
+                        onClick = { onSwapSlots(stand.id) },
+                        modifier = Modifier.testTag("swap_slots_btn_${stand.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SwapHoriz,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
                         )
-                    } else {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-
-                    if (carpet1 != null || carpet2 != null) {
-                        OutlinedButton(
-                            onClick = { onSwapSlots(stand.id) },
-                            modifier = Modifier.testTag("swap_slots_btn_${stand.id}")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.SwapHoriz,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Zamień 1 ⇄ 2",
-                                fontSize = 12.sp
-                            )
-                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Zamień ${stand.code}a ⇄ ${stand.code}b",
+                            fontSize = 12.sp
+                        )
                     }
                 }
             }
@@ -219,20 +255,20 @@ fun StandCard(
 
 @Composable
 private fun SlotView(
-    slotTitle: String,
-    slotNumber: Int,
+    placeName: String,
+    placeLetter: String,
     carpet: Carpet?,
     onAssignClick: () -> Unit,
-    onRemoveClick: () -> Unit,
+    onClearClick: () -> Unit,
     onCarpetClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (carpet != null) {
-        // Zajęty slot
+        // ZAJĘTE MIEJSCE W KONTENERZE
         Card(
             modifier = modifier
                 .clickable { onCarpetClick() }
-                .testTag("slot_${slotNumber}_occupied"),
+                .testTag("slot_${placeLetter}_occupied"),
             shape = RoundedCornerShape(14.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surface
@@ -249,52 +285,36 @@ private fun SlotView(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = slotTitle,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Text(
+                            text = placeName,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+
+                    // Przycisk zwolnienia miejsca (miejsce pozostaje puste)
                     IconButton(
-                        onClick = onRemoveClick,
-                        modifier = Modifier.size(24.dp)
+                        onClick = onClearClick,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .testTag("clear_slot_btn_${placeLetter}")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Unarchive,
-                            contentDescription = "Zdejmij do magazynu",
-                            modifier = Modifier.size(16.dp),
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Zwolnij miejsce (pozostanie puste)",
+                            modifier = Modifier.size(18.dp),
                             tint = MaterialTheme.colorScheme.error
                         )
                     }
                 }
 
-                // Badge rezerwacji lub dni na ekspozycji
-                if (carpet.isReserved) {
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = Color(0xFFFFF8E1),
-                        modifier = Modifier.padding(vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "★ ZAREZERWOWANY",
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFFF57F17)
-                        )
-                    }
-                } else if (carpet.displaySinceTimestamp != null) {
-                    val days = carpet.daysOnDisplay
-                    val pillColor = if (days > 60) Color(0xFFC2185B) else Color(0xFF757575)
-                    Text(
-                        text = "wisi: $days dni",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = pillColor
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -323,7 +343,7 @@ private fun SlotView(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Etykieta ESL i cena
+                // Kod kreskowy i cena
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -381,10 +401,10 @@ private fun SlotView(
             }
         }
     } else {
-        // Pusty slot (wolne miejsce)
+        // PUSTE MIEJSCE W KONTENERZE (Zgodnie z wymaganiem: "gdy usunę produkt z miejsca zostaje ono puste")
         Box(
             modifier = modifier
-                .height(148.dp)
+                .height(156.dp)
                 .clip(RoundedCornerShape(14.dp))
                 .border(
                     width = 1.5.dp,
@@ -394,26 +414,32 @@ private fun SlotView(
                 .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f))
                 .clickable { onAssignClick() }
                 .padding(10.dp)
-                .testTag("slot_${slotNumber}_empty"),
+                .testTag("slot_${placeLetter}_empty"),
             contentAlignment = Alignment.Center
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Text(
-                    text = slotTitle,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Text(
+                        text = "$placeName (Puste)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(10.dp))
                 Icon(
                     imageVector = Icons.Default.Add,
-                    contentDescription = "Wolne miejsce",
+                    contentDescription = "Puste miejsce",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(28.dp)
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "+ Wstaw dywan",
                     style = MaterialTheme.typography.labelMedium,

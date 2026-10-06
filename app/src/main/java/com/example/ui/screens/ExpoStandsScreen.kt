@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,15 +18,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.ViewAgenda
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -36,30 +37,29 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Carpet
 import com.example.data.model.DisplayStand
 import com.example.ui.MainViewModel
 import com.example.ui.StandFilter
-import com.example.ui.components.CarpetPatternBadge
 import com.example.ui.components.StandCard
 
 @Composable
@@ -73,11 +73,11 @@ fun ExpoStandsScreen(
     val carpets by viewModel.carpets.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val standFilter by viewModel.standFilter.collectAsState()
-    val selectedSection by viewModel.selectedSection.collectAsState()
 
-    var viewModeTab by remember { mutableIntStateOf(0) } // 0 = Lista, 1 = Plan Alei
+    var showClearAllConfirmDialog by remember { mutableStateOf(false) }
 
     val carpetsById = remember(carpets) { carpets.associateBy { it.id } }
+    val standsById = remember(allStands) { allStands.associateBy { it.id } }
 
     // Obliczenia statystyk ekspozycji
     val totalStands = allStands.size
@@ -89,8 +89,50 @@ fun ExpoStandsScreen(
     }
     val totalFree = totalCapacity - totalOccupied
 
-    val distinctSections = remember(allStands) {
-        allStands.map { it.section }.filter { it.isNotBlank() }.distinct()
+    // Sugerowany kolejny numer kontenera
+    val nextSuggestedNumber = remember(allStands) {
+        val existingNums = allStands.mapNotNull { it.code.toIntOrNull() }
+        if (existingNums.isEmpty()) "1" else (existingNums.maxOrNull()!! + 1).toString()
+    }
+
+    // Sprawdzenie, czy zapytanie dokładnie pasuje do jakiegoś dywanu
+    val matchedCarpet = remember(searchQuery, carpets) {
+        if (searchQuery.isBlank()) null
+        else {
+            val q = searchQuery.trim().lowercase()
+            carpets.firstOrNull { c ->
+                val stand = c.currentStandId?.let { standsById[it] }
+                val placeCode = if (stand != null && c.currentSlot != null) {
+                    "${stand.code}${if (c.currentSlot == 1) "a" else "b"}"
+                } else ""
+                c.barcode.equals(q, ignoreCase = true) ||
+                placeCode.equals(q, ignoreCase = true) ||
+                c.name.equals(q, ignoreCase = true)
+            }
+        }
+    }
+
+    if (showClearAllConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearAllConfirmDialog = false },
+            title = { Text("Wyczyścić wszystkie kontenery?", fontWeight = FontWeight.Bold) },
+            text = { Text("Wszystkie istniejące kontenery zostaną usunięte z bazy, abyś mógł dodać fizyczne kontenery od nowa.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClearAllConfirmDialog = false
+                        viewModel.clearAllStands()
+                    }
+                ) {
+                    Text("Wyczyść wszystko", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearAllConfirmDialog = false }) {
+                    Text("Anuluj")
+                }
+            }
+        )
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -101,53 +143,31 @@ fun ExpoStandsScreen(
         ) {
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Przełącznik widoku: Lista vs Plan Alei
-            TabRow(
-                selectedTabIndex = viewModeTab,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .testTag("expo_view_mode_tabs"),
-                containerColor = MaterialTheme.colorScheme.surfaceContainer
-            ) {
-                Tab(
-                    selected = viewModeTab == 0,
-                    onClick = { viewModeTab = 0 },
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.ViewAgenda, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Lista stanowisk")
-                        }
-                    }
-                )
-                Tab(
-                    selected = viewModeTab == 1,
-                    onClick = { viewModeTab = 1 },
-                    text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Plan alei salonu")
-                        }
-                    }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Wyszukiwarka
+            // Wyszukiwarka: po kodzie kreskowym, miejscu (1a, 2b) lub nazwie
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { viewModel.searchQuery.value = it },
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("expo_search_field"),
-                placeholder = { Text("Szukaj stanowiska, kodu ESL, dywanu...") },
+                placeholder = { Text("Szukaj: kod kreskowy, miejsce (np. 1a, 2b)...", fontSize = 13.sp) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.searchQuery.value = "" }) {
-                            Icon(Icons.Default.Close, contentDescription = "Wyczyść")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.searchQuery.value = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "Wyczyść")
+                            }
+                        }
+                        IconButton(
+                            onClick = onNavigateToScanner,
+                            modifier = Modifier.testTag("search_scanner_shortcut_btn")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.QrCodeScanner,
+                                contentDescription = "Skanuj kod kreskowy",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                 },
@@ -155,404 +175,251 @@ fun ExpoStandsScreen(
                 shape = RoundedCornerShape(14.dp)
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            // Wyświetlenie dopasowanego dywanu jeśli wyszukiwano po kodzie lub miejscu
+            AnimatedVisibility(visible = matchedCarpet != null) {
+                matchedCarpet?.let { carpet ->
+                    val stand = carpet.currentStandId?.let { standsById[it] }
+                    val placeText = if (stand != null && carpet.currentSlot != null) {
+                        "Kontener ${stand.code} -> Miejsce ${stand.code}${if (carpet.currentSlot == 1) "a" else "b"}"
+                    } else {
+                        "Brak przypisania do miejsca"
+                    }
 
-            // Pasek podsumowania ekspozycji salonu
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .clickable { viewModel.selectedCarpetForDetail.value = carpet },
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                        border = CardDefaults.outlinedCardBorder()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Icon(Icons.Default.LocationOn, contentDescription = null, tint = Color(0xFF2E7D32), modifier = Modifier.size(24.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(text = "🎯 Znaleziono: ${carpet.name}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1B5E20))
+                                    Text(text = "Lokalizacja: $placeText", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = Color(0xFF2E7D32))
+                                    Text(text = "Kod: ${carpet.barcode} | Wymiary: ${carpet.size}", fontSize = 11.sp, color = Color(0xFF424242))
+                                }
+                            }
+                            if (stand != null && carpet.currentSlot != null) {
+                                OutlinedButton(
+                                    onClick = { viewModel.clearStandSlot(stand.id, carpet.currentSlot!!) },
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                                ) {
+                                    Text("Zwolnij", fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Karta podsumowania i akcji
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
                 )
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
                         Text(
-                            text = "STAN EKSPOZYCJI SALONU",
+                            text = "EKSPOZYCJA KONTENERÓW",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "$totalStands stanowisk • pojemność $totalCapacity dywanów",
+                            text = "$totalStands kontenerów • $totalOccupied/$totalCapacity miejsc zajętych",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFFE8F5E9)
-                        ) {
-                            Text(
-                                text = "Zajęte: $totalOccupied",
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF2E7D32)
-                            )
+                        if (allStands.isNotEmpty()) {
+                            IconButton(
+                                onClick = { showClearAllConfirmDialog = true },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DeleteSweep,
+                                    contentDescription = "Wyczyść wszystko",
+                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFFFFF3E0)
+                        Button(
+                            onClick = { viewModel.showNewStandDialog.value = true },
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                         ) {
-                            Text(
-                                text = "Wolne: $totalFree",
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFE65100)
-                            )
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Dodaj", fontSize = 12.sp)
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Filtry zapełnienia (Chips)
+            // Filtry kontenerów
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FilterChip(
                     selected = standFilter == StandFilter.ALL,
                     onClick = { viewModel.standFilter.value = StandFilter.ALL },
-                    label = { Text("Wszystkie ($totalStands)") },
-                    modifier = Modifier.testTag("filter_all_stands")
+                    label = { Text("Wszystkie ($totalStands)", fontSize = 11.sp) },
+                    colors = FilterChipDefaults.filterChipColors()
                 )
                 FilterChip(
                     selected = standFilter == StandFilter.HAS_FREE_SLOT,
                     onClick = { viewModel.standFilter.value = StandFilter.HAS_FREE_SLOT },
-                    label = { Text("Wolne miejsca ($totalFree)") },
-                    modifier = Modifier.testTag("filter_free_slots")
+                    label = { Text("Wolne ($totalFree)", fontSize = 11.sp) }
                 )
                 FilterChip(
                     selected = standFilter == StandFilter.FULL,
                     onClick = { viewModel.standFilter.value = StandFilter.FULL },
-                    label = { Text("Pełne (2/2)") }
+                    label = { Text("Pełne", fontSize = 11.sp) }
                 )
                 FilterChip(
                     selected = standFilter == StandFilter.EMPTY,
                     onClick = { viewModel.standFilter.value = StandFilter.EMPTY },
-                    label = { Text("Puste (0/2)") }
+                    label = { Text("Puste", fontSize = 11.sp) }
                 )
             }
 
-            // Sekcje salonu (jeśli są)
-            if (distinctSections.isNotEmpty()) {
-                Row(
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Lista kontenerów
+            if (stands.isEmpty()) {
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(vertical = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
                 ) {
-                    distinctSections.forEach { sectionName ->
-                        val isSelected = selectedSection == sectionName
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = {
-                                viewModel.selectedSection.value = if (isSelected) null else sectionName
-                            },
-                            label = { Text(sectionName.take(24) + if (sectionName.length > 24) "..." else "") },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer
-                            )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        Text(
+                            text = if (allStands.isEmpty()) "Brak kontenerów na ekspozycji" else "Brak kontenerów dla wpisanego filtru",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
                         )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            if (viewModeTab == 0) {
-                // TRYB 1: Klasyczna lista szczegółowych 2-miejscowych kart stanowisk
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .testTag("stands_lazy_column"),
-                    contentPadding = PaddingValues(bottom = 88.dp, top = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    if (stands.isEmpty()) {
-                        item {
-                            EmptyStandsCard()
-                        }
-                    } else {
-                        items(stands, key = { it.id }) { stand ->
-                            val carpet1 = stand.slot1CarpetId?.let { carpetsById[it] }
-                            val carpet2 = stand.slot2CarpetId?.let { carpetsById[it] }
-
-                            StandCard(
-                                stand = stand,
-                                carpet1 = carpet1,
-                                carpet2 = carpet2,
-                                onSlotClick = { standId, slotNumber, currentCarpet ->
-                                    if (currentCarpet == null) {
-                                        viewModel.searchQuery.value = ""
-                                        viewModel.carpetFilter.value = com.example.ui.CarpetFilter.IN_STORAGE
-                                        viewModel.scanBannerMessage.value = "Wybierz dywan z listy, który chcesz umieścić na ${stand.name} (Slot $slotNumber)"
-                                    } else {
-                                        viewModel.selectedCarpetForDetail.value = currentCarpet
-                                    }
-                                },
-                                onRemoveFromSlot = { carpetId ->
-                                    viewModel.removeCarpetFromDisplay(carpetId)
-                                },
-                                onSwapSlots = { standId ->
-                                    viewModel.swapSlots(standId)
-                                },
-                                onEditStand = { standToEdit ->
-                                    viewModel.editingStand.value = standToEdit
-                                },
-                                onCarpetClick = { clickedCarpet ->
-                                    viewModel.selectedCarpetForDetail.value = clickedCarpet
-                                }
-                            )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (allStands.isEmpty()) "Dodaj fizyczny kontener, aby utworzyć miejsca a i b." else "Zmień kryteria wyszukiwania.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = {
+                                if (allStands.isEmpty()) viewModel.showNewStandDialog.value = true
+                                else viewModel.searchQuery.value = ""
+                            }
+                        ) {
+                            Text(if (allStands.isEmpty()) "+ Dodaj pierwszy kontener" else "Wyczyść filtr")
                         }
                     }
                 }
             } else {
-                // TRYB 2: WIZUALNY PLAN ALEI SALONU (GRID DLA MAGAZYNIERA / OBSŁUGI)
-                ShowroomFloorPlanView(
-                    stands = stands,
-                    carpetsById = carpetsById,
-                    onSelectStand = { stand ->
-                        // Focus on stand
-                        viewModel.searchQuery.value = stand.code
-                        viewModeTab = 0
-                    },
-                    onCarpetClick = { carpet ->
-                        viewModel.selectedCarpetForDetail.value = carpet
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .testTag("stands_list"),
+                    contentPadding = PaddingValues(bottom = 88.dp, top = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    items(stands, key = { it.id }) { stand ->
+                        val carpet1 = stand.slot1CarpetId?.let { carpetsById[it] }
+                        val carpet2 = stand.slot2CarpetId?.let { carpetsById[it] }
+
+                        StandCard(
+                            stand = stand,
+                            carpet1 = carpet1,
+                            carpet2 = carpet2,
+                            onSlotClick = { standId, slotNumber, currentCarpet ->
+                                if (currentCarpet == null) {
+                                    // Pusty slot -> wybierz dywan do wstawienia
+                                    viewModel.carpetForAssignment.value = Carpet(
+                                        id = "",
+                                        barcode = "",
+                                        name = "",
+                                        size = "",
+                                        collection = "",
+                                        composition = "",
+                                        pricePln = 0.0,
+                                        currentStandId = standId,
+                                        currentSlot = slotNumber
+                                    )
+                                    viewModel.showNewCarpetDialog.value = true
+                                } else {
+                                    // Zajęty slot -> podgląd dywanu
+                                    viewModel.selectedCarpetForDetail.value = currentCarpet
+                                }
+                            },
+                            onClearSlot = { standId, slotNumber ->
+                                viewModel.clearStandSlot(standId, slotNumber)
+                            },
+                            onSwapSlots = { standId ->
+                                viewModel.swapSlots(standId)
+                            },
+                            onDeleteStand = { standId ->
+                                viewModel.deleteStand(standId)
+                            },
+                            onCarpetClick = { carpet ->
+                                viewModel.selectedCarpetForDetail.value = carpet
+                            }
+                        )
                     }
-                )
+                }
             }
         }
 
-        // FAB: Dodaj nowe stanowisko
+        // FAB: Dodaj nowy kontener
         FloatingActionButton(
             onClick = { viewModel.showNewStandDialog.value = true },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(20.dp)
-                .testTag("fab_add_stand"),
-            containerColor = MaterialTheme.colorScheme.primary
-        ) {
-            Icon(Icons.Default.Add, contentDescription = "Dodaj stanowisko")
-        }
-    }
-}
-
-@Composable
-private fun EmptyStandsCard() {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 32.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "Brak stanowisk spełniających kryteria",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Zmień filtry lub dodaj nowe stanowisko za pomocą przycisku poniżej.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
-private fun ShowroomFloorPlanView(
-    stands: List<DisplayStand>,
-    carpetsById: Map<String, Carpet>,
-    onSelectStand: (DisplayStand) -> Unit,
-    onCarpetClick: (Carpet) -> Unit
-) {
-    val groupedBySection = remember(stands) {
-        stands.groupBy { it.section.ifBlank { "Pozostałe stanowiska" } }
-    }
-
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag("showroom_floor_plan"),
-        contentPadding = PaddingValues(bottom = 88.dp, top = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        groupedBySection.forEach { (sectionName, sectionStands) ->
-            item {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "📍 $sectionName",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        sectionStands.forEach { stand ->
-                            val carpet1 = stand.slot1CarpetId?.let { carpetsById[it] }
-                            val carpet2 = stand.slot2CarpetId?.let { carpetsById[it] }
-
-                            FloorPlanStandRow(
-                                stand = stand,
-                                carpet1 = carpet1,
-                                carpet2 = carpet2,
-                                onStandClick = { onSelectStand(stand) },
-                                onCarpetClick = onCarpetClick
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FloorPlanStandRow(
-    stand: DisplayStand,
-    carpet1: Carpet?,
-    carpet2: Carpet?,
-    onStandClick: () -> Unit,
-    onCarpetClick: (Carpet) -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable { onStandClick() },
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.width(52.dp)
-            ) {
-                Text(
-                    text = stand.code,
-                    modifier = Modifier.padding(vertical = 6.dp),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            // Dwa sloty graficzne
-            Row(
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FloorPlanSlotTile(
-                    slotLabel = "Slot 1 (L)",
-                    carpet = carpet1,
-                    onCarpetClick = onCarpetClick,
-                    modifier = Modifier.weight(1f)
-                )
-                FloorPlanSlotTile(
-                    slotLabel = "Slot 2 (P)",
-                    carpet = carpet2,
-                    onCarpetClick = onCarpetClick,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun FloorPlanSlotTile(
-    slotLabel: String,
-    carpet: Carpet?,
-    onCarpetClick: (Carpet) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    if (carpet != null) {
-        val bgColor = if (carpet.isReserved) Color(0xFFFFF8E1) else MaterialTheme.colorScheme.surface
-        val borderColor = if (carpet.isReserved) Color(0xFFF57F17) else Color(0xFF81C784)
-
-        Surface(
-            modifier = modifier
-                .clip(RoundedCornerShape(8.dp))
-                .border(1.dp, borderColor, RoundedCornerShape(8.dp))
-                .clickable { onCarpetClick(carpet) },
-            color = bgColor,
-            shape = RoundedCornerShape(8.dp)
+                .testTag("add_stand_fab"),
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary
         ) {
             Row(
-                modifier = Modifier.padding(6.dp),
+                modifier = Modifier.padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                CarpetPatternBadge(patternType = carpet.patternType, size = 28.dp)
+                Icon(Icons.Default.Add, contentDescription = "Dodaj kontener")
                 Spacer(modifier = Modifier.width(6.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = carpet.name,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1
-                    )
-                    Text(
-                        text = if (carpet.isReserved) "★ ZAREZERWOWANY" else carpet.size,
-                        fontSize = 10.sp,
-                        color = if (carpet.isReserved) Color(0xFFF57F17) else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = if (carpet.isReserved) FontWeight.Bold else FontWeight.Normal
-                    )
-                }
-            }
-        }
-    } else {
-        Surface(
-            modifier = modifier
-                .clip(RoundedCornerShape(8.dp))
-                .border(1.dp, Color(0xFFC8E6C9), RoundedCornerShape(8.dp)),
-            color = Color(0xFFE8F5E9),
-            shape = RoundedCornerShape(8.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = "$slotLabel: + WOLNE",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF2E7D32)
-                )
+                Text("Kontener $nextSuggestedNumber", fontWeight = FontWeight.Bold)
             }
         }
     }

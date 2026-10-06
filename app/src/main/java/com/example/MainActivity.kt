@@ -79,7 +79,7 @@ enum class AppNavTab(
 ) {
     EXPO("Ekspozycja", Icons.Filled.Grid3x3, Icons.Outlined.Grid3x3, "tab_expo"),
     CARPETS("Dywany", Icons.Filled.Inventory2, Icons.Outlined.Inventory2, "tab_carpets"),
-    SCANNER("Skaner ESL", Icons.Filled.QrCodeScanner, Icons.Outlined.QrCodeScanner, "tab_scanner"),
+    SCANNER("Skaner kodów", Icons.Filled.QrCodeScanner, Icons.Outlined.QrCodeScanner, "tab_scanner"),
     SYNC("Synchronizacja", Icons.Filled.Sync, Icons.Outlined.Sync, "tab_sync")
 }
 
@@ -165,43 +165,13 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
 
-                                 IconButton(
-                                    onClick = { viewModel.showOrdersSheet.value = true },
-                                    modifier = Modifier.testTag("top_bar_orders_btn")
-                                ) {
-                                    if (pendingOrders.isNotEmpty()) {
-                                        BadgedBox(
-                                            badge = {
-                                                Badge(
-                                                    containerColor = Color(0xFFD97706),
-                                                    contentColor = Color.White
-                                                ) {
-                                                    Text("${pendingOrders.size}")
-                                                }
-                                            }
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Warehouse,
-                                                contentDescription = "Zlecenia zdjęcia ze stojaków",
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    } else {
-                                        Icon(
-                                            imageVector = Icons.Default.Warehouse,
-                                            contentDescription = "Zlecenia zdjęcia ze stojaków",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-
                                 IconButton(
                                     onClick = { currentTab = AppNavTab.SCANNER },
                                     modifier = Modifier.testTag("top_bar_scanner_btn")
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.QrCodeScanner,
-                                        contentDescription = "Skanuj etykietę ESL",
+                                        contentDescription = "Skanuj kod kreskowy",
                                         tint = MaterialTheme.colorScheme.primary
                                     )
                                 }
@@ -401,40 +371,18 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                // Dodawanie nowego stanowiska
+                // Dodawanie nowego kontenera
                 if (showNewStandDialog) {
+                    val nextSuggestedNumber = stands.mapNotNull { it.code.toIntOrNull() }.let { list ->
+                        if (list.isEmpty()) "1" else (list.maxOrNull()!! + 1).toString()
+                    }
                     EditStandDialog(
                         initialStand = null,
+                        suggestedNextNumber = nextSuggestedNumber,
                         onSave = { newStand ->
                             viewModel.saveStand(newStand)
                         },
                         onDismiss = { viewModel.showNewStandDialog.value = false }
-                    )
-                }
-
-                // Zlecenie zdjęcia ze stojaka dla magazynu
-                carpetForTakeDownOrder?.let { carpet ->
-                    val stand = carpet.currentStandId?.let { standId ->
-                        stands.find { it.id == standId }
-                    }
-                    CreateTakeDownOrderDialog(
-                        carpet = carpet,
-                        stand = stand,
-                        onConfirm = { notes ->
-                            viewModel.createTakeDownOrder(carpet.id, notes)
-                        },
-                        onDismiss = { viewModel.carpetForTakeDownOrder.value = null }
-                    )
-                }
-
-                // Sheet listy zleceń dla magazynu
-                if (showOrdersSheet) {
-                    TakeDownOrdersSheet(
-                        orders = allOrders,
-                        onCompleteOrder = { orderId ->
-                            viewModel.completeTakeDownOrder(orderId)
-                        },
-                        onDismiss = { viewModel.showOrdersSheet.value = false }
                     )
                 }
             }

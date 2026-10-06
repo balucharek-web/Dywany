@@ -279,7 +279,7 @@ class ExpoRepository(
     }
 
     /**
-     * Zdejmowanie dywanu z ekspozycji i przeniesienie do magazynu
+     * Zdejmowanie dywanu z ekspozycji - zwalnia miejsce (pozostaje ono puste)
      */
     suspend fun removeCarpetFromDisplay(carpetId: String, deviceName: String = "Urządzenie") = withContext(Dispatchers.IO) {
         val carpet = carpetDao.getCarpetById(carpetId) ?: return@withContext
@@ -307,8 +307,75 @@ class ExpoRepository(
 
         logDao.insertLog(
             SyncLogEntry(
-                actionType = "ZDJĘCIE_Z_EKSPOZYCJI",
-                description = "Dywan ${carpet.name} przeniesiony do magazynu",
+                actionType = "ZWOLNIENIE_MIEJSCA",
+                description = "Dywan ${carpet.name} zdjęty z ekspozycji. Miejsce zostało puste.",
+                deviceName = deviceName
+            )
+        )
+    }
+
+    /**
+     * Zwolnienie konkretnego miejsca (Slot 1 = a, Slot 2 = b) na kontenerze - miejsce zostaje puste
+     */
+    suspend fun clearStandSlot(standId: String, slotNumber: Int, deviceName: String = "Urządzenie") = withContext(Dispatchers.IO) {
+        val stand = standDao.getStandById(standId) ?: return@withContext
+        val carpetId = if (slotNumber == 1) stand.slot1CarpetId else stand.slot2CarpetId
+        val now = System.currentTimeMillis()
+
+        if (carpetId != null) {
+            val carpet = carpetDao.getCarpetById(carpetId)
+            if (carpet != null) {
+                carpetDao.insertOrUpdate(
+                    carpet.copy(
+                        currentStandId = null,
+                        currentSlot = null,
+                        status = CarpetStatus.IN_STORAGE,
+                        updatedAt = now
+                    )
+                )
+            }
+        }
+
+        val updatedStand = if (slotNumber == 1) {
+            stand.copy(slot1CarpetId = null, updatedAt = now)
+        } else {
+            stand.copy(slot2CarpetId = null, updatedAt = now)
+        }
+        standDao.insertOrUpdate(updatedStand)
+
+        val placeCode = "${stand.code}${if (slotNumber == 1) "a" else "b"}"
+        logDao.insertLog(
+            SyncLogEntry(
+                actionType = "ZWOLNIENIE_MIEJSCA",
+                description = "Zwolniono miejsce $placeCode w ${stand.name}. Miejsce jest puste.",
+                deviceName = deviceName
+            )
+        )
+    }
+
+    /**
+     * Usunięcie wszystkich kontenerów (np. gdy użytkownik chce zacząć dodawać fizyczne kontenery od zera)
+     */
+    suspend fun clearAllStands(deviceName: String = "Urządzenie") = withContext(Dispatchers.IO) {
+        val allStandsList = standDao.getAllStandsList()
+        val now = System.currentTimeMillis()
+        for (stand in allStandsList) {
+            stand.slot1CarpetId?.let { cId ->
+                carpetDao.getCarpetById(cId)?.let { c ->
+                    carpetDao.insertOrUpdate(c.copy(currentStandId = null, currentSlot = null, status = CarpetStatus.IN_STORAGE, updatedAt = now))
+                }
+            }
+            stand.slot2CarpetId?.let { cId ->
+                carpetDao.getCarpetById(cId)?.let { c ->
+                    carpetDao.insertOrUpdate(c.copy(currentStandId = null, currentSlot = null, status = CarpetStatus.IN_STORAGE, updatedAt = now))
+                }
+            }
+            standDao.deleteById(stand.id)
+        }
+        logDao.insertLog(
+            SyncLogEntry(
+                actionType = "WYCZYSZCZENIE_KONTENEROW",
+                description = "Wyczyszczono wszystkie kontenery",
                 deviceName = deviceName
             )
         )

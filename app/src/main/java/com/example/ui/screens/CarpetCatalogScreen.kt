@@ -121,7 +121,7 @@ fun CarpetCatalogScreen(
                 FilterChip(
                     selected = carpetFilter == CarpetFilter.IN_STORAGE,
                     onClick = { viewModel.carpetFilter.value = CarpetFilter.IN_STORAGE },
-                    label = { Text("W magazynie ($inStorageCount)") },
+                    label = { Text("Nieprzypisane ($inStorageCount)") },
                     modifier = Modifier.testTag("filter_in_storage")
                 )
             }
@@ -296,7 +296,7 @@ private fun CarpetCatalogItemCard(
                 ) {
                     // Badge lokalizacji (GDZIE JEST DYWAN)
                     if (carpet.status == CarpetStatus.ON_DISPLAY && stand != null) {
-                        val slotName = if (carpet.currentSlot == 1) "M1 (Lewe)" else "M2 (Prawe)"
+                        val placeLetter = if (carpet.currentSlot == 1) "a" else "b"
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = Color(0xFFE8F5E9)
@@ -313,7 +313,7 @@ private fun CarpetCatalogItemCard(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "${stand.code} • $slotName",
+                                    text = "Kontener ${stand.code} • ${stand.code}$placeLetter",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF1B5E20)
@@ -326,7 +326,7 @@ private fun CarpetCatalogItemCard(
                             color = Color(0xFFECEFF1)
                         ) {
                             Text(
-                                text = "W magazynie",
+                                text = "Nieprzypisany",
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium,

@@ -205,34 +205,28 @@ fun CarpetDetailSheet(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "POŁOŻENIE W SALONIE",
+                            text = "POŁOŻENIE NA EKSPOZYCJI",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = if (stand != null) Color(0xFF2E7D32) else Color(0xFF757575)
                         )
                         if (stand != null) {
-                            val slotDesc = if (carpet.currentSlot == 1) "Miejsce 1 (Lewe / Przód)" else "Miejsce 2 (Prawe / Tył)"
+                            val placeLetter = if (carpet.currentSlot == 1) "a" else "b"
                             Text(
-                                text = "${stand.name} (${stand.code})",
+                                text = "${stand.name}",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF1B5E20)
                             )
                             Text(
-                                text = slotDesc,
-                                style = MaterialTheme.typography.bodyMedium,
+                                text = "Miejsce ${stand.code}$placeLetter",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
                                 color = Color(0xFF2E7D32)
                             )
-                            if (stand.section.isNotBlank()) {
-                                Text(
-                                    text = stand.section,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFF388E3C)
-                                )
-                            }
                         } else {
                             Text(
-                                text = "W magazynie głównym (nie wisi na ekspozycji)",
+                                text = "Nieprzypisany do miejsca (brak na ekspozycji)",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
                                 color = Color(0xFF424242)
@@ -430,9 +424,9 @@ fun CarpetDetailSheet(
                         onClick = onRemoveFromDisplay,
                         modifier = Modifier.testTag("action_remove_display_btn")
                     ) {
-                        Icon(Icons.Default.Unarchive, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Do magazynu", fontSize = 13.sp)
+                        Text("Zwolnij miejsce", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
                     }
                 }
             }

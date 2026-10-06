@@ -3,10 +3,13 @@ package com.example.ui.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -24,21 +27,20 @@ import java.util.UUID
 @Composable
 fun EditStandDialog(
     initialStand: DisplayStand?,
+    suggestedNextNumber: String = "1",
     onSave: (DisplayStand) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var code by remember { mutableStateOf(initialStand?.code ?: "A-09") }
-    var name by remember { mutableStateOf(initialStand?.name ?: "Stanowisko A-09") }
-    var section by remember { mutableStateOf(initialStand?.section ?: "Sekcja A - Dywany Tradycyjne") }
-    var notes by remember { mutableStateOf(initialStand?.notes ?: "") }
-
     val isEditing = initialStand != null
+    var code by remember { mutableStateOf(initialStand?.code ?: suggestedNextNumber) }
+    var name by remember { mutableStateOf(initialStand?.name ?: "Kontener $suggestedNextNumber") }
+    var notes by remember { mutableStateOf(initialStand?.notes ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = if (isEditing) "Edytuj stanowisko" else "Nowe stanowisko ekspozycyjne",
+                text = if (isEditing) "Edytuj kontener" else "Dodaj nowy kontener",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
@@ -46,51 +48,53 @@ fun EditStandDialog(
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = "Każde stanowisko posiada 2 niezależne miejsca (Slot 1 i Slot 2).",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(
+                        text = "Kontener otrzyma 2 miejsca ekspozycyjne: ${code.trim()}a oraz ${code.trim()}b",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(10.dp)
+                    )
+                }
+
                 OutlinedTextField(
                     value = code,
                     onValueChange = {
                         code = it
-                        if (!isEditing && name.startsWith("Stanowisko")) {
-                            name = "Stanowisko $it"
+                        if (!isEditing) {
+                            name = if (it.isNotBlank()) "Kontener $it" else "Kontener"
                         }
                     },
-                    label = { Text("Kod stanowiska *") },
-                    placeholder = { Text("np. A-09, B-04") },
+                    label = { Text("Numer kontenera *") },
+                    placeholder = { Text("np. 1, 2, 3, 4...") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("stand_code_input"),
                     singleLine = true
                 )
+
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Nazwa stanowiska *") },
-                    placeholder = { Text("np. Stanowisko A-09") },
+                    label = { Text("Nazwa kontenera *") },
+                    placeholder = { Text("np. Kontener 1") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("stand_name_input"),
                     singleLine = true
                 )
-                OutlinedTextField(
-                    value = section,
-                    onValueChange = { section = it },
-                    label = { Text("Sekcja / Aleja w salonie") },
-                    placeholder = { Text("np. Aleja 2 - Dywany Wełniane") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
+
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
-                    label = { Text("Uwagi / Ograniczenia wymiarowe") },
-                    placeholder = { Text("np. max 200x300 cm, stojak obrotowy") },
+                    label = { Text("Opcjonalne uwagi / lokalizacja") },
+                    placeholder = { Text("np. Sekcja wejściowa, stojak dwustronny") },
                     modifier = Modifier.fillMaxWidth(),
                     maxLines = 2
                 )
@@ -103,16 +107,16 @@ fun EditStandDialog(
                         val stand = initialStand?.copy(
                             code = code.trim(),
                             name = name.trim(),
-                            section = section.trim(),
-                            barcode = "STAND-${code.trim()}",
+                            section = "Ekspozycja",
+                            barcode = "KONTENER-${code.trim()}",
                             notes = notes.trim(),
                             updatedAt = System.currentTimeMillis()
                         ) ?: DisplayStand(
-                            id = "STAND-${UUID.randomUUID().toString().take(6).uppercase()}",
+                            id = "STAND-${code.trim().ifEmpty { UUID.randomUUID().toString().take(6) }}",
                             code = code.trim(),
                             name = name.trim(),
-                            section = section.trim(),
-                            barcode = "STAND-${code.trim()}",
+                            section = "Ekspozycja",
+                            barcode = "KONTENER-${code.trim()}",
                             notes = notes.trim(),
                             updatedAt = System.currentTimeMillis()
                         )
@@ -122,7 +126,7 @@ fun EditStandDialog(
                 modifier = Modifier.testTag("save_stand_submit_btn"),
                 enabled = code.isNotBlank() && name.isNotBlank()
             ) {
-                Text("Zapisz")
+                Text(if (isEditing) "Zapisz" else "Utwórz kontener")
             }
         },
         dismissButton = {

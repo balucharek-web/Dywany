@@ -76,6 +76,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         selectedSection
     ) { allStands, allCarpets, query, filter, section ->
         val carpetsById = allCarpets.associateBy { it.id }
+        val cleanQuery = query.trim().lowercase()
 
         allStands.filter { stand ->
             if (section != null && stand.section != section) return@filter false
@@ -86,21 +87,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 StandFilter.EMPTY -> stand.isCompletelyEmpty
             }
         }.filter { stand ->
-            if (query.isBlank()) true
+            if (cleanQuery.isBlank()) true
             else {
                 val s1 = stand.slot1CarpetId?.let { carpetsById[it]?.name } ?: ""
                 val s1Code = stand.slot1CarpetId?.let { carpetsById[it]?.barcode } ?: ""
                 val s2 = stand.slot2CarpetId?.let { carpetsById[it]?.name } ?: ""
                 val s2Code = stand.slot2CarpetId?.let { carpetsById[it]?.barcode } ?: ""
+                val placeA = "${stand.code}a"
+                val placeB = "${stand.code}b"
 
-                stand.name.contains(query, ignoreCase = true) ||
-                stand.code.contains(query, ignoreCase = true) ||
-                stand.section.contains(query, ignoreCase = true) ||
-                stand.barcode.contains(query, ignoreCase = true) ||
-                s1.contains(query, ignoreCase = true) ||
-                s1Code.contains(query, ignoreCase = true) ||
-                s2.contains(query, ignoreCase = true) ||
-                s2Code.contains(query, ignoreCase = true)
+                stand.name.contains(cleanQuery, ignoreCase = true) ||
+                stand.code.equals(cleanQuery, ignoreCase = true) ||
+                stand.code.contains(cleanQuery, ignoreCase = true) ||
+                placeA.equals(cleanQuery, ignoreCase = true) ||
+                placeB.equals(cleanQuery, ignoreCase = true) ||
+                placeA.contains(cleanQuery, ignoreCase = true) ||
+                placeB.contains(cleanQuery, ignoreCase = true) ||
+                stand.barcode.contains(cleanQuery, ignoreCase = true) ||
+                s1.contains(cleanQuery, ignoreCase = true) ||
+                s1Code.contains(cleanQuery, ignoreCase = true) ||
+                s2.contains(cleanQuery, ignoreCase = true) ||
+                s2Code.contains(cleanQuery, ignoreCase = true)
             }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -113,6 +120,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         carpetFilter
     ) { allCarpets, allStands, query, filter ->
         val standsById = allStands.associateBy { it.id }
+        val cleanQuery = query.trim().lowercase()
 
         allCarpets.filter { carpet ->
             when (filter) {
@@ -121,18 +129,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 CarpetFilter.IN_STORAGE -> carpet.status == CarpetStatus.IN_STORAGE
             }
         }.filter { carpet ->
-            if (query.isBlank()) true
+            if (cleanQuery.isBlank()) true
             else {
-                val standName = carpet.currentStandId?.let { standsById[it]?.name } ?: ""
-                val standCode = carpet.currentStandId?.let { standsById[it]?.code } ?: ""
+                val stand = carpet.currentStandId?.let { standsById[it] }
+                val standName = stand?.name ?: ""
+                val standCode = stand?.code ?: ""
+                val placeCode = if (stand != null && carpet.currentSlot != null) {
+                    "${stand.code}${if (carpet.currentSlot == 1) "a" else "b"}"
+                } else ""
 
-                carpet.name.contains(query, ignoreCase = true) ||
-                carpet.barcode.contains(query, ignoreCase = true) ||
-                carpet.size.contains(query, ignoreCase = true) ||
-                carpet.collection.contains(query, ignoreCase = true) ||
-                carpet.composition.contains(query, ignoreCase = true) ||
-                standName.contains(query, ignoreCase = true) ||
-                standCode.contains(query, ignoreCase = true)
+                carpet.name.contains(cleanQuery, ignoreCase = true) ||
+                carpet.barcode.contains(cleanQuery, ignoreCase = true) ||
+                carpet.size.contains(cleanQuery, ignoreCase = true) ||
+                carpet.collection.contains(cleanQuery, ignoreCase = true) ||
+                carpet.composition.contains(cleanQuery, ignoreCase = true) ||
+                standName.contains(cleanQuery, ignoreCase = true) ||
+                standCode.equals(cleanQuery, ignoreCase = true) ||
+                placeCode.equals(cleanQuery, ignoreCase = true) ||
+                placeCode.contains(cleanQuery, ignoreCase = true)
             }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -241,18 +255,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 selectedCarpetForDetail.value = carpet
                 val stand = carpet.currentStandId?.let { repository.getStandById(it) }
                 val locationText = if (stand != null) {
-                    val slot = if (carpet.currentSlot == 1) "Miejsce 1 (Lewe)" else "Miejsce 2 (Prawe)"
-                    "${stand.name} -> $slot"
+                    val placeLetter = if (carpet.currentSlot == 1) "a" else "b"
+                    "Kontener ${stand.code}, Miejsce ${stand.code}$placeLetter"
                 } else {
-                    "W magazynie (nieprzypisany)"
+                    "Brak (nieprzypisany do miejsca)"
                 }
-                scanBannerMessage.value = "Zeskanowano: ${carpet.name} | Lokalizacja: $locationText"
+                scanBannerMessage.value = "Dywan: ${carpet.name} | Lokalizacja: $locationText"
                 return@launch
             }
 
             val stand = repository.getStandByBarcode(clean)
             if (stand != null) {
-                scanBannerMessage.value = "Zeskanowano stanowisko: ${stand.name} (${stand.occupiedCount}/2 dywany)"
+                scanBannerMessage.value = "Zeskanowano kontener: ${stand.name} (${stand.occupiedCount}/2 miejsca)"
                 searchQuery.value = stand.code
                 return@launch
             }
@@ -266,7 +280,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             prefilledBarcodeForNewCarpet.value = clean
             showNewCarpetDialog.value = true
-            scanBannerMessage.value = "Nowa etykieta ESL: $clean. Wpisz dane dywanu, aby go zarejestrować."
+            scanBannerMessage.value = "Nowy kod: $clean. Wpisz dane dywanu, aby go zarejestrować."
+        }
+    }
+
+    fun clearStandSlot(standId: String, slotNumber: Int) {
+        viewModelScope.launch {
+            repository.clearStandSlot(standId, slotNumber, deviceName)
+            selectedCarpetForDetail.value?.let { current ->
+                val updated = repository.getCarpetById(current.id)
+                selectedCarpetForDetail.value = updated
+            }
+            meshEngine.notifyLocalDataChanged()
+        }
+    }
+
+    fun clearAllStands() {
+        viewModelScope.launch {
+            repository.clearAllStands(deviceName)
+            meshEngine.notifyLocalDataChanged()
         }
     }
 

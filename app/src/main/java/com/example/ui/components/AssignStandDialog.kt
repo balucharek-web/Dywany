@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -56,10 +55,16 @@ fun AssignStandDialog(
 
     val filteredStands = remember(stands, searchQuery) {
         if (searchQuery.isBlank()) stands
-        else stands.filter {
-            it.name.contains(searchQuery, ignoreCase = true) ||
-            it.code.contains(searchQuery, ignoreCase = true) ||
-            it.section.contains(searchQuery, ignoreCase = true)
+        else {
+            val q = searchQuery.trim().lowercase()
+            stands.filter {
+                val placeA = "${it.code}a"
+                val placeB = "${it.code}b"
+                it.name.contains(q, ignoreCase = true) ||
+                it.code.equals(q, ignoreCase = true) ||
+                placeA.equals(q, ignoreCase = true) ||
+                placeB.equals(q, ignoreCase = true)
+            }
         }
     }
 
@@ -68,7 +73,7 @@ fun AssignStandDialog(
         title = {
             Column {
                 Text(
-                    text = "Wybierz miejsce ekspozycji",
+                    text = "Wybierz miejsce w kontenerze",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -92,7 +97,7 @@ fun AssignStandDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("assign_stand_search"),
-                    placeholder = { Text("Filtruj stanowiska...") },
+                    placeholder = { Text("Szukaj kontenera lub miejsca (np. 1a)...") },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
@@ -104,87 +109,80 @@ fun AssignStandDialog(
                     singleLine = true
                 )
 
-                Text(
-                    text = "Każde stanowisko mieści 2 dywany. Wybierz wolny slot:",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Medium
-                )
+                if (filteredStands.isEmpty()) {
+                    Text(
+                        text = "Brak dostępnych kontenerów. Dodaj najpierw kontener przyciskiem '+ Dodaj kontener'.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(8.dp)
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(filteredStands, key = { it.id }) { stand ->
+                            val slot1Carpet = stand.slot1CarpetId?.let { carpetsById[it] }
+                            val slot2Carpet = stand.slot2CarpetId?.let { carpetsById[it] }
 
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(filteredStands, key = { it.id }) { stand ->
-                        val slot1Carpet = stand.slot1CarpetId?.let { carpetsById[it] }
-                        val slot2Carpet = stand.slot2CarpetId?.let { carpetsById[it] }
-
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("assign_stand_item_${stand.id}"),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "${stand.code} - ${stand.name}",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    if (stand.hasFreeSlot) {
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = Color(0xFFE8F5E9)
-                                        ) {
-                                            Text(
-                                                text = "Wolny slot",
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = Color(0xFF2E7D32),
-                                                fontWeight = FontWeight.Bold
-                                            )
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("assign_stand_item_${stand.id}"),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = stand.name,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        if (stand.hasFreeSlot) {
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = Color(0xFFE8F5E9)
+                                            ) {
+                                                Text(
+                                                    text = "Wolne miejsce",
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = Color(0xFF2E7D32),
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
                                         }
                                     }
-                                }
 
-                                if (stand.section.isNotBlank()) {
-                                    Text(
-                                        text = stand.section,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontSize = 11.sp
-                                    )
-                                }
+                                    Spacer(modifier = Modifier.height(8.dp))
 
-                                Spacer(modifier = Modifier.height(8.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        // Miejsce a (Slot 1)
+                                        SlotPickerButton(
+                                            slotName = "Miejsce ${stand.code}a",
+                                            currentCarpet = slot1Carpet,
+                                            isSelectedCurrent = carpet.currentStandId == stand.id && carpet.currentSlot == 1,
+                                            onClick = { onSelectSlot(stand.id, 1) },
+                                            modifier = Modifier.weight(1f)
+                                        )
 
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    // Slot 1 Wybór
-                                    SlotPickerButton(
-                                        slotName = "Slot 1 (Lewy)",
-                                        currentCarpet = slot1Carpet,
-                                        isSelectedCurrent = carpet.currentStandId == stand.id && carpet.currentSlot == 1,
-                                        onClick = { onSelectSlot(stand.id, 1) },
-                                        modifier = Modifier.weight(1f)
-                                    )
-
-                                    // Slot 2 Wybór
-                                    SlotPickerButton(
-                                        slotName = "Slot 2 (Prawy)",
-                                        currentCarpet = slot2Carpet,
-                                        isSelectedCurrent = carpet.currentStandId == stand.id && carpet.currentSlot == 2,
-                                        onClick = { onSelectSlot(stand.id, 2) },
-                                        modifier = Modifier.weight(1f)
-                                    )
+                                        // Miejsce b (Slot 2)
+                                        SlotPickerButton(
+                                            slotName = "Miejsce ${stand.code}b",
+                                            currentCarpet = slot2Carpet,
+                                            isSelectedCurrent = carpet.currentStandId == stand.id && carpet.currentSlot == 2,
+                                            onClick = { onSelectSlot(stand.id, 2) },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -252,7 +250,7 @@ private fun SlotPickerButton(
                 )
             } else if (currentCarpet == null) {
                 Text(
-                    text = "+ Wolne (wstaw)",
+                    text = "+ Puste (umieść)",
                     style = MaterialTheme.typography.bodySmall,
                     fontSize = 11.sp,
                     color = Color(0xFF2E7D32),
