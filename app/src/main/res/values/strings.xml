@@ -1,0 +1,29 @@
+<resources>
+    <string name="app_name">DywanExpo</string>
+    <string name="nav_expo">Ekspozycja</string>
+    <string name="nav_carpets">Dywany</string>
+    <string name="nav_scanner">Skaner ESL</string>
+    <string name="nav_sync">Synchronizacja</string>
+    
+    <string name="search_hint">Szukaj dywanu, kodu ESL, stanowiska...</string>
+    <string name="filter_all">Wszystkie</string>
+    <string name="filter_on_display">Na ekspozycji</string>
+    <string name="filter_in_storage">W magazynie</string>
+    <string name="filter_has_free_slot">Wolne miejsca</string>
+    
+    <string name="slot_1">Miejsce 1 (Lewe / Przód)</string>
+    <string name="slot_2">Miejsce 2 (Prawe / Tył)</string>
+    <string name="slot_empty">Wolne miejsce (puste)</string>
+    <string name="stand_title_prefix">Stanowisko</string>
+    <string name="stand_capacity">Pojemność: 2 dywany</string>
+    
+    <string name="btn_add_carpet">Dodaj dywan</string>
+    <string name="btn_add_stand">Nowe stanowisko</string>
+    <string name="btn_scan_barcode">Skanuj etykietę</string>
+    <string name="btn_sync_now">Synchronizuj teraz</string>
+    <string name="btn_save">Zapisz</string>
+    <string name="btn_cancel">Anuluj</string>
+    <string name="btn_delete">Usuń</string>
+    <string name="btn_assign_stand">Przypisz do stanowiska</string>
+    <string name="btn_remove_from_stand">Zdejmij z ekspozycji</string>
+</resources>

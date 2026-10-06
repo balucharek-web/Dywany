@@ -1,0 +1,6 @@
+{
+  "name": "DywanExpo",
+  "description": "Zarządzanie ekspozycją dywanów: dwumiejscowe stanowiska, skanowanie etykiet ESL, wyszukiwanie i synchronizacja między urządzeniami.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
