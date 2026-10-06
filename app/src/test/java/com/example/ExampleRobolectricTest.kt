@@ -135,4 +135,27 @@ class ExampleRobolectricTest {
         assertEquals("Inspire", product.collection)
         assertEquals("100% Wełna", product.composition)
     }
+
+    @Test
+    fun `leroy merlin parser rejects 404 and homepage and accepts real products`() {
+        val parser = com.example.data.util.LeroyMerlinParser
+        // Rejects 404 and homepage (the exact bugs in user screenshots)
+        assertFalse(parser.isValidProductTitle("404 - nie znaleziono strony"))
+        assertFalse(parser.isValidProductTitle("Sklepy budowlano-dekoracyjne Leroy Merlin - Zapraszamy"))
+        assertFalse(parser.isValidProductTitle("Brak wyników wyszukiwania"))
+        assertFalse(parser.isValidProductTitle("Weryfikacja anty-botowa"))
+
+        // Accepts valid product titles
+        assertTrue(parser.isValidProductTitle("Dywan wełniany Agnella Agnus 160x230 beżowy"))
+        assertTrue(parser.isValidProductTitle("Klej hybrydowy Soudal T-Rex Gold 290 ml"))
+
+        // Parses Leroy Merlin product URL correctly
+        val testUrl = "https://www.leroymerlin.pl/produkty/wystroj-wnetrz/dywany/dywan-welniany-agnus-160-x-230-cm-bezowy-inspire-82451234.html"
+        val parsed = parser.parsePastedTextOrUrl(testUrl, fallbackBarcode = "5901234567890")
+        assertNotNull(parsed)
+        assertEquals("82451234", parsed?.refCode)
+        assertEquals("160x230 cm", parsed?.size)
+        assertEquals("Inspire", parsed?.collection)
+        assertEquals("100% Wełna", parsed?.composition)
+    }
 }

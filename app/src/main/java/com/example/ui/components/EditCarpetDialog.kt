@@ -146,7 +146,7 @@ fun EditCarpetDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Wyszukaj w Leroy Merlin (po EAN)",
+                        text = "Wyszukaj w Leroy Merlin (EAN / Ref / Szablony)",
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp
                     )
@@ -296,9 +296,8 @@ fun EditCarpetDialog(
                 }
                 if (product.collection.isNotBlank()) collection = product.collection
                 if (product.composition.isNotBlank()) composition = product.composition
-                if (notes.isBlank()) {
-                    notes = "Pobrano z Leroy Merlin (${barcode.trim()})"
-                }
+                val refInfo = if (product.refCode.isNotBlank()) " [Ref LM: ${product.refCode}]" else ""
+                notes = "Pobrano z Leroy Merlin (${barcode.trim()})$refInfo"
                 showLeroyLookup = false
             },
             onDismiss = { showLeroyLookup = false }

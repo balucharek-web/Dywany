@@ -8,5 +8,6 @@ data class LeroyMerlinProduct(
     val composition: String = "",
     val barcode: String = "",
     val productUrl: String = "",
-    val imageUrl: String = ""
+    val imageUrl: String = "",
+    val refCode: String = ""
 )
