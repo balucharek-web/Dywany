@@ -51,7 +51,11 @@ import com.example.data.model.Carpet
 import com.example.data.model.CarpetStatus
 import com.example.data.model.DisplayStand
 
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Warehouse
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,6 +75,7 @@ fun CarpetDetailSheet(
     onDeleteCarpet: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val context = LocalContext.current
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -429,6 +434,37 @@ fun CarpetDetailSheet(
                         Text("Zwolnij miejsce", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
                     }
                 }
+            }
+
+            // Podgląd produktu w Leroy Merlin po EAN
+            OutlinedButton(
+                onClick = {
+                    try {
+                        val intent = Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse("https://www.leroymerlin.pl/szukaj?q=${Uri.encode(carpet.barcode)}")
+                        )
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        // Ignore
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("open_leroy_merlin_btn"),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF2E7D32))
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ShoppingBag,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Sprawdź kartę produktu w Leroy Merlin (EAN)",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
             }
 
             // Edycja i usuwanie

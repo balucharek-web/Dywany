@@ -118,4 +118,21 @@ class ExampleRobolectricTest {
 
         db.close()
     }
+
+    @Test
+    fun `leroy merlin product model properties and mapping`() {
+        val product = com.example.data.model.LeroyMerlinProduct(
+            title = "Dywan wełniany Agnella Agnus 160x230 beżowy Inspire",
+            pricePln = 599.0,
+            size = "160x230 cm",
+            collection = "Inspire",
+            composition = "100% Wełna",
+            barcode = "5901234567890"
+        )
+        assertEquals("Dywan wełniany Agnella Agnus 160x230 beżowy Inspire", product.title)
+        assertEquals(599.0, product.pricePln ?: 0.0, 0.01)
+        assertEquals("160x230 cm", product.size)
+        assertEquals("Inspire", product.collection)
+        assertEquals("100% Wełna", product.composition)
+    }
 }

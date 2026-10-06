@@ -280,7 +280,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             prefilledBarcodeForNewCarpet.value = clean
             showNewCarpetDialog.value = true
-            scanBannerMessage.value = "Nowy kod: $clean. Wpisz dane dywanu, aby go zarejestrować."
+            scanBannerMessage.value = "Nowy kod EAN: $clean. Pobieram dane z Leroy Merlin..."
         }
     }
 

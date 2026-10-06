@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,11 +16,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -51,21 +55,21 @@ fun EditCarpetDialog(
     onDismiss: () -> Unit,
     onOpenScannerForBarcode: (() -> Unit)? = null
 ) {
+    val isEditing = initialCarpet != null
     var name by remember { mutableStateOf(initialCarpet?.name ?: "") }
     var barcode by remember {
         mutableStateOf(
             initialCarpet?.barcode ?: prefilledBarcode.ifBlank { "ESL-${(100000..999999).random()}" }
         )
     }
-    var size by remember { mutableStateOf(initialCarpet?.size ?: "200x300 cm") }
+    var carpetSize by remember { mutableStateOf(initialCarpet?.size ?: "200x300 cm") }
     var collection by remember { mutableStateOf(initialCarpet?.collection ?: "Klasyczna") }
     var composition by remember { mutableStateOf(initialCarpet?.composition ?: "100% Wełna") }
     var priceText by remember { mutableStateOf(initialCarpet?.pricePln?.toInt()?.toString() ?: "1499") }
     var promoPriceText by remember { mutableStateOf(initialCarpet?.promoPricePln?.toInt()?.toString() ?: "") }
     var patternType by remember { mutableIntStateOf(initialCarpet?.patternType ?: 0) }
     var notes by remember { mutableStateOf(initialCarpet?.notes ?: "") }
-
-    val isEditing = initialCarpet != null
+    var showLeroyLookup by remember { mutableStateOf(!isEditing && prefilledBarcode.isNotBlank()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -124,13 +128,37 @@ fun EditCarpetDialog(
                     }
                 }
 
+                // Przycisk wyszukiwania danych w Leroy Merlin po EAN
+                OutlinedButton(
+                    onClick = { showLeroyLookup = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("lookup_leroy_btn"),
+                    enabled = barcode.isNotBlank(),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Color(0xFF2E7D32)
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ShoppingBag,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Wyszukaj w Leroy Merlin (po EAN)",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedTextField(
-                        value = size,
-                        onValueChange = { size = it },
+                        value = carpetSize,
+                        onValueChange = { carpetSize = it },
                         label = { Text("Rozmiar") },
                         placeholder = { Text("np. 160x230 cm") },
                         modifier = Modifier.weight(1f),
@@ -219,7 +247,7 @@ fun EditCarpetDialog(
                         val carpet = initialCarpet?.copy(
                             name = name.trim(),
                             barcode = barcode.trim(),
-                            size = size.trim(),
+                            size = carpetSize.trim(),
                             collection = collection.trim(),
                             composition = composition.trim(),
                             pricePln = price,
@@ -231,7 +259,7 @@ fun EditCarpetDialog(
                             id = "CARPET-${UUID.randomUUID().toString().take(8).uppercase()}",
                             barcode = barcode.trim(),
                             name = name.trim(),
-                            size = size.trim(),
+                            size = carpetSize.trim(),
                             collection = collection.trim(),
                             composition = composition.trim(),
                             pricePln = price,
@@ -256,4 +284,24 @@ fun EditCarpetDialog(
             }
         }
     )
+
+    if (showLeroyLookup && barcode.isNotBlank()) {
+        LeroyMerlinLookupDialog(
+            ean = barcode,
+            onApplyProduct = { product ->
+                if (product.title.isNotBlank()) name = product.title
+                if (product.size.isNotBlank()) carpetSize = product.size
+                if (product.pricePln != null && product.pricePln > 0.0) {
+                    priceText = product.pricePln.toInt().toString()
+                }
+                if (product.collection.isNotBlank()) collection = product.collection
+                if (product.composition.isNotBlank()) composition = product.composition
+                if (notes.isBlank()) {
+                    notes = "Pobrano z Leroy Merlin (${barcode.trim()})"
+                }
+                showLeroyLookup = false
+            },
+            onDismiss = { showLeroyLookup = false }
+        )
+    }
 }
