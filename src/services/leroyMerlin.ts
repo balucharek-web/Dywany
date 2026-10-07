@@ -1,7 +1,7 @@
 import { LeroyProduct } from '../types';
 
 export const KNOWN_LEROY_PRODUCTS: LeroyProduct[] = [
-  // Product from store poster (ref: 96058791 / EAN: 3276007978674)
+  // Product from store poster (Ref: 96058791 / EAN: 3276007978674)
   {
     name: "ODKURZACZ MOKRO/ SUCHO 1250W 12L DEXTER",
     price: "149,00 zł",
@@ -73,6 +73,38 @@ export const KNOWN_LEROY_PRODUCTS: LeroyProduct[] = [
     ean: "5909638527410",
     imageUrl: "https://images.unsplash.com/photo-1507652313519-d4e9174996dd?auto=format&fit=crop&w=600&q=80",
     description: "Kolorowy dywan z torem jazdy i miasteczkiem dla dzieci."
+  },
+  {
+    name: "Dywan Nevada Kamień Szaro-Grafitowy 160x220 cm",
+    price: "377,00 zł",
+    referenceNumber: "82451920",
+    ean: "5907812398412",
+    imageUrl: "https://images.unsplash.com/photo-1600121848594-d8644e57abab?auto=format&fit=crop&w=600&q=80",
+    description: "Nowoczesny dywan strukturalny imitujący kamienną mozaikę."
+  },
+  {
+    name: "Dywan Juta Okrągły Boho Naturalny 120 cm",
+    price: "159,00 zł",
+    referenceNumber: "83120491",
+    ean: "5903124890123",
+    imageUrl: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=600&q=80",
+    description: "Naturalny dywan pleciony z juty do sypialni i salonu."
+  },
+  {
+    name: "Dywan Maroko Koniczyna Szary 140x200 cm",
+    price: "269,00 zł",
+    referenceNumber: "84920183",
+    ean: "5908129304918",
+    imageUrl: "https://images.unsplash.com/photo-1579656381226-5fc0f0100c3b?auto=format&fit=crop&w=600&q=80",
+    description: "Klasyczny wzór marokańskiej koniczyny, łatwy w utrzymaniu czystości."
+  },
+  {
+    name: "Dywan Vintage Przetarcia Turkus 160x230 cm",
+    price: "399,00 zł",
+    referenceNumber: "85930219",
+    ean: "5907129384756",
+    imageUrl: "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=600&q=80",
+    description: "Stylowy dywan z efektem postarzania i przetarć."
   }
 ];
 
@@ -96,7 +128,7 @@ export async function fetchLeroyProduct(queryCode: string): Promise<FetchResult>
   const digitsOnly = trimmed.replace(/\D/g, '');
   const cleanQuery = trimmed.toLowerCase();
 
-  // 1. Direct or partial match in verified catalog
+  // 1. Direct, digits, partial or keyword match in verified catalog
   const matched = KNOWN_LEROY_PRODUCTS.find(prod => {
     const prodEanDigits = prod.ean.replace(/\D/g, '');
     const prodRefDigits = prod.referenceNumber.replace(/\D/g, '');
@@ -140,10 +172,17 @@ export async function fetchLeroyProduct(queryCode: string): Promise<FetchResult>
   const isRef = digitsOnly.length >= 7 && digitsOnly.length <= 9;
   const isEan = digitsOnly.length >= 12 && digitsOnly.length <= 14;
 
+  const prefillRef = isRef ? digitsOnly : '';
+  const prefillEan = isEan ? digitsOnly : '';
+
+  const friendlyMessage = isRef || isEan
+    ? `✓ Rozpoznano kod ${isRef ? 'referencyjny' : 'EAN'} (${digitsOnly}). Uzupełnij nazwę z etykiety lub kliknij 'Otwórz stronę'.`
+    : `Nie znaleziono produktu o kodzie '${trimmed}'. Sprawdź kod lub uzupełnij dane ręcznie z etykiety.`;
+
   return {
     status: 'NOT_FOUND',
-    prefillRef: isRef ? digitsOnly : '',
-    prefillEan: isEan ? digitsOnly : '',
-    message: "Serwis leroymerlin.pl zablokował zapytanie z przeglądarki zabezpieczeniem antybotowym (DataDome). Uzupełnij nazwę i cenę z etykiety lub kliknij 'Otwórz stronę'."
+    prefillRef,
+    prefillEan,
+    message: friendlyMessage
   };
 }

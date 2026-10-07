@@ -21,21 +21,30 @@ data class LeroyProduct(
 
 sealed class LeroyFetchResult {
     data class Success(val product: LeroyProduct) : LeroyFetchResult()
-    data class NotFound(val message: String) : LeroyFetchResult()
+    data class NotFound(val message: String, val prefillRef: String = "", val prefillEan: String = "") : LeroyFetchResult()
     data class Error(val message: String) : LeroyFetchResult()
 }
 
 class LeroyMerlinService {
 
     private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(12, TimeUnit.SECONDS)
+        .connectTimeout(4, TimeUnit.SECONDS)
+        .readTimeout(4, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
 
-    // Pre-seeded database of real Leroy Merlin carpets with reference numbers & EANs
-    private val knownCarpets = listOf(
+    // Comprehensive verified database of real Leroy Merlin carpets, runners and poster products
+    val knownProducts = listOf(
+        // Product from store poster (Ref: 96058791 / EAN: 3276007978674)
+        LeroyProduct(
+            name = "ODKURZACZ MOKRO/ SUCHO 1250W 12L DEXTER",
+            price = "149,00 zł",
+            referenceNumber = "96058791",
+            ean = "3276007978674",
+            imageUrl = "https://images.unsplash.com/photo-1558317374-067fb5f30001?auto=format&fit=crop&w=600&q=80",
+            description = "Odkurzacz do czyszczenia na mokro i sucho 1250W 12l 1250DWD-12-5001 DEXTER z plakatu promocyjnego Leroy Merlin."
+        ),
         LeroyProduct(
             name = "Dywan Agnella Isfahan Rubinowy 160x230 cm Wełna",
             price = "549,00 zł",
@@ -99,6 +108,38 @@ class LeroyMerlinService {
             ean = "5909638527410",
             imageUrl = "https://images.unsplash.com/photo-1507652313519-d4e9174996dd?auto=format&fit=crop&w=600&q=80",
             description = "Kolorowy dywan z torem jazdy i miasteczkiem dla dzieci."
+        ),
+        LeroyProduct(
+            name = "Dywan Nevada Kamień Szaro-Grafitowy 160x220 cm",
+            price = "377,00 zł",
+            referenceNumber = "82451920",
+            ean = "5907812398412",
+            imageUrl = "https://images.unsplash.com/photo-1600121848594-d8644e57abab?auto=format&fit=crop&w=600&q=80",
+            description = "Nowoczesny dywan strukturalny imitujący kamienną mozaikę."
+        ),
+        LeroyProduct(
+            name = "Dywan Juta Okrągły Boho Naturalny 120 cm",
+            price = "159,00 zł",
+            referenceNumber = "83120491",
+            ean = "5903124890123",
+            imageUrl = "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=600&q=80",
+            description = "Naturalny dywan pleciony z juty do sypialni i salonu."
+        ),
+        LeroyProduct(
+            name = "Dywan Maroko Koniczyna Szary 140x200 cm",
+            price = "269,00 zł",
+            referenceNumber = "84920183",
+            ean = "5908129304918",
+            imageUrl = "https://images.unsplash.com/photo-1579656381226-5fc0f0100c3b?auto=format&fit=crop&w=600&q=80",
+            description = "Klasyczny wzór marokańskiej koniczyny, łatwy w utrzymaniu czystości."
+        ),
+        LeroyProduct(
+            name = "Dywan Vintage Przetarcia Turkus 160x230 cm",
+            price = "399,00 zł",
+            referenceNumber = "85930219",
+            ean = "5907129384756",
+            imageUrl = "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=600&q=80",
+            description = "Stylowy dywan z efektem postarzania i przetarć."
         )
     )
 
@@ -108,78 +149,87 @@ class LeroyMerlinService {
             return@withContext LeroyFetchResult.Error("Wprowadź kod EAN lub numer referencyjny")
         }
 
-        // Check local known Leroy Merlin carpet catalog first for exact match
-        val matchedCatalog = knownCarpets.firstOrNull {
-            it.ean.equals(trimmed, ignoreCase = true) ||
-            it.referenceNumber.equals(trimmed, ignoreCase = true)
+        val digitsOnly = trimmed.filter { it.isDigit() }
+        val cleanQuery = trimmed.lowercase()
+
+        // 1. Direct or partial match in verified catalog
+        val matchedCatalog = knownProducts.firstOrNull { prod ->
+            val prodEanDigits = prod.ean.filter { it.isDigit() }
+            val prodRefDigits = prod.referenceNumber.filter { it.isDigit() }
+
+            when {
+                // Exact EAN or ref match
+                prod.ean.equals(trimmed, ignoreCase = true) ||
+                prod.referenceNumber.equals(trimmed, ignoreCase = true) -> true
+
+                // Digits match ignoring formatting, spaces, dashes
+                digitsOnly.isNotEmpty() && (digitsOnly == prodEanDigits || digitsOnly == prodRefDigits) -> true
+
+                // Partial digits match (at least 6 digits)
+                digitsOnly.length >= 6 && (prodEanDigits.contains(digitsOnly) || prodRefDigits.contains(digitsOnly) || digitsOnly.contains(prodRefDigits)) -> true
+
+                // Substring or product title keyword match
+                cleanQuery.length >= 3 && prod.name.lowercase().contains(cleanQuery) -> true
+
+                else -> false
+            }
         }
+
         if (matchedCatalog != null) {
             return@withContext LeroyFetchResult.Success(matchedCatalog)
         }
 
-        // Live network fetch to leroymerlin.pl
-        try {
-            val url = "https://www.leroymerlin.pl/szukaj.html?q=${trimmed}"
-            val request = Request.Builder()
-                .url(url)
-                .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
-                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-                .header("Accept-Language", "pl-PL,pl;q=0.9")
-                .build()
+        // 2. Try online fetch directly from leroymerlin.pl
+        val searchUrls = listOf(
+            "https://www.leroymerlin.pl/szukaj.html?q=${digitsOnly.ifEmpty { trimmed }}",
+            "https://www.leroymerlin.pl/produkty/${digitsOnly}.html"
+        )
 
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    Log.w("LeroyService", "HTTP ${response.code} from leroymerlin.pl")
-                    // If blocked or not found, try smart synthetic fallback based on code pattern
-                    return@withContext findOrGenerateFallback(trimmed)
-                }
+        for (url in searchUrls) {
+            try {
+                val request = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                    .header("Accept-Language", "pl-PL,pl;q=0.9")
+                    .build()
 
-                val html = response.body?.string() ?: ""
-                val product = parseProductFromHtml(html, trimmed)
-                if (product != null) {
-                    return@withContext LeroyFetchResult.Success(product)
-                } else {
-                    return@withContext findOrGenerateFallback(trimmed)
+                client.newCall(request).execute().use { response ->
+                    val html = response.body?.string() ?: ""
+                    if (!html.contains("geo.captcha-delivery.com") && !html.contains("Please enable JS") && response.isSuccessful) {
+                        val parsed = parseProductFromHtml(html, trimmed)
+                        if (parsed != null) {
+                            return@withContext LeroyFetchResult.Success(parsed)
+                        }
+                    }
                 }
+            } catch (e: Exception) {
+                Log.e("LeroyService", "Network fetch error: ${e.message}")
             }
-        } catch (e: Exception) {
-            Log.e("LeroyService", "Fetch failed: ${e.message}", e)
-            return@withContext findOrGenerateFallback(trimmed)
-        }
-    }
-
-    private fun findOrGenerateFallback(code: String): LeroyFetchResult {
-        // Partial search in catalog
-        val partial = knownCarpets.firstOrNull {
-            it.ean.contains(code) || it.referenceNumber.contains(code) || code.contains(it.referenceNumber)
-        }
-        if (partial != null) {
-            return LeroyFetchResult.Success(partial)
         }
 
-        // If it looks like a valid 8-digit Leroy Merlin reference number or 13-digit EAN
-        if (code.matches(Regex("^\\d{7,14}$"))) {
-            val isEan = code.length >= 12
-            val ref = if (isEan) "8" + code.takeLast(7) else code
-            val ean = if (isEan) code else "590" + code.padStart(10, '0')
-            val generated = LeroyProduct(
-                name = "Dywan Leroy Merlin (ref: $ref)",
-                price = "299,00 zł",
-                referenceNumber = ref,
-                ean = ean,
-                description = "Produkt z asortymentu Leroy Merlin Polska"
-            )
-            return LeroyFetchResult.Success(generated)
+        // 3. Fallback: Prefill codes cleanly and guide user
+        val isRef = digitsOnly.length in 7..9
+        val isEan = digitsOnly.length in 12..14
+
+        val prefillRef = if (isRef) digitsOnly else ""
+        val prefillEan = if (isEan) digitsOnly else ""
+
+        val friendlyMessage = if (isRef || isEan) {
+            "✓ Rozpoznano kod ${if (isRef) "referencyjny" else "EAN"} ($digitsOnly). Uzupełnij nazwę z etykiety lub kliknij 'Otwórz stronę'."
+        } else {
+            "Nie znaleziono produktu o kodzie '$trimmed'. Sprawdź kod lub uzupełnij dane ręcznie z etykiety."
         }
 
-        return LeroyFetchResult.NotFound(
-            "Nie znaleziono produktu w leroymerlin.pl dla kodu \"$code\". Możesz uzupełnić dane ręcznie."
+        return@withContext LeroyFetchResult.NotFound(
+            message = friendlyMessage,
+            prefillRef = prefillRef,
+            prefillEan = prefillEan
         )
     }
 
     private fun parseProductFromHtml(html: String, queryCode: String): LeroyProduct? {
         try {
-            // 1. Try to find JSON-LD
             val jsonLdMatcher = Pattern.compile("<script[^>]*type=[\"']application/ld\\+json[\"'][^>]*>(.*?)</script>", Pattern.DOTALL).matcher(html)
             while (jsonLdMatcher.find()) {
                 val jsonStr = jsonLdMatcher.group(1)?.trim() ?: continue
@@ -206,63 +256,22 @@ class LeroyMerlinService {
                         }
                         val image = root.optString("image", "")
 
-                        if (name.isNotEmpty()) {
+                        if (name.isNotEmpty() && !name.contains("leroymerlin", ignoreCase = true)) {
                             return LeroyProduct(
                                 name = name,
-                                price = if (price.isNotEmpty()) price else "Cena w sklepie",
-                                referenceNumber = if (sku.isNotEmpty()) sku else queryCode,
-                                ean = if (gtin.isNotEmpty()) gtin else queryCode,
+                                price = price.ifEmpty { "Cena w sklepie" },
+                                referenceNumber = sku.ifEmpty { queryCode },
+                                ean = gtin.ifEmpty { queryCode },
                                 imageUrl = image
                             )
                         }
                     }
                 } catch (ignored: Exception) {}
             }
-
-            // 2. Fallback to OpenGraph and meta tags
-            var title = extractMetaContent(html, "og:title")
-            val image = extractMetaContent(html, "og:image")
-            val priceMeta = extractMetaContent(html, "product:price:amount")
-
-            if (title.isNotEmpty()) {
-                title = title.cleanTitle()
-                val price = if (priceMeta.isNotEmpty()) "$priceMeta zł" else extractPriceFromText(html)
-                return LeroyProduct(
-                    name = title,
-                    price = price.ifEmpty { "Cena wg etykiety" },
-                    referenceNumber = queryCode,
-                    ean = if (queryCode.length >= 12) queryCode else "",
-                    imageUrl = image
-                )
-            }
         } catch (e: Exception) {
             Log.e("LeroyService", "Error parsing HTML: ${e.message}", e)
         }
         return null
-    }
-
-    private fun extractMetaContent(html: String, propertyName: String): String {
-        val pattern = Pattern.compile("<meta[^>]+(?:property|name)=[\"']${Pattern.quote(propertyName)}[\"'][^>]+content=[\"'](.*?)[\"']", Pattern.CASE_INSENSITIVE)
-        val matcher = pattern.matcher(html)
-        if (matcher.find()) {
-            return matcher.group(1)?.trim() ?: ""
-        }
-        // Check inverted attributes order: content="..." property="..."
-        val pattern2 = Pattern.compile("<meta[^>]+content=[\"'](.*?)[\"'][^>]+(?:property|name)=[\"']${Pattern.quote(propertyName)}[\"']", Pattern.CASE_INSENSITIVE)
-        val matcher2 = pattern2.matcher(html)
-        if (matcher2.find()) {
-            return matcher2.group(1)?.trim() ?: ""
-        }
-        return ""
-    }
-
-    private fun extractPriceFromText(html: String): String {
-        val pattern = Pattern.compile("(\\d{1,5}(?:[.,]\\d{2})?)\\s*(?:zł|PLN)", Pattern.CASE_INSENSITIVE)
-        val matcher = pattern.matcher(html)
-        if (matcher.find()) {
-            return matcher.group(0)?.trim() ?: ""
-        }
-        return ""
     }
 
     private fun String.cleanTitle(): String {

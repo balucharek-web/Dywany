@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { X, QrCode, Search, Camera, VideoOff, Flashlight } from 'lucide-react';
+import { X, QrCode, Search, VideoOff } from 'lucide-react';
 
 interface BarcodeScannerModalProps {
   onScanCode: (code: string) => void;
@@ -33,29 +33,65 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
 
     const startCamera = async () => {
       try {
+        const config = {
+          fps: 12,
+          qrbox: { width: 260, height: 160 },
+          aspectRatio: 1.333
+        };
+
+        const handleSuccess = (decodedText: string) => {
+          if (isMounted && decodedText) {
+            scanner.stop().catch(() => {}).finally(() => {
+              onScanCode(decodedText);
+            });
+          }
+        };
+
+        // Try environment (back) camera first
+        try {
+          await scanner.start(
+            { facingMode: 'environment' },
+            config,
+            handleSuccess,
+            () => {}
+          );
+          if (isMounted) {
+            setCameraActive(true);
+            setCameraError(null);
+          }
+          return;
+        } catch (envErr) {
+          console.warn("Back camera direct start failed, trying any available camera:", envErr);
+        }
+
+        // Fallback: enumerate cameras
         const cameras = await Html5Qrcode.getCameras();
-        if (!cameras || cameras.length === 0) {
-          if (isMounted) setCameraError('Brak wykrytej kamery w urządzeniu.');
+        if (cameras && cameras.length > 0) {
+          const backCam = cameras.find(c =>
+            c.label.toLowerCase().includes('back') ||
+            c.label.toLowerCase().includes('rear') ||
+            c.label.toLowerCase().includes('otoczenia')
+          ) || cameras[cameras.length - 1];
+
+          await scanner.start(
+            backCam.id,
+            config,
+            handleSuccess,
+            () => {}
+          );
+          if (isMounted) {
+            setCameraActive(true);
+            setCameraError(null);
+          }
           return;
         }
 
-        const cameraId = cameras[cameras.length - 1].id; // Prefer back camera
+        // Fallback: user facing camera
         await scanner.start(
-          cameraId,
-          {
-            fps: 10,
-            qrbox: { width: 250, height: 160 },
-            aspectRatio: 1.333
-          },
-          (decodedText) => {
-            if (isMounted && decodedText) {
-              scanner.stop().catch(() => {});
-              onScanCode(decodedText);
-            }
-          },
-          () => {
-            // Frame scan failure (common while searching for barcode)
-          }
+          { facingMode: 'user' },
+          config,
+          handleSuccess,
+          () => {}
         );
         if (isMounted) {
           setCameraActive(true);
@@ -63,10 +99,11 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
         }
       } catch (err: any) {
         if (isMounted) {
+          console.error("Camera start error:", err);
           setCameraError(
             err?.message?.includes('NotAllowedError') || err?.message?.includes('Permission')
-              ? 'Wymagany dostęp do kamery, aby skanować kody kreskowe i ESL.'
-              : 'Kamera niedostępna w tym środowisku (skorzystaj z pola poniżej).'
+              ? 'Wymagane zezwolenie na dostęp do aparatu w przeglądarce.'
+              : 'Aparat niedostępny w tej przeglądarce lub urządzeniu. Użyj pola poniżej.'
           );
         }
       }
