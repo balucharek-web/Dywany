@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_name">DywanMag</string>
+    <string name="search_hint">Szukaj np. 1a, 23b, kodu ESL, EAN lub nazwy...</string>
+    <string name="sign_in_google">Zaloguj przez Google</string>
+    <string name="sign_in_to_edit">Tryb tylko do odczytu. Zaloguj się, aby dodawać i edytować dywany na stojakach.</string>
+    <string name="sign_out">Wyloguj</string>
+    <string name="filter_all">Wszystkie</string>
+    <string name="filter_occupied">Zajęte</string>
+    <string name="filter_empty">Wolne miejsca</string>
+    <string name="slot_title">Miejsce %1$s</string>
+    <string name="rack_title">Stojak %1$d</string>
+    <string name="add_carpet">Dodaj dywan</string>
+    <string name="edit_carpet">Edytuj dywan</string>
+    <string name="empty_slot">Miejsce wolne</string>
+    <string name="occupied_slot">Zajęte</string>
+    <string name="clear_slot">Zwolnij miejsce</string>
+    <string name="fetch_leroy">Pobierz z Leroy Merlin</string>
+    <string name="fetching_leroy">Pobieranie danych z leroymerlin.pl…</string>
+    <string name="scanner_title">Skaner kodów kreskowych / ESL</string>
+    <string name="camera_permission_needed">Aplikacja potrzebuje dostępu do aparatu, aby skanować kody ESL i EAN.</string>
+    <string name="grant_permission">Zezwól na aparat</string>
+</resources>
