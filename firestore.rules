@@ -1,0 +1,60 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 64 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidSlot(data) {
+      return data.slotId is string && data.slotId.size() > 0 && data.slotId.size() <= 32 &&
+             data.rackNumber is int && data.rackNumber >= 1 && data.rackNumber <= 10000 &&
+             (data.slotLetter == 'a' || data.slotLetter == 'b') &&
+             data.occupied is bool &&
+             (!('productName' in data) || (data.productName is string && data.productName.size() <= 200)) &&
+             (!('ean' in data) || (data.ean is string && data.ean.size() <= 32)) &&
+             (!('referenceNumber' in data) || (data.referenceNumber is string && data.referenceNumber.size() <= 32)) &&
+             (!('eslCode' in data) || (data.eslCode is string && data.eslCode.size() <= 64)) &&
+             (!('price' in data) || (data.price is string && data.price.size() <= 50)) &&
+             (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 1000)) &&
+             (!('updatedBy' in data) || (data.updatedBy is string && data.updatedBy.size() <= 128)) &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    match /slots/{slotId} {
+      // Anyone can search and view carpet locations on display
+      allow get, list: if true;
+
+      // Only authenticated users can modify, create, or delete slot allocations
+      allow create: if isSignedIn() &&
+                       isValidId(slotId) &&
+                       isValidSlot(incoming()) &&
+                       incoming().slotId == slotId;
+
+      allow update: if isSignedIn() &&
+                       isValidId(slotId) &&
+                       isValidSlot(incoming()) &&
+                       incoming().slotId == existing().slotId &&
+                       incoming().createdAt == existing().createdAt;
+
+      allow delete: if isSignedIn() && isValidId(slotId);
+    }
+  }
+}
