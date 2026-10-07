@@ -1,0 +1,75 @@
+{
+  "entities": {
+    "Slot": {
+      "title": "Slot",
+      "description": "Represents an individual carpet display rack slot (e.g. 1a, 1b).",
+      "type": "object",
+      "properties": {
+        "slotId": {
+          "type": "string",
+          "description": "Unique slot identifier such as 1a, 23b."
+        },
+        "rackNumber": {
+          "type": "integer",
+          "description": "The rack/magazyn number."
+        },
+        "slotLetter": {
+          "type": "string",
+          "enum": ["a", "b"],
+          "description": "The slot position on the rack (a or b)."
+        },
+        "occupied": {
+          "type": "boolean",
+          "description": "Whether a carpet is currently placed in this slot."
+        },
+        "productName": {
+          "type": "string",
+          "description": "The name or model of the carpet."
+        },
+        "ean": {
+          "type": "string",
+          "description": "The EAN-13 barcode of the carpet."
+        },
+        "referenceNumber": {
+          "type": "string",
+          "description": "The Leroy Merlin internal reference number (ref)."
+        },
+        "eslCode": {
+          "type": "string",
+          "description": "The electronic shelf label (ESL) code or barcode."
+        },
+        "price": {
+          "type": "string",
+          "description": "The product price formatted as string (e.g. 399,00 zł)."
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "Optional image URL of the product."
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "Email or identifier of the user who performed the last update."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of the last update. Clients must submit FieldValue.serverTimestamp()."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp. Clients must submit FieldValue.serverTimestamp()."
+        }
+      },
+      "required": ["slotId", "rackNumber", "slotLetter", "occupied", "updatedAt", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/slots/{slotId}": {
+      "schema": {
+        "$ref": "#/entities/Slot"
+      },
+      "description": "Collection of all display rack slots across the warehouse/store."
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "DywanMag",
+  "description": "Zarządzanie ekspozycją dywanów na stojakach, wyszukiwanie miejsc, skaner ESL/EAN oraz synchronizacja w czasie rzeczywistym.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
