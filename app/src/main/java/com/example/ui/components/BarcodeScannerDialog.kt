@@ -314,13 +314,13 @@ fun BarcodeScannerDialog(
                                                     imageProxy.imageInfo.rotationDegrees
                                                 )
                                                 barcodeScanner.process(image)
-                                                    .addOnSuccessListener { barcodes ->
+                                                    .addOnSuccessListener { barcodes: List<com.google.mlkit.vision.barcode.common.Barcode> ->
                                                         for (barcode in barcodes) {
-                                                            val rawValue = barcode.rawValue
-                                                            if (!rawValue.isNullOrBlank() && rawValue != lastScannedCode) {
-                                                                lastScannedCode = rawValue
+                                                            val code: String = barcode.rawValue ?: continue
+                                                            if (code.isNotBlank() && code != lastScannedCode) {
+                                                                lastScannedCode = code
                                                                 previewView.post {
-                                                                    executeSearch(rawValue)
+                                                                    executeSearch(code)
                                                                 }
                                                                 break
                                                             }
