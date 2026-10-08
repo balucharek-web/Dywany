@@ -27,11 +27,17 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Android legacy outputs
+# Android build outputs & caches
 *.iml
 .gradle
 .kotlin
 /local.properties
+local.properties
 /build
+*/build/
+captures/
+.externalNativeBuild
+.cxx
 .build-outputs/
 debug.keystore*
+*-debug.log

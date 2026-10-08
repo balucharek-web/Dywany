@@ -1,6 +1,6 @@
 {
-  "name": "DywanMag",
-  "description": "Zarządzanie ekspozycją dywanów na stojakach, wyszukiwanie miejsc, skaner ESL/EAN oraz synchronizacja w czasie rzeczywistym.",
+  "name": "Ekspozycja Dywanów",
+  "description": "System zarządzania ekspozycją dywanów Leroy Merlin",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

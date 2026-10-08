@@ -1,60 +1,113 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default deny all
-    match /{document=**} {
-      allow read, write: if false;
-    }
 
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 64 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    function userEmail() {
+      return request.auth.token.email.lower();
     }
 
-    function incoming() {
-      return request.resource.data;
+    function isSuperAdmin() {
+      return isSignedIn() && userEmail() == 'abaluch@leroymerlin.pl';
     }
 
-    function existing() {
-      return resource.data;
+    function isAdmin() {
+      return isSuperAdmin() || (
+        isSignedIn() && (
+          exists(/databases/$(database)/documents/admins/$(userEmail())) ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['ADMIN', 'SUPER_ADMIN'])
+        )
+      );
     }
 
-    function isValidSlot(data) {
-      return data.slotId is string && data.slotId.size() > 0 && data.slotId.size() <= 32 &&
-             data.rackNumber is int && data.rackNumber >= 1 && data.rackNumber <= 10000 &&
-             (data.slotLetter == 'a' || data.slotLetter == 'b') &&
-             data.occupied is bool &&
-             (!('productName' in data) || (data.productName is string && data.productName.size() <= 200)) &&
-             (!('ean' in data) || (data.ean is string && data.ean.size() <= 32)) &&
-             (!('referenceNumber' in data) || (data.referenceNumber is string && data.referenceNumber.size() <= 32)) &&
-             (!('eslCode' in data) || (data.eslCode is string && data.eslCode.size() <= 64)) &&
-             (!('price' in data) || (data.price is string && data.price.size() <= 50)) &&
-             (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 1000)) &&
-             (!('updatedBy' in data) || (data.updatedBy is string && data.updatedBy.size() <= 128)) &&
-             data.updatedAt is timestamp && data.updatedAt <= request.time &&
-             data.createdAt is timestamp && data.createdAt <= request.time;
+    function isValidUser(data) {
+      return data.keys().hasAll(['userId', 'email', 'role']) &&
+             data.userId is string &&
+             data.email is string &&
+             data.role in ['SUPER_ADMIN', 'ADMIN', 'USER'];
     }
 
-    match /slots/{slotId} {
-      // Anyone can search and view carpet locations on display
-      allow get, list: if true;
+    function isValidAdmin(data) {
+      return data.keys().hasAll(['email', 'addedBy']) &&
+             data.email is string &&
+             data.addedBy is string;
+    }
 
-      // Only authenticated users can modify, create, or delete slot allocations
-      allow create: if isSignedIn() &&
-                       isValidId(slotId) &&
-                       isValidSlot(incoming()) &&
-                       incoming().slotId == slotId;
+    function isValidPalek(data) {
+      return data.keys().hasAll(['id', 'numer', 'slots']) &&
+             data.id is string &&
+             data.numer is int && data.numer >= 1 &&
+             data.slots is map;
+    }
 
-      allow update: if isSignedIn() &&
-                       isValidId(slotId) &&
-                       isValidSlot(incoming()) &&
-                       incoming().slotId == existing().slotId &&
-                       incoming().createdAt == existing().createdAt;
+    function isValidDywan(data) {
+      return data.keys().hasAll(['km', 'palekNumer', 'miejsce', 'slot']) &&
+             data.km is string &&
+             data.km.matches('^[0-9]{8}$') &&
+             data.palekNumer is int && data.palekNumer >= 1 &&
+             data.miejsce is string &&
+             data.slot in ['A', 'B'];
+    }
 
-      allow delete: if isSignedIn() && isValidId(slotId);
+    function isValidHistory(data) {
+      return data.keys().hasAll(['id', 'action', 'userEmail', 'details']) &&
+             data.id is string &&
+             data.action in ['ADD', 'REMOVE', 'MOVE', 'SWAP', 'CREATE_PALEK', 'DELETE_PALEK', 'UPDATE_PRODUCT'] &&
+             data.userEmail is string &&
+             data.details is string;
+    }
+
+    // Kolekcja profili użytkowników
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && (
+        isSuperAdmin() ||
+        (request.auth.uid == userId && (
+          !('role' in request.resource.data) ||
+          request.resource.data.role == 'USER' ||
+          (isSuperAdmin() && request.resource.data.role in ['SUPER_ADMIN', 'ADMIN', 'USER'])
+        ))
+      ) && isValidUser(request.resource.data);
+      allow delete: if isSuperAdmin();
+    }
+
+    // Kolekcja administratorów - TYLKO SUPER ADMIN (abaluch@leroymerlin.pl) może modyfikować
+    match /admins/{adminEmail} {
+      allow read: if isSignedIn();
+      allow create, update: if isSuperAdmin() && isValidAdmin(request.resource.data);
+      allow delete: if isSuperAdmin() && adminEmail != 'abaluch@leroymerlin.pl';
+    }
+
+    // Pałąki ekspozycyjne - odczyt dla każdego zalogowanego, modyfikacje dla adminów
+    match /palki/{palekId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && isValidPalek(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // Dywany (indeks KM) - odczyt dla każdego zalogowanego, modyfikacje dla adminów
+    match /dywany/{km} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && isValidDywan(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // Historia operacji - niezmienny rejestr audytowy (immutable)
+    match /history/{logId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && isValidHistory(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    // Historia zmian cen produktów Leroy Merlin
+    match /productPriceHistory/{priceHistoryId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin();
+      allow update, delete: if false;
     }
   }
 }

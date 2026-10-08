@@ -1,75 +1,125 @@
 {
   "entities": {
-    "Slot": {
-      "title": "Slot",
-      "description": "Represents an individual carpet display rack slot (e.g. 1a, 1b).",
+    "User": {
+      "title": "User",
+      "description": "Pracownik sklepu Leroy Merlin korzystający z systemu.",
       "type": "object",
       "properties": {
-        "slotId": {
-          "type": "string",
-          "description": "Unique slot identifier such as 1a, 23b."
-        },
-        "rackNumber": {
-          "type": "integer",
-          "description": "The rack/magazyn number."
-        },
-        "slotLetter": {
-          "type": "string",
-          "enum": ["a", "b"],
-          "description": "The slot position on the rack (a or b)."
-        },
-        "occupied": {
-          "type": "boolean",
-          "description": "Whether a carpet is currently placed in this slot."
-        },
-        "productName": {
-          "type": "string",
-          "description": "The name or model of the carpet."
-        },
-        "ean": {
-          "type": "string",
-          "description": "The EAN-13 barcode of the carpet."
-        },
-        "referenceNumber": {
-          "type": "string",
-          "description": "The Leroy Merlin internal reference number (ref)."
-        },
-        "eslCode": {
-          "type": "string",
-          "description": "The electronic shelf label (ESL) code or barcode."
-        },
-        "price": {
-          "type": "string",
-          "description": "The product price formatted as string (e.g. 399,00 zł)."
-        },
-        "imageUrl": {
-          "type": "string",
-          "description": "Optional image URL of the product."
-        },
-        "updatedBy": {
-          "type": "string",
-          "description": "Email or identifier of the user who performed the last update."
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Timestamp of the last update. Clients must submit FieldValue.serverTimestamp()."
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Creation timestamp. Clients must submit FieldValue.serverTimestamp()."
+        "userId": { "type": "string", "description": "Identyfikator użytkownika Firebase Auth UID" },
+        "email": { "type": "string", "description": "Adres e-mail pracownika" },
+        "displayName": { "type": "string", "description": "Imię i nazwisko pracownika" },
+        "role": { "type": "string", "enum": ["SUPER_ADMIN", "ADMIN", "USER"], "description": "Rola w systemie" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Data rejestracji" }
+      },
+      "required": ["userId", "email", "role"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Zarejestrowany administrator systemu ekspozycji.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "description": "Adres e-mail administratora" },
+        "addedBy": { "type": "string", "description": "E-mail osoby dodającej uprawnienia" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Data dodania uprawnień" }
+      },
+      "required": ["email", "addedBy"]
+    },
+    "Palek": {
+      "title": "Palek",
+      "description": "Pałąk ekspozycyjny w dziale dywanów posiadający miejsca A i B.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Identyfikator dokumentu np. palek_23" },
+        "numer": { "type": "integer", "description": "Kolejny numer pałąka" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Data utworzenia" },
+        "createdBy": { "type": "string", "description": "E-mail lub UID twórcy" },
+        "slots": {
+          "type": "object",
+          "description": "Miejsca ekspozycyjne na pałąku (A i B)"
         }
       },
-      "required": ["slotId", "rackNumber", "slotLetter", "occupied", "updatedAt", "createdAt"]
+      "required": ["id", "numer", "slots"]
+    },
+    "Dywan": {
+      "title": "Dywan",
+      "description": "Ekspozycja dywanu indeksowana numerem KM (8 cyfr).",
+      "type": "object",
+      "properties": {
+        "km": { "type": "string", "description": "Dokładnie 8-cyfrowy kod produktu KM" },
+        "ean": { "type": "string", "description": "Kod kreskowy EAN (np. 5901234567890)" },
+        "nazwa": { "type": "string", "description": "Nazwa handlowa dywanu" },
+        "rozmiar": { "type": "string", "description": "Wymiary / rozmiar dywanu np. 160 x 230 cm" },
+        "cena": { "type": "number", "description": "Cena dywanu w postaci liczbowej" },
+        "waluta": { "type": "string", "description": "Waluta ceny np. PLN" },
+        "productUrl": { "type": "string", "description": "URL produktu na stronie Leroy Merlin" },
+        "palekNumer": { "type": "integer", "description": "Numer pałąka, na którym wisi dywan" },
+        "miejsce": { "type": "string", "description": "Oznaczenie miejsca np. 23A lub 23B" },
+        "slot": { "type": "string", "enum": ["A", "B"], "description": "Slot na pałąku: A lub B" },
+        "productDataUpdatedAt": { "type": "string", "format": "date-time", "description": "Czas ostatniej synchronizacji danych z Leroy Merlin" },
+        "productDataSource": { "type": "string", "description": "Źródło danych (np. leroy_merlin)" },
+        "productDataStatus": { "type": "string", "enum": ["ACTIVE", "NOT_FOUND", "ERROR", "DISCONTINUED"], "description": "Status dostępności produktu" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Czas ostatniej modyfikacji" },
+        "updatedByEmail": { "type": "string", "description": "E-mail osoby modyfikującej" }
+      },
+      "required": ["km", "palekNumer", "miejsce", "slot"]
+    },
+    "HistoryLog": {
+      "title": "HistoryLog",
+      "description": "Niezmienny wpis audytowy historii zmian ekspozycji.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unikalny identyfikator wpisu" },
+        "action": { "type": "string", "enum": ["ADD", "REMOVE", "MOVE", "SWAP", "CREATE_PALEK", "DELETE_PALEK", "UPDATE_PRODUCT"], "description": "Rodzaj wykonanej operacji" },
+        "userEmail": { "type": "string", "description": "Adres e-mail wykonawcy" },
+        "userName": { "type": "string", "description": "Imię/nazwa wykonawcy" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Czas operacji" },
+        "km": { "type": "string", "description": "Numer KM powiązanego dywanu" },
+        "from": { "type": "string", "description": "Miejsce źródłowe" },
+        "to": { "type": "string", "description": "Miejsce docelowe" },
+        "details": { "type": "string", "description": "Czytelny opis zmiany" }
+      },
+      "required": ["id", "action", "userEmail", "details"]
+    },
+    "ProductPriceHistory": {
+      "title": "ProductPriceHistory",
+      "description": "Historia zmian ceny produktu pobieranej ze sklepu.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Identyfikator wpisu" },
+        "km": { "type": "string", "description": "Numer KM dywanu" },
+        "oldPrice": { "type": "number", "description": "Poprzednia cena" },
+        "newPrice": { "type": "number", "description": "Nowa cena" },
+        "changedAt": { "type": "string", "format": "date-time", "description": "Czas zmiany" },
+        "source": { "type": "string", "description": "Źródło informacji (np. leroy_merlin)" },
+        "changedBy": { "type": "string", "description": "Osoba lub proces wykonujący zmianę" }
+      },
+      "required": ["id", "km", "newPrice"]
     }
   },
   "firestore": {
-    "/slots/{slotId}": {
-      "schema": {
-        "$ref": "#/entities/Slot"
-      },
-      "description": "Collection of all display rack slots across the warehouse/store."
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Profile użytkowników systemu"
+    },
+    "/admins/{adminEmail}": {
+      "schema": "Admin",
+      "description": "Lista uprawnionych administratorów"
+    },
+    "/palki/{palekId}": {
+      "schema": "Palek",
+      "description": "Kolekcja pałąków i ich aktualnej zawartości A i B"
+    },
+    "/dywany/{km}": {
+      "schema": "Dywan",
+      "description": "Szybki indeks dywanów po 8-cyfrowym numerze KM z danymi Leroy Merlin"
+    },
+    "/history/{logId}": {
+      "schema": "HistoryLog",
+      "description": "Rejestr audytowy operacji na ekspozycji"
+    },
+    "/productPriceHistory/{priceHistoryId}": {
+      "schema": "ProductPriceHistory",
+      "description": "Historia zmian cen produktów Leroy Merlin"
     }
   }
 }

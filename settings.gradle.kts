@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "DywanMag"
+rootProject.name = "Ekspozycja Dywanów"
 
 include(":app")

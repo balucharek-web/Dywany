@@ -7,8 +7,13 @@ const { test, before, after, beforeEach } = require("node:test");
 const fs = require("node:fs");
 
 let testEnv;
-const PROJECT_ID = "demo-no-project";
-const USER_UID = "worker_123";
+const PROJECT_ID = process.env.GCP_PROJECT || "demo-no-project";
+const SUPER_ADMIN_UID = "super_admin_uid";
+const SUPER_ADMIN_EMAIL = "abaluch@leroymerlin.pl";
+const ADMIN_UID = "admin_uid";
+const ADMIN_EMAIL = "admin.test@leroymerlin.pl";
+const USER_UID = "user_uid";
+const USER_EMAIL = "user.test@leroymerlin.pl";
 
 const [emulatorHost, emulatorPortStr] = (process.env.FIRESTORE_EMULATOR_HOST || "127.0.0.1:8085").split(":");
 const emulatorPort = parseInt(emulatorPortStr, 10);
@@ -37,71 +42,70 @@ beforeEach(async () => {
   }
 });
 
-test("Unauthenticated user can read slots", async () => {
-  const unauthedDb = testEnv.unauthenticatedContext().firestore();
-  await assertSucceeds(unauthedDb.collection("slots").doc("1a").get());
+test("Unauthenticated user: cannot read palki", async () => {
+  const unauthDb = testEnv.unauthenticatedContext().firestore();
+  await assertFails(unauthDb.collection("palki").get());
 });
 
-test("Unauthenticated user CANNOT create a slot", async () => {
-  const unauthedDb = testEnv.unauthenticatedContext().firestore();
-  await assertFails(
-    unauthedDb.collection("slots").doc("1a").set({
-      slotId: "1a",
-      rackNumber: 1,
-      slotLetter: "a",
-      occupied: true,
-      productName: "Dywan Isfahan",
-      updatedAt: new Date(),
-      createdAt: new Date(),
-    })
-  );
+test("Authenticated user: can read palki", async () => {
+  const userDb = testEnv.authenticatedContext(USER_UID, { email: USER_EMAIL }).firestore();
+  await assertSucceeds(userDb.collection("palki").get());
 });
 
-test("Authenticated worker can create and update a valid slot", async () => {
-  const authedDb = testEnv.authenticatedContext(USER_UID).firestore();
-  const slotRef = authedDb.collection("slots").doc("1a");
-  const now = new Date();
-
-  await assertSucceeds(
-    slotRef.set({
-      slotId: "1a",
-      rackNumber: 1,
-      slotLetter: "a",
-      occupied: true,
-      productName: "Dywan Komfort 160x230",
-      ean: "5901234567890",
-      referenceNumber: "82654321",
-      eslCode: "ESL-001",
-      price: "499,00 zł",
-      updatedBy: "worker@example.com",
-      updatedAt: now,
-      createdAt: now,
-    })
-  );
-
-  // Update carpet details
-  await assertSucceeds(
-    slotRef.update({
-      productName: "Dywan Agnella 160x230",
-      price: "449,00 zł",
-      updatedAt: new Date(),
-    })
-  );
+test("Regular user: cannot create palek", async () => {
+  const userDb = testEnv.authenticatedContext(USER_UID, { email: USER_EMAIL }).firestore();
+  await assertFails(userDb.collection("palki").doc("palek_1").set({
+    id: "palek_1",
+    numer: 1,
+    slots: { A: null, B: null }
+  }));
 });
 
-test("Authenticated worker cannot violate slot schema", async () => {
-  const authedDb = testEnv.authenticatedContext(USER_UID).firestore();
-  const slotRef = authedDb.collection("slots").doc("1a");
+test("Super Admin (abaluch@leroymerlin.pl): can create palek and admin", async () => {
+  const superDb = testEnv.authenticatedContext(SUPER_ADMIN_UID, { email: SUPER_ADMIN_EMAIL }).firestore();
+  await assertSucceeds(superDb.collection("palki").doc("palek_1").set({
+    id: "palek_1",
+    numer: 1,
+    slots: { A: null, B: null }
+  }));
 
-  // Invalid rackNumber (0)
-  await assertFails(
-    slotRef.set({
-      slotId: "1a",
-      rackNumber: 0,
-      slotLetter: "a",
-      occupied: true,
-      updatedAt: new Date(),
-      createdAt: new Date(),
-    })
-  );
+  await assertSucceeds(superDb.collection("admins").doc(ADMIN_EMAIL).set({
+    email: ADMIN_EMAIL,
+    addedBy: SUPER_ADMIN_EMAIL
+  }));
+});
+
+test("Admin: can create palek and dywan with valid 8-digit KM", async () => {
+  // First seed admin entry
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().collection("admins").doc(ADMIN_EMAIL).set({
+      email: ADMIN_EMAIL,
+      addedBy: SUPER_ADMIN_EMAIL
+    });
+  });
+
+  const adminDb = testEnv.authenticatedContext(ADMIN_UID, { email: ADMIN_EMAIL }).firestore();
+  await assertSucceeds(adminDb.collection("palki").doc("palek_2").set({
+    id: "palek_2",
+    numer: 2,
+    slots: { A: null, B: null }
+  }));
+
+  // Valid 8-digit KM: 45657894
+  await assertSucceeds(adminDb.collection("dywany").doc("45657894").set({
+    km: "45657894",
+    nazwa: "Dywan Testowy",
+    palekNumer: 2,
+    miejsce: "2A",
+    slot: "A"
+  }));
+
+  // Invalid KM (7 digits or letters) must FAIL
+  await assertFails(adminDb.collection("dywany").doc("1234567").set({
+    km: "1234567",
+    nazwa: "Błędny Dywan",
+    palekNumer: 2,
+    miejsce: "2A",
+    slot: "A"
+  }));
 });

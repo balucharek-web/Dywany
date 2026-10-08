@@ -8,52 +8,35 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = PrimaryBlueDark,
-    onPrimary = OnPrimaryBlueDark,
-    primaryContainer = PrimaryContainerBlueDark,
-    onPrimaryContainer = OnPrimaryContainerBlueDark,
-    secondary = SecondaryAmber,
-    onSecondary = OnSecondaryAmber,
-    secondaryContainer = SecondaryContainerAmber,
-    onSecondaryContainer = OnSecondaryContainerAmber,
-    tertiary = TertiaryEmerald,
-    onTertiary = OnTertiaryEmerald,
-    background = BackgroundDark,
-    onBackground = OnBackgroundDark,
-    surface = SurfaceDark,
-    onSurface = OnSurfaceDark,
-    surfaceVariant = SurfaceVariantDark,
-    onSurfaceVariant = OnSurfaceVariantDark
+    primary = DarkGreenPrimary,
+    secondary = DarkGreenSecondary,
+    tertiary = DarkGreenTertiary,
+    background = DarkBackground,
+    surface = DarkSurface,
+    onPrimary = Color.Black,
+    onSecondary = Color.Black
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = PrimaryBlue,
-    onPrimary = OnPrimaryBlue,
-    primaryContainer = PrimaryContainerBlue,
-    onPrimaryContainer = OnPrimaryContainerBlue,
-    secondary = SecondaryAmber,
-    onSecondary = OnSecondaryAmber,
-    secondaryContainer = SecondaryContainerAmber,
-    onSecondaryContainer = OnSecondaryContainerAmber,
-    tertiary = TertiaryEmerald,
-    onTertiary = OnTertiaryEmerald,
-    tertiaryContainer = TertiaryContainerEmerald,
-    onTertiaryContainer = OnTertiaryContainerEmerald,
-    background = BackgroundLight,
-    onBackground = OnBackgroundLight,
-    surface = SurfaceLight,
-    onSurface = OnSurfaceLight,
-    surfaceVariant = SurfaceVariantLight,
-    onSurfaceVariant = OnSurfaceVariantLight
+    primary = LeroyGreenPrimary,
+    secondary = LeroyGreenSecondary,
+    tertiary = LeroyGreenTertiary,
+    background = LeroyLightBackground,
+    surface = LeroyLightSurface,
+    outlineVariant = LeroyLightOutline,
+    onPrimary = Color.White,
+    onSecondary = Color.White,
+    onTertiary = Color.White
 )
 
 @Composable
 fun MyApplicationTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val colorScheme = when {
