@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions for zero-trust authorization
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isRootSuperAdmin() {
+      return isAuthenticated() &&
+        request.auth.token.email.lower() == 'baluch.arek@gmail.com';
+    }
+
+    function getUserRole() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.token.email))
+        ? get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role
+        : 'USER';
+    }
+
+    function isAdmin() {
+      return isRootSuperAdmin() ||
+        (isAuthenticated() && (getUserRole() == 'ADMIN' || getUserRole() == 'SUPER_ADMIN'));
+    }
+
+    function isSuperAdmin() {
+      return isRootSuperAdmin() ||
+        (isAuthenticated() && getUserRole() == 'SUPER_ADMIN');
+    }
+
+    // 1. PRODUCTS COLLECTION
+    // USER: Public read (wyszukiwanie bez logowania)
+    // ADMIN / SUPER_ADMIN: Write / Update (edycja cen lokalnych, dodawanie)
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 2. DISPLAY ASSIGNMENTS (Pałąki i miejsca A/B)
+    // USER: Public read
+    // ADMIN / SUPER_ADMIN: Write (przypisanie, przeniesienie, zamiana atomowa, usunięcie)
+    match /displayAssignments/{spotId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 3. AUDIT LOGS (Historia zmian)
+    // Read: ADMIN / SUPER_ADMIN
+    // Create: ADMIN / SUPER_ADMIN (cannot be modified or deleted once created)
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false; // Append-only immutable log
+    }
+
+    // 4. USERS COLLECTION (Role i uprawnienia)
+    // Read: Authenticated users
+    // Write: SUPER_ADMIN only
+    match /users/{userEmail} {
+      allow read: if isAuthenticated();
+      // Ensure the root super admin cannot be demoted or deleted by rules
+      allow write: if isSuperAdmin() &&
+        !(userEmail.lower() == 'baluch.arek@gmail.com' && request.resource.data.role != 'SUPER_ADMIN');
+    }
+
+    // 5. SETTINGS
+    // Read: Public
+    // Write: ADMIN / SUPER_ADMIN
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

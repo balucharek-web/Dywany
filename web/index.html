@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ekspozycja Dywanów | Leroy Merlin</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+  <!-- Firebase JS SDK (Compat for reliable static browser hosting) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- Top Navigation Bar -->
+    <header class="app-header">
+      <div class="header-left">
+        <span class="lm-brand-badge">LM</span>
+        <div>
+          <h1>EKSPOZYCJA DYWANÓW</h1>
+          <span class="sync-status" id="syncStatus">
+            <span class="status-dot online"></span> <span id="statusText">Połączono z bazą</span>
+          </span>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="user-pill" id="userPill" onclick="openAuthModal()">
+          <span class="role-dot" id="roleDot"></span>
+          <span id="userPillText">Gość (USER)</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-tab="home" onclick="switchTab('home')">🔍 Główna</button>
+      <button class="nav-tab" data-tab="poles" onclick="switchTab('poles')">🏷️ Pałąki</button>
+      <button class="nav-tab admin-only" data-tab="history" onclick="switchTab('history')">📜 Historia zmian</button>
+      <button class="nav-tab super-admin-only" data-tab="users" onclick="switchTab('users')">👥 Użytkownicy</button>
+      <button class="nav-tab" data-tab="settings" onclick="switchTab('settings')">⚙️ Ustawienia</button>
+    </nav>
+
+    <!-- Main Content Container -->
+    <main class="content-container">
+      
+      <!-- TAB: HOME -->
+      <section id="tab-home" class="tab-content active">
+        <!-- Search Section -->
+        <div class="search-card">
+          <div class="search-input-group">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="mainSearchInput" placeholder="Wpisz EAN / numer LM / miejsce (np. 23A) / nazwę…" oninput="handleSearch(this.value)">
+            <button class="clear-btn" id="clearSearchBtn" onclick="clearSearch()" style="display: none;">✕</button>
+            <button class="scan-btn" onclick="openScannerModal()">📷 Skanuj kod</button>
+          </div>
+          
+          <div class="recent-tags" id="recentTags">
+            <span class="recent-label">Szybkie wyszukiwanie:</span>
+            <button class="tag" onclick="quickSearch('23A')">23A</button>
+            <button class="tag" onclick="quickSearch('1B')">1B</button>
+            <button class="tag" onclick="quickSearch('82451923')">82451923 (LM)</button>
+            <button class="tag" onclick="quickSearch('Agnella')">Agnella</button>
+          </div>
+        </div>
+
+        <!-- Admin Quick Actions Bar -->
+        <div class="admin-actions-bar admin-only">
+          <button class="btn btn-primary" onclick="openAddCarpetModal()">+ Dodaj dywan</button>
+          <button class="btn btn-secondary" onclick="openSwapModal()">⇄ Zamień miejsca</button>
+        </div>
+
+        <!-- Search Results / Occupied Carpet Catalog -->
+        <div class="section-title">
+          <h2 id="homeSectionTitle">Aktualna ekspozycja dywanów</h2>
+        </div>
+
+        <div class="carpet-grid" id="carpetGrid">
+          <!-- Dynamically populated -->
+        </div>
+      </section>
+
+      <!-- TAB: POLES (PAŁĄKI) -->
+      <section id="tab-poles" class="tab-content">
+        <div class="poles-controls">
+          <div class="pole-search-box">
+            <input type="number" id="jumpPoleInput" placeholder="Skocz do pałąka (np. 23)" oninput="filterPoles(this.value)">
+          </div>
+          <div class="filter-chips">
+            <button class="chip active" data-filter="all" onclick="setPoleFilter('all', this)">Wszystkie</button>
+            <button class="chip" data-filter="occupied" onclick="setPoleFilter('occupied', this)">Tylko zajęte</button>
+            <button class="chip" data-filter="empty" onclick="setPoleFilter('empty', this)">Z wolnym miejscem</button>
+          </div>
+          <button class="btn btn-primary admin-only" onclick="openAddPolePrompt()">+ Dodaj pałąk</button>
+        </div>
+
+        <div class="poles-list" id="polesList">
+          <!-- Dynamically populated (Pałąk 1: 1A, 1B...) -->
+        </div>
+      </section>
+
+      <!-- TAB: HISTORY (AUDIT LOGS) -->
+      <section id="tab-history" class="tab-content">
+        <div class="section-title">
+          <h2>Historia zmian na ekspozycji</h2>
+          <span class="subtitle">Dziennik operacji w czasie rzeczywistym</span>
+        </div>
+        <div class="history-list" id="historyList">
+          <!-- Dynamically populated -->
+        </div>
+      </section>
+
+      <!-- TAB: USERS (SUPER_ADMIN ONLY) -->
+      <section id="tab-users" class="tab-content">
+        <div class="section-title">
+          <h2>Zarządzanie administratorami</h2>
+          <span class="subtitle">Właściciel: baluch.arek@gmail.com (SUPER_ADMIN)</span>
+        </div>
+
+        <div class="card admin-form-card">
+          <h3>Dodaj administratora (Google E-mail)</h3>
+          <div class="input-row">
+            <input type="email" id="newAdminEmail" placeholder="np. jan.kowalski@gmail.com">
+            <button class="btn btn-primary" onclick="handleAddAdmin()">Dodaj ADMIN</button>
+          </div>
+        </div>
+
+        <div class="card warning-card">
+          <h3>Przekazanie roli SUPER_ADMIN</h3>
+          <p>System uniemożliwia usunięcie ostatniego SUPER_ADMIN. Przekazanie jest atomowe.</p>
+          <div class="input-row">
+            <input type="email" id="transferAdminEmail" placeholder="Adres e-mail nowego SUPER_ADMIN">
+            <button class="btn btn-danger" onclick="handleTransferSuperAdmin()">Przekaż uprawnienia</button>
+          </div>
+        </div>
+
+        <h3>Zarejestrowani użytkownicy</h3>
+        <div class="users-list" id="usersList">
+          <!-- Dynamically populated -->
+        </div>
+      </section>
+
+      <!-- TAB: SETTINGS -->
+      <section id="tab-settings" class="tab-content">
+        <div class="section-title">
+          <h2>Ustawienia i Infrastruktura</h2>
+        </div>
+
+        <div class="card">
+          <h3>Automatyczna synchronizacja cen</h3>
+          <p>Okresowe pobieranie danych ze strony leroymerlin.pl (ceny, zdjęcia, nazwy). Lokalne ceny (Lokalna cena) nie są nadpisywane.</p>
+          <div class="interval-selector">
+            <label>Częstotliwość aktualizacji:</label>
+            <select id="syncIntervalSelect" onchange="updateSyncInterval(this.value)">
+              <option value="6">Co 6 godzin</option>
+              <option value="12">Co 12 godzin</option>
+              <option value="24" selected>Co 24 godziny (domyślnie)</option>
+              <option value="48">Co 48 godzin</option>
+              <option value="168">Co 7 dni</option>
+            </select>
+          </div>
+          <div style="margin-top: 14px;">
+            <button class="btn btn-secondary" onclick="triggerManualSync()">🔄 Odśwież produkty teraz</button>
+          </div>
+        </div>
+
+        <div class="card owner-card">
+          <h3>Właściciel infrastruktury i bazy danych</h3>
+          <p><strong>Główny właściciel i administrator:</strong> <code>baluch.arek@gmail.com</code></p>
+          <p>Produkcyjna baza Firestore, reguły bezpieczeństwa, Cloud Functions i hosting należą wyłącznie do konta baluch.arek@gmail.com.</p>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- MODAL: Product Details -->
+    <div class="modal" id="productModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <span class="spot-badge" id="modalSpotBadge">23A</span>
+          <button class="modal-close" onclick="closeModal('productModal')">✕</button>
+        </div>
+        <div class="modal-body" id="productModalBody">
+          <!-- Product image, codes, prices, local price edit -->
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: Add Carpet -->
+    <div class="modal" id="addCarpetModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>+ Dodaj dywan na ekspozycję</h3>
+          <button class="modal-close" onclick="closeModal('addCarpetModal')">✕</button>
+        </div>
+        <div class="modal-body">
+          <label>Wybierz produkt (EAN / numer LM):</label>
+          <input type="text" id="addCarpetSearch" placeholder="Wpisz EAN lub numer LM..." oninput="filterAddProductList(this.value)">
+          <div class="product-picker-list" id="addProductPickerList"></div>
+          
+          <div style="margin-top: 16px;">
+            <label>Wybierz pałąk i miejsce:</label>
+            <div class="input-row">
+              <input type="number" id="targetPoleNumber" placeholder="Numer pałąka (np. 23)" value="1">
+              <select id="targetSpotLetter">
+                <option value="A">Miejsce A</option>
+                <option value="B">Miejsce B</option>
+              </select>
+            </div>
+          </div>
+          <div id="addSpotStatusNotice" class="notice-box" style="margin-top: 12px;"></div>
+          <div style="margin-top: 16px; text-align: right;">
+            <button class="btn btn-secondary" onclick="closeModal('addCarpetModal')">Anuluj</button>
+            <button class="btn btn-primary" id="confirmAssignBtn" onclick="confirmAddCarpet()">Przypisz dywan</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: Swap Spots -->
+    <div class="modal" id="swapModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>⇄ Zamień miejsca dywanów</h3>
+          <button class="modal-close" onclick="closeModal('swapModal')">✕</button>
+        </div>
+        <div class="modal-body">
+          <p>Operacja atomowa. Miejsca zostaną zamienione natychmiast na wszystkich urządzeniach.</p>
+          <div class="input-row">
+            <input type="text" id="swapSpot1" placeholder="Miejsce 1 (np. 23A)">
+            <span style="font-size: 20px; font-weight: bold;">⇄</span>
+            <input type="text" id="swapSpot2" placeholder="Miejsce 2 (np. 23B)">
+          </div>
+          <div style="margin-top: 20px; text-align: right;">
+            <button class="btn btn-secondary" onclick="closeModal('swapModal')">Anuluj</button>
+            <button class="btn btn-primary" onclick="confirmSwapSpots()">Wykonaj zamianę</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: Move Carpet -->
+    <div class="modal" id="moveModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Przenieś dywan</h3>
+          <button class="modal-close" onclick="closeModal('moveModal')">✕</button>
+        </div>
+        <div class="modal-body">
+          <p id="moveModalDesc"></p>
+          <label>Wybierz docelowy pałąk i miejsce:</label>
+          <div class="input-row">
+            <input type="number" id="moveTargetPole" placeholder="Numer pałąka">
+            <select id="moveTargetSpot">
+              <option value="A">A</option>
+              <option value="B">B</option>
+            </select>
+          </div>
+          <div id="moveStatusNotice" class="notice-box" style="margin-top: 12px;"></div>
+          <div style="margin-top: 20px; text-align: right;">
+            <button class="btn btn-secondary" onclick="closeModal('moveModal')">Anuluj</button>
+            <button class="btn btn-primary" id="confirmMoveBtn" onclick="confirmMoveCarpet()">Przenieś</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: Barcode Scanner (Web Camera) -->
+    <div class="modal" id="scannerModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>📷 Skaner kodów kreskowych EAN / LM</h3>
+          <button class="modal-close" onclick="closeScannerModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <p>Skieruj aparat na kod kreskowy dywanu. Pełny kod EAN zostanie odczytany bez obcinania znaków.</p>
+          <div id="videoContainer" style="position: relative; width: 100%; height: 260px; background: #000; border-radius: 12px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+            <video id="scannerVideo" playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
+            <div style="position: absolute; width: 220px; height: 120px; border: 2px solid #00E676; border-radius: 10px; pointer-events: none;"></div>
+          </div>
+          <div style="margin-top: 14px;">
+            <label>Ręczne wpisanie kodu:</label>
+            <div class="input-row">
+              <input type="text" id="manualBarcodeInput" placeholder="np. 5901234567890">
+              <button class="btn btn-primary" onclick="submitManualBarcode()">Szukaj</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: Account & Google Sign-In -->
+    <div class="modal" id="authModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Konto i Uprawnienia Google</h3>
+          <button class="modal-close" onclick="closeModal('authModal')">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="card" id="authStatusCard">
+            <!-- User info -->
+          </div>
+
+          <div style="margin-top: 16px;">
+            <button class="btn btn-primary btn-block" onclick="loginWithGoogle()">
+              🔑 Zaloguj przez Google (Konto Osobiste / Służbowe)
+            </button>
+          </div>
+
+          <hr style="margin: 20px 0; border: none; border-top: 1px solid #e0e0e0;">
+
+          <h4>Szybki wybór profilu (dla testów / profilu służbowego):</h4>
+          <div class="role-selector-btns">
+            <button class="role-btn" onclick="selectTestAccount('baluch.arek@gmail.com')">
+              <strong>baluch.arek@gmail.com</strong>
+              <span>Główny Administrator (SUPER_ADMIN)</span>
+            </button>
+            <button class="role-btn" onclick="selectTestAccount('marek.nowak@leroymerlin.pl')">
+              <strong>marek.nowak@leroymerlin.pl</strong>
+              <span>Pracownik sklepu (ADMIN)</span>
+            </button>
+            <button class="role-btn" onclick="selectTestAccount(null)">
+              <strong>Tryb Gościa</strong>
+              <span>Dostęp tylko do odczytu (USER)</span>
+            </button>
+          </div>
+
+          <div style="margin-top: 20px; text-align: right;">
+            <button class="btn btn-secondary" onclick="closeModal('authModal')">Zamknij</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

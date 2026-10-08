@@ -1,0 +1,6 @@
+{
+  "name": "Ekspozycja Dywanów",
+  "description": "Zarządzanie ekspozycją dywanów na pałąkach w sklepie Leroy Merlin ze skanowaniem EAN, numerami LM, synchronizacją Firestore i rolami.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,19 @@
+<resources>
+    <string name="app_name">Ekspozycja Dywanów</string>
+    <string name="search_placeholder">Wpisz EAN / numer LM / miejsce (np. 23A) / nazwę…</string>
+    <string name="scan_barcode">Skanuj kod</string>
+    <string name="display_view">Ekspozycja</string>
+    <string name="recent_searches">Ostatnie wyszukiwania</string>
+    <string name="management">Zarządzanie</string>
+    <string name="add_carpet">Dodaj dywan</string>
+    <string name="swap_spots">Zamień miejsca</string>
+    <string name="history_changes">Historia zmian</string>
+    <string name="users_management">Użytkownicy</string>
+    <string name="pole_management">Pałąki</string>
+    <string name="sign_in_google">Zaloguj przez Google</string>
+    <string name="sign_out">Wyloguj się</string>
+    <string name="local_price_label">Lokalna cena</string>
+    <string name="online_price_label">Cena internetowa</string>
+    <string name="empty_spot">Puste</string>
+    <string name="offline_notice">Brak połączenia – tryb offline</string>
+</resources>
