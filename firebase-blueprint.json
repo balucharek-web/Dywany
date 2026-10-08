@@ -1,0 +1,88 @@
+{
+  "entities": {
+    "Palek": {
+      "title": "Palek",
+      "description": "Represents a physical carpet display rack (pałąk) containing slot A and slot B",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "number": { "type": "integer", "description": "Rack number, e.g. 1, 2, 3" },
+        "slotA": {
+          "type": "object",
+          "description": "Slot A status and assigned rug details"
+        },
+        "slotB": {
+          "type": "object",
+          "description": "Slot B status and assigned rug details"
+        },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string", "description": "Email or UID of last modifying user" }
+      },
+      "required": ["id", "number", "slotA", "slotB"]
+    },
+    "Dywan": {
+      "title": "Dywan",
+      "description": "Represents a carpet product from Leroy Merlin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ean": { "type": "string", "description": "Full EAN barcode (e.g. 13 digits) stored as string" },
+        "lmNumber": { "type": "string", "description": "8-digit Leroy Merlin product code" },
+        "name": { "type": "string", "description": "Product commercial name" },
+        "size": { "type": "string", "description": "Dimensions (e.g. 160x230 cm)" },
+        "price": { "type": "number", "description": "Current retail price" },
+        "palekNumber": { "type": "integer" },
+        "slot": { "type": "string", "enum": ["A", "B"] },
+        "imageUrl": { "type": "string" },
+        "productUrl": { "type": "string" },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "ean", "lmNumber", "name", "price"]
+    },
+    "HistoryLog": {
+      "title": "HistoryLog",
+      "description": "Audit log for every rack and rug operation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "userEmail": { "type": "string" },
+        "action": { "type": "string", "enum": ["ASSIGN", "REMOVE", "SWAP", "MOVE", "EDIT"] },
+        "details": { "type": "string" },
+        "oldValue": { "type": "string" },
+        "newValue": { "type": "string" }
+      },
+      "required": ["id", "userEmail", "action", "details"]
+    },
+    "UserRole": {
+      "title": "UserRole",
+      "description": "User permission profile",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["SUPER_ADMIN", "ADMIN", "USER"] },
+        "displayName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role"]
+    }
+  },
+  "firestore": {
+    "/palki/{palekId}": {
+      "schema": { "$ref": "#/entities/Palek" },
+      "description": "Collection of all carpet racks (pałąki)"
+    },
+    "/dywany/{dywanId}": {
+      "schema": { "$ref": "#/entities/Dywan" },
+      "description": "Catalog of carpets and their assigned locations"
+    },
+    "/history/{historyId}": {
+      "schema": { "$ref": "#/entities/HistoryLog" },
+      "description": "Change history audit trail"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserRole" },
+      "description": "User roles and access permissions"
+    }
+  }
+}

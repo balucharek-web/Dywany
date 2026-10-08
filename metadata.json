@@ -1,0 +1,6 @@
+{
+  "name": "Leroy Merlin Dywany",
+  "description": "System ekspozycji dywanów Leroy Merlin - zarządzanie pałąkami, slotami A/B, skanowaniem kodów EAN i synchronizacją czasu rzeczywistego.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

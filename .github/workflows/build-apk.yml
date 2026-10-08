@@ -1,0 +1,52 @@
+name: Build APK and Create Release
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew || true
+
+      - name: Build Debug and Release APK
+        run: |
+          if [ -f "./gradlew" ]; then
+            ./gradlew assembleDebug --stacktrace
+          else
+            gradle assembleDebug --stacktrace
+          fi
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+
+      - name: Create GitHub Release with APK
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
+        with:
+          tag_name: v1.0.1
+          name: "Wydanie produkcyjne v1.0.1 - Naprawiony EAN i Opcjonalne Logowanie"
+          body: |
+            ### Zmiany w wydaniu v1.0.1:
+            - **Naprawa skanowania kodów EAN**: EAN jest zachowywany w 100% jako String (np. `5901234567890`) bez obcinania do 8 znaków.
+            - **Rozróżnienie EAN od numeru LM**: EAN i numer LM są osobnymi identyfikatorami.
+            - **Opcjonalne logowanie Google**: Aplikacja otwiera się bezpośrednio w trybie odczytu (przeglądanie, wyszukiwanie, skanowanie). Logowanie jest wymagane wyłącznie przy operacjach zapisu.
+          files: app/build/outputs/apk/debug/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

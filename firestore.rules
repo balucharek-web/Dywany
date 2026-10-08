@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserEmail() {
+      return request.auth.token.email;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        getUserEmail() == 'abaluch@leroymerlin.pl' ||
+        getUserEmail() == 'baluch.arek@gmail.com'
+      );
+    }
+
+    function isAdmin() {
+      return isSuperAdmin() || (
+        isSignedIn() && (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['ADMIN', 'SUPER_ADMIN']
+        )
+      );
+    }
+
+    function isUser() {
+      return isSignedIn();
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Palki (Carpet display racks):
+    // READ: Dostęp publiczny (GUEST / bez logowania)
+    // WRITE: Wymagane zalogowanie i rola USER/ADMIN/SUPER_ADMIN
+    match /palki/{palekId} {
+      allow read: if true;
+      allow create, update: if isUser();
+      allow delete: if isAdmin();
+    }
+
+    // Dywany (Carpets catalog):
+    // READ: Dostęp publiczny (GUEST / bez logowania)
+    // WRITE: Wymagane zalogowanie
+    match /dywany/{dywanId} {
+      allow read: if true;
+      allow create, update: if isUser();
+      allow delete: if isAdmin();
+    }
+
+    // History (Audit logs):
+    // READ: Dostęp publiczny (GUEST / bez logowania)
+    // CREATE: Tylko zalogowani użytkownicy przy wykonywaniu operacji
+    // UPDATE/DELETE: Tylko SUPER_ADMIN
+    match /history/{historyId} {
+      allow read: if true;
+      allow create: if isUser();
+      allow update, delete: if isSuperAdmin();
+    }
+
+    // Users and roles:
+    // Odczyt dla zalogowanych, zapis tylko przez uprawnionych
+    match /users/{userId} {
+      allow read: if isUser();
+      allow create: if isUser() && (
+        request.auth.uid == userId ||
+        isAdmin()
+      );
+      allow update, delete: if isSuperAdmin() || (isAdmin() && request.auth.uid != userId);
+    }
+  }
+}
