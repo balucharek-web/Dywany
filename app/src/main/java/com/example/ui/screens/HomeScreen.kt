@@ -91,9 +91,9 @@ fun HomeScreen(
     val historyList by viewModel.historyList.collectAsState()
     val userRole by viewModel.userRole.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val currentUser by viewModel.currentUser.collectAsState()
+    val activeEmail by viewModel.activeEmail.collectAsState()
 
-    val isLoggedIn = currentUser != null
+    val isLoggedIn = activeEmail != null
 
     // Stany dialogów
     var showScanner by remember { mutableStateOf(false) }
@@ -195,7 +195,7 @@ fun HomeScreen(
                                 color = Color.White
                             )
                             Text(
-                                text = if (isLoggedIn) "${currentUser?.email} (${userRole.name})" else "👤 Niezalogowany (Tylko odczyt)",
+                                text = if (isLoggedIn) "$activeEmail (${userRole.name})" else "👤 Niezalogowany (Tylko odczyt)",
                                 fontSize = 11.sp,
                                 color = Color.White.copy(alpha = 0.85f)
                             )
@@ -223,7 +223,10 @@ fun HomeScreen(
                         }
                     }
                     if (isLoggedIn) {
-                        IconButton(onClick = onSignOut) {
+                        IconButton(onClick = {
+                            viewModel.clearSession()
+                            onSignOut()
+                        }) {
                             Icon(
                                 imageVector = Icons.Default.Logout,
                                 contentDescription = "Wyloguj"
@@ -336,7 +339,7 @@ fun HomeScreen(
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = "Tryb podglądu",
+                            text = "Tryb podglądu (Gość)",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = TextSecondary,
@@ -408,7 +411,6 @@ fun HomeScreen(
                                 }
                             },
                             onDywanDetailClick = { dywan ->
-                                // Odczyt dostępny bez logowania
                                 coroutineScope.launch {
                                     snackbarHostState.showSnackbar(
                                         "Dywan: ${dywan.name} | EAN: ${dywan.ean} | LM: ${dywan.lmNumber} | Cena: ${String.format("%.2f", dywan.price)} zł"
@@ -478,15 +480,16 @@ fun HomeScreen(
         )
     }
 
-    // Dialog żądania logowania
+    // Dialog logowania pracownika (Google Sign-In + szybkie logowanie pracownika sklepu)
     if (showLoginDialog) {
         LoginRequiredDialog(
             actionName = pendingActionDesc,
             onDismiss = { showLoginDialog = false },
-            onLoginSuccess = {
+            onLoginSuccess = { email ->
+                viewModel.setEmployeeSession(email)
                 showLoginDialog = false
                 coroutineScope.launch {
-                    snackbarHostState.showSnackbar("Zalogowano pomyślnie! Możesz teraz modyfikować dane.")
+                    snackbarHostState.showSnackbar("Zalogowano jako $email. Możesz teraz modyfikować dane.")
                 }
             }
         )

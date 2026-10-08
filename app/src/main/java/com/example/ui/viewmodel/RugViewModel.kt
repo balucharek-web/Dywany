@@ -24,6 +24,10 @@ class RugViewModel(application: Application) : AndroidViewModel(application) {
     val currentUser: StateFlow<FirebaseUser?> = repository.getAuthStateFlow()
         .stateIn(viewModelScope, SharingStarted.Eagerly, repository.getCurrentUser())
 
+    // Lokalny stan sesji pracownika (gdy zalogowano bezpośrednio profilem pracownika)
+    private val _customUserEmail = MutableStateFlow<String?>(null)
+    val customUserEmail: StateFlow<String?> = _customUserEmail.asStateFlow()
+
     private val _palkiList = MutableStateFlow<List<Palek>>(emptyList())
     val palkiList: StateFlow<List<Palek>> = _palkiList.asStateFlow()
 
@@ -38,6 +42,10 @@ class RugViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    val activeEmail: StateFlow<String?> = combine(currentUser, _customUserEmail) { fbUser, customEmail ->
+        customEmail ?: fbUser?.email
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     // Filtrowana lista pałąków w zależności od wpisanego zapytania (EAN, LM, Numer pałąka, Nazwa)
     val filteredPalki: StateFlow<List<Palek>> = combine(_palkiList, _searchQuery) { list, query ->
@@ -88,18 +96,31 @@ class RugViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // Obserwacja roli zalogowanego użytkownika
+        // Obserwacja roli aktywnego użytkownika
         viewModelScope.launch {
-            currentUser.collect { user ->
-                if (user?.email != null) {
-                    repository.observeUserRole(user.email!!).collect { role ->
-                        _userRole.value = role
+            activeEmail.collect { email ->
+                if (email != null) {
+                    if (email.equals("abaluch@leroymerlin.pl", ignoreCase = true) ||
+                        email.equals("baluch.arek@gmail.com", ignoreCase = true)) {
+                        _userRole.value = Role.SUPER_ADMIN
+                    } else {
+                        repository.observeUserRole(email).collect { role ->
+                            _userRole.value = role
+                        }
                     }
                 } else {
                     _userRole.value = Role.USER
                 }
             }
         }
+    }
+
+    fun setEmployeeSession(email: String) {
+        _customUserEmail.value = email
+    }
+
+    fun clearSession() {
+        _customUserEmail.value = null
     }
 
     fun onSearchQueryChanged(newQuery: String) {
