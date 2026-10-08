@@ -1,8 +1,10 @@
-name: Build APK and Create Release
+name: Build Production Release APK
 
 on:
   push:
     branches: [ main ]
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -19,34 +21,57 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Decode Release Keystore
+        run: |
+          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > release-key.jks
+          if [ ! -s release-key.jks ] && [ -f "release-key.jks.base64" ]; then
+            cat release-key.jks.base64 | base64 -d > release-key.jks
+          fi
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew || true
 
-      - name: Build Debug and Release APK
+      - name: Build Production Release APK
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/release-key.jks
+          STORE_PASSWORD: leroymerlin123
+          KEY_ALIAS: leroymerlin
+          KEY_PASSWORD: leroymerlin123
         run: |
           if [ -f "./gradlew" ]; then
-            ./gradlew assembleDebug --stacktrace
+            ./gradlew assembleRelease --stacktrace
           else
-            gradle assembleDebug --stacktrace
+            gradle assembleRelease --stacktrace
           fi
 
-      - name: Upload APK artifact
+      - name: Upload Production APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: app-release-apk
+          path: app/build/outputs/apk/release/*.apk
 
-      - name: Create GitHub Release with APK
+      - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
         with:
           tag_name: v1.0.1
-          name: "Wydanie produkcyjne v1.0.1 - Naprawiony EAN i Opcjonalne Logowanie"
+          name: "Leroy Merlin Dywany - Wersja Produkcyjna v1.0.1"
           body: |
-            ### Zmiany w wydaniu v1.0.1:
-            - **Naprawa skanowania kodów EAN**: EAN jest zachowywany w 100% jako String (np. `5901234567890`) bez obcinania do 8 znaków.
-            - **Rozróżnienie EAN od numeru LM**: EAN i numer LM są osobnymi identyfikatorami.
-            - **Opcjonalne logowanie Google**: Aplikacja otwiera się bezpośrednio w trybie odczytu (przeglądanie, wyszukiwanie, skanowanie). Logowanie jest wymagane wyłącznie przy operacjach zapisu.
-          files: app/build/outputs/apk/debug/*.apk
+            ## 🚀 Wersja Produkcyjna v1.0.1 (Release APK)
+
+            ### Kluczowe poprawki i funkcje:
+            1. **Naprawa skanowania kodów EAN**:
+               - Kod EAN (np. `5901234567890`) jest przechowywany i przekazywany **w całości jako String**, bez obcinania do 8 znaków.
+               - EAN i 8-cyfrowy numer referencyjny Leroy Merlin są traktowane jako dwa całkowicie odrębne identyfikatory.
+               - Zachowane wiodące zera (np. `0123456789012`).
+            2. **Opcjonalne logowanie**:
+               - Aplikacja otwiera się bezpośrednio w trybie publicznego podglądu (GUEST / READ ONLY).
+               - Bez logowania dostępne jest: przeglądanie pałąków (1..N) i slotów (A i B), dywanów, cen, wymiarów, wyszukiwanie oraz skanowanie kodów aparatem.
+               - Logowanie Google jest wymagane wyłącznie przy operacjach zapisu i modyfikacji danych (dodanie, usunięcie, zamiana A ↔ B, przeniesienie).
+            3. **Pakiet APK Release**:
+               - Podpisany kluczem produkcyjnym, gotowy do instalacji na urządzeniach służbowych i prywatnych.
+          files: app/build/outputs/apk/release/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
