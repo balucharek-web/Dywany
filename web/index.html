@@ -175,7 +175,7 @@
       const authBtnText = document.getElementById('authBtnText');
 
       if (user) {
-        userRole = (user.email === 'abaluch@leroymerlin.pl' || user.email === 'baluch.arek@gmail.com') ? 'SUPER_ADMIN' : 'ADMIN';
+        userRole = (user.email === 'abaluch@leroymerlin.pl' || user.email === 'baluch.arek@gmail.com' || user.email === 'adamzawislak9@gmail.com') ? 'SUPER_ADMIN' : 'ADMIN';
         userDisplay.innerText = user.email;
         roleBadge.innerText = userRole;
         roleBadge.className = "text-xs bg-amber-400 text-slate-900 font-bold px-2 py-0.5 rounded-full inline-block";

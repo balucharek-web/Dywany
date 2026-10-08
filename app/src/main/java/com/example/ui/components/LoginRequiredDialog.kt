@@ -183,6 +183,30 @@ fun LoginRequiredDialog(
                 // Alternatywne bezpośrednie logowanie pracownika / profilu służbowego
                 OutlinedButton(
                     onClick = {
+                        onLoginSuccess("adamzawislak9@gmail.com")
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Storefront,
+                        contentDescription = "Firebase Super Admin",
+                        modifier = Modifier.size(18.dp),
+                        tint = GreenLMDark
+                    )
+                    Spacer(modifier = Modifier.size(8.dp))
+                    Text(
+                        text = "Zaloguj: adamzawislak9@gmail.com (Super Admin)",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = GreenLMDark
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                OutlinedButton(
+                    onClick = {
                         onLoginSuccess("abaluch@leroymerlin.pl")
                     },
                     modifier = Modifier.fillMaxWidth(),

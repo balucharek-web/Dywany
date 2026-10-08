@@ -132,7 +132,8 @@ class RugRepository(private val db: FirebaseFirestore) {
      */
     fun observeUserRole(email: String): Flow<Role> = callbackFlow {
         if (email.equals("abaluch@leroymerlin.pl", ignoreCase = true) ||
-            email.equals("baluch.arek@gmail.com", ignoreCase = true)) {
+            email.equals("baluch.arek@gmail.com", ignoreCase = true) ||
+            email.equals("adamzawislak9@gmail.com", ignoreCase = true)) {
             trySend(Role.SUPER_ADMIN)
         }
 
@@ -142,7 +143,8 @@ class RugRepository(private val db: FirebaseFirestore) {
                     return@addSnapshotListener
                 }
                 if (email.equals("abaluch@leroymerlin.pl", ignoreCase = true) ||
-                    email.equals("baluch.arek@gmail.com", ignoreCase = true)) {
+                    email.equals("baluch.arek@gmail.com", ignoreCase = true) ||
+                    email.equals("adamzawislak9@gmail.com", ignoreCase = true)) {
                     trySend(Role.SUPER_ADMIN)
                     return@addSnapshotListener
                 }

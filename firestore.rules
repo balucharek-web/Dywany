@@ -13,7 +13,8 @@ service cloud.firestore {
     function isSuperAdmin() {
       return isSignedIn() && (
         getUserEmail() == 'abaluch@leroymerlin.pl' ||
-        getUserEmail() == 'baluch.arek@gmail.com'
+        getUserEmail() == 'baluch.arek@gmail.com' ||
+        getUserEmail() == 'adamzawislak9@gmail.com'
       );
     }
 

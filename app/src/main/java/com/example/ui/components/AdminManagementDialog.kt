@@ -50,7 +50,7 @@ fun AdminManagementDialog(
                     fontSize = 13.sp
                 )
                 Text(
-                    text = "abaluch@leroymerlin.pl",
+                    text = "adamzawislak9@gmail.com / abaluch@leroymerlin.pl",
                     fontWeight = FontWeight.Bold,
                     color = GreenLMDark,
                     fontSize = 14.sp

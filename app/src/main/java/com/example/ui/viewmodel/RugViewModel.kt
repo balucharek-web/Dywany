@@ -101,7 +101,8 @@ class RugViewModel(application: Application) : AndroidViewModel(application) {
             activeEmail.collect { email ->
                 if (email != null) {
                     if (email.equals("abaluch@leroymerlin.pl", ignoreCase = true) ||
-                        email.equals("baluch.arek@gmail.com", ignoreCase = true)) {
+                        email.equals("baluch.arek@gmail.com", ignoreCase = true) ||
+                        email.equals("adamzawislak9@gmail.com", ignoreCase = true)) {
                         _userRole.value = Role.SUPER_ADMIN
                     } else {
                         repository.observeUserRole(email).collect { role ->
