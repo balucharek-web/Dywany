@@ -7,12 +7,15 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
@@ -20,19 +23,16 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+          cache: gradle
 
       - name: Decode Release Keystore
         run: |
-          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > release-key.jks
-          if [ ! -s release-key.jks ] && [ -f "release-key.jks.base64" ]; then
-            cat release-key.jks.base64 | base64 -d > release-key.jks
+          if [ -f "release-key.jks.base64" ]; then
+            base64 -d release-key.jks.base64 > release-key.jks
           fi
 
       - name: Grant execute permission for gradlew
-        run: chmod +x gradlew || true
+        run: chmod +x gradlew
 
       - name: Build Production Release APK
         env:
@@ -40,18 +40,18 @@ jobs:
           STORE_PASSWORD: leroymerlin123
           KEY_ALIAS: leroymerlin
           KEY_PASSWORD: leroymerlin123
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Rename Release APK for direct download
         run: |
-          if [ -f "./gradlew" ]; then
-            ./gradlew assembleRelease --stacktrace
-          else
-            gradle assembleRelease --stacktrace
-          fi
+          mkdir -p release-artifacts
+          cp app/build/outputs/apk/release/*.apk release-artifacts/LeroyMerlinDywany-v1.0.1-release.apk
 
       - name: Upload Production APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release-apk
-          path: app/build/outputs/apk/release/*.apk
+          name: LeroyMerlinDywany-v1.0.1-release
+          path: release-artifacts/LeroyMerlinDywany-v1.0.1-release.apk
 
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
@@ -59,19 +59,24 @@ jobs:
           tag_name: v1.0.1
           name: "Leroy Merlin Dywany - Wersja Produkcyjna v1.0.1"
           body: |
-            ## 🚀 Wersja Produkcyjna v1.0.1 (Release APK)
+            ## 🚀 Leroy Merlin Dywany – Wersja Produkcyjna v1.0.1 (Release APK)
 
-            ### Kluczowe poprawki i funkcje:
+            Pobierz oficjalny plik instalacyjny APK:
+            👉 **[LeroyMerlinDywany-v1.0.1-release.apk](https://github.com/balucharek-web/Dywany/releases/download/v1.0.1/LeroyMerlinDywany-v1.0.1-release.apk)**
+
+            ---
+
+            ### ✅ Kluczowe funkcje i naprawione błędy:
             1. **Naprawa skanowania kodów EAN**:
-               - Kod EAN (np. `5901234567890`) jest przechowywany i przekazywany **w całości jako String**, bez obcinania do 8 znaków.
-               - EAN i 8-cyfrowy numer referencyjny Leroy Merlin są traktowane jako dwa całkowicie odrębne identyfikatory.
+               - Kod EAN (np. `5901234567890`) jest pobierany i zapisywany **w całości jako String**, bez obcinania do 8 znaków.
+               - EAN i 8-cyfrowy numer referencyjny Leroy Merlin to dwa w pełni odrębne identyfikatory.
                - Zachowane wiodące zera (np. `0123456789012`).
-            2. **Opcjonalne logowanie**:
-               - Aplikacja otwiera się bezpośrednio w trybie publicznego podglądu (GUEST / READ ONLY).
-               - Bez logowania dostępne jest: przeglądanie pałąków (1..N) i slotów (A i B), dywanów, cen, wymiarów, wyszukiwanie oraz skanowanie kodów aparatem.
-               - Logowanie Google jest wymagane wyłącznie przy operacjach zapisu i modyfikacji danych (dodanie, usunięcie, zamiana A ↔ B, przeniesienie).
-            3. **Pakiet APK Release**:
-               - Podpisany kluczem produkcyjnym, gotowy do instalacji na urządzeniach służbowych i prywatnych.
-          files: app/build/outputs/apk/release/*.apk
+            2. **Opcjonalne logowanie (Dostęp publiczny dla gości)**:
+               - Aplikacja otwiera się bezpośrednio bez blokady logowania.
+               - Bez logowania dostępne jest: przeglądanie pałąków (1..N) i slotów (A i B), dywanów, cen, wymiarów, wyszukiwanie oraz skanowanie kodów aparatem w celu sprawdzenia lokalizacji.
+               - Logowanie Google jest wymagane wyłącznie przy operacjach zapisu (dodanie, edycja, usunięcie, zamiana A ↔ B, przeniesienie).
+            3. **Wydanie produkcyjne (Release APK)**:
+               - Podpisane certyfikatem produkcyjnym (nie debug).
+          files: release-artifacts/LeroyMerlinDywany-v1.0.1-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
