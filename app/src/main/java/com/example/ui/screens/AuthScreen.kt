@@ -222,6 +222,17 @@ fun AuthScreen(
                     fontSize = 11.sp,
                     color = Color(0xFF94A3B8)
                 )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Wersja produkcyjna v2.0.1",
+                    style = MaterialTheme.typography.labelSmall,
+                    textAlign = TextAlign.Center,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF64748B)
+                )
             }
         }
 
