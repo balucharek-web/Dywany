@@ -1,0 +1,123 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role management for Leroy Merlin rug display system",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["USER", "ADMIN", "SUPER_ADMIN"] },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "email", "role"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Rug catalog product with Leroy Merlin system number, EAN, and online/local pricing",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "name": { "type": "string" },
+        "ean": { "type": "string" },
+        "lmSystemNumber": { "type": "string" },
+        "onlinePrice": { "type": "number" },
+        "localPrice": { "type": "number" },
+        "localPriceOverride": { "type": "boolean" },
+        "imageUrl": { "type": "string" },
+        "productUrl": { "type": "string" },
+        "lastUpdated": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["productId", "name", "ean", "lmSystemNumber"]
+    },
+    "Pole": {
+      "title": "Pole",
+      "description": "Display pole ('pałąk') holding up to two rugs in position A and B",
+      "type": "object",
+      "properties": {
+        "poleId": { "type": "string" },
+        "number": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["poleId", "number"]
+    },
+    "DisplayAssignment": {
+      "title": "DisplayAssignment",
+      "description": "Assignment of a rug to a specific pole and spot (e.g. 23A or 23B)",
+      "type": "object",
+      "properties": {
+        "assignmentId": { "type": "string" },
+        "poleNumber": { "type": "integer" },
+        "position": { "type": "string", "enum": ["A", "B"] },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "ean": { "type": "string" },
+        "lmSystemNumber": { "type": "string" },
+        "price": { "type": "number" },
+        "localPriceOverride": { "type": "boolean" },
+        "imageUrl": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["assignmentId", "poleNumber", "position"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Audit trail log entry tracking who changed which display or rug",
+      "type": "object",
+      "properties": {
+        "logId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "operationType": { "type": "string" },
+        "details": { "type": "string" },
+        "oldValue": { "type": "string" },
+        "newValue": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["logId", "userId", "userEmail", "operationType"]
+    },
+    "AppSettings": {
+      "title": "AppSettings",
+      "description": "System settings such as product auto-update intervals",
+      "type": "object",
+      "properties": {
+        "syncIntervalHours": { "type": "integer" },
+        "lastGlobalSync": { "type": "string", "format": "date-time" },
+        "poleCount": { "type": "integer" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and permissions"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Rug catalog items"
+    },
+    "/poles/{poleId}": {
+      "schema": "Pole",
+      "description": "Display poles"
+    },
+    "/displayAssignments/{assignmentId}": {
+      "schema": "DisplayAssignment",
+      "description": "Spots on poles assigned to rugs (pos_23_A, pos_23_B)"
+    },
+    "/auditLogs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Change history and audit log entries"
+    },
+    "/settings/{settingId}": {
+      "schema": "AppSettings",
+      "description": "Store system configuration"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "firestore": [
+    {
+      "database": "ai-studio-android-ekspozyc-faa4fd35-3317-4477-b9ae-5449adb70e3d",
+      "rules": "firestore.rules"
+    },
+    {
+      "database": "(default)",
+      "rules": "firestore.rules"
+    }
+  ],
+  "emulators": {
+    "firestore": {
+      "host": "127.0.0.1",
+      "port": 8085
+    },
+    "auth": {
+      "host": "127.0.0.1",
+      "port": 9099
+    },
+    "ui": {
+      "enabled": false
+    }
+  }
+}

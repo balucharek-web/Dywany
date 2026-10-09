@@ -1,0 +1,111 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSuperAdminEmail() {
+      return isSignedIn() && request.auth.token.email == 'baluch.arek@gmail.com';
+    }
+
+    function getUserRole() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : (isSuperAdminEmail() ? 'SUPER_ADMIN' : 'USER');
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && (getUserRole() == 'SUPER_ADMIN' || isSuperAdminEmail());
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (getUserRole() == 'ADMIN' || isSuperAdmin());
+    }
+
+    // Validation functions
+    function isValidUser(data) {
+      return data.userId is string &&
+             data.email is string &&
+             data.role in ['USER', 'ADMIN', 'SUPER_ADMIN'];
+    }
+
+    function isValidProduct(data) {
+      return data.productId is string &&
+             data.name is string &&
+             data.ean is string &&
+             data.lmSystemNumber is string;
+    }
+
+    function isValidPole(data) {
+      return data.poleId is string &&
+             data.number is int &&
+             data.number > 0;
+    }
+
+    function isValidDisplayAssignment(data) {
+      return data.assignmentId is string &&
+             data.poleNumber is int &&
+             data.position in ['A', 'B'];
+    }
+
+    function isValidAuditLog(data) {
+      return data.logId is string &&
+             data.userId is string &&
+             data.userEmail is string &&
+             data.operationType is string;
+    }
+
+    // Match rules
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      // Super admin can write any user; self-registration allows creating default 'USER' role
+      // or initial SUPER_ADMIN for baluch.arek@gmail.com
+      allow create: if isSignedIn() && (
+        isSuperAdmin() ||
+        (request.auth.uid == userId && (
+          (request.resource.data.role == 'USER') ||
+          (isSuperAdminEmail() && request.resource.data.role == 'SUPER_ADMIN')
+        ))
+      ) && isValidUser(request.resource.data);
+
+      allow update: if isSignedIn() && (
+        isSuperAdmin() ||
+        (request.auth.uid == userId && request.resource.data.role == resource.data.role)
+      ) && isValidUser(request.resource.data);
+
+      // Only super admin can delete users, and cannot delete own super admin account if no others
+      allow delete: if isSuperAdmin();
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidProduct(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /poles/{poleId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidPole(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /displayAssignments/{assignmentId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidDisplayAssignment(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn() && isValidAuditLog(request.resource.data);
+      allow update, delete: if false; // Audit logs are immutable
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

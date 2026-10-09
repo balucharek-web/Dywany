@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ekspozycja Dywanów - Leroy Merlin</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Firebase App & Services SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="navbar">
+      <div class="nav-brand">
+        <div class="brand-badge">LM</div>
+        <div>
+          <h1>Ekspozycja dywanów</h1>
+          <p class="subtitle">Zarządzanie pałąkami w sklepie</p>
+        </div>
+      </div>
+      <div class="nav-auth" id="authSection">
+        <button id="loginBtn" class="btn btn-primary" onclick="loginWithGoogle()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
+          Zaloguj przez Google
+        </button>
+        <div id="userInfo" class="user-info hidden">
+          <span id="userEmail" class="user-email"></span>
+          <span id="userRole" class="badge"></span>
+          <button id="logoutBtn" class="btn btn-outline btn-sm" onclick="logout()">Wyloguj</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Admin Top Toolbar (visible to ADMIN / SUPER_ADMIN) -->
+    <div id="adminToolbar" class="admin-toolbar hidden">
+      <span>⚙ Tryb administratora</span>
+      <div class="toolbar-actions">
+        <button class="btn btn-sm btn-primary" onclick="openAddRugModal()">+ Dodaj dywan</button>
+        <button class="btn btn-sm btn-secondary" onclick="openManagePolesModal()">Pałąki</button>
+        <button class="btn btn-sm btn-secondary" onclick="openAuditModal()">Historia zmian</button>
+        <button id="usersBtn" class="btn btn-sm btn-secondary hidden" onclick="openUsersModal()">Użytkownicy</button>
+      </div>
+    </div>
+
+    <!-- Main Container -->
+    <main class="container">
+      <!-- Search Card -->
+      <section class="search-card">
+        <div class="search-input-group">
+          <input type="text" id="searchInput" placeholder="Wpisz EAN / numer systemowy LM / miejsce (np. 23A)" oninput="handleSearch()">
+          <button id="clearSearchBtn" class="btn-icon hidden" onclick="clearSearch()">✕</button>
+          <button id="cameraScanBtn" class="btn btn-scan" onclick="startWebScanner()" title="Skanuj kod kreskowy aparatem">
+            📷 Skanuj EAN
+          </button>
+        </div>
+        <div class="search-hint">Wskazówka: Wpisz np. <strong>23A</strong>, aby od razu zobaczyć dywan na pałąku 23 w miejscu A.</div>
+      </section>
+
+      <!-- Video Scanner Element -->
+      <div id="scannerModal" class="modal hidden">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>Skaner kodów kreskowych EAN</h3>
+            <button class="close-btn" onclick="stopWebScanner()">✕</button>
+          </div>
+          <div class="video-container">
+            <video id="scannerVideo" playsinline></video>
+            <div class="scanner-aim"></div>
+          </div>
+          <p class="scan-instructions">Skieruj aparat na kod kreskowy. EAN nie zostanie obcięty.</p>
+        </div>
+      </div>
+
+      <!-- Search Results Area -->
+      <section id="searchResultsSection" class="search-results hidden">
+        <h2>Wyniki wyszukiwania</h2>
+        <div id="searchResultsList" class="results-grid"></div>
+      </section>
+
+      <!-- Display Rack Section -->
+      <section id="displayRacksSection" class="display-section">
+        <div class="section-header">
+          <h2>Ekspozycja pałąków</h2>
+          <div class="filter-group">
+            <button class="btn btn-filter active" onclick="setFilter('ALL', this)">Wszystkie</button>
+            <button class="btn btn-filter" onclick="setFilter('OCCUPIED', this)">Zajęte</button>
+            <button class="btn btn-filter" onclick="setFilter('FREE', this)">Wolne</button>
+            <input type="number" id="jumpToPole" placeholder="Skocz do pałąka..." oninput="handleJumpPole(this.value)">
+          </div>
+        </div>
+
+        <div id="polesGrid" class="poles-grid">
+          <!-- Dynamic pole cards loaded via Firestore realtime listener -->
+        </div>
+      </section>
+    </main>
+
+    <!-- Modal Dialogs for Admin Actions -->
+    <!-- Add Rug Modal -->
+    <div id="addRugModal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Dodaj dywan na ekspozycję</h3>
+          <button class="close-btn" onclick="closeModal('addRugModal')">✕</button>
+        </div>
+        <form onsubmit="submitAddRug(event)">
+          <div class="form-group">
+            <label>Kod EAN (pełny kod, nie obcinany!):</label>
+            <input type="text" id="addEan" required>
+          </div>
+          <div class="form-group">
+            <label>Numer systemowy Leroy Merlin (np. 8 cyfr):</label>
+            <input type="text" id="addLmNumber" required>
+          </div>
+          <div class="form-group">
+            <label>Nazwa produktu:</label>
+            <input type="text" id="addName" required>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Cena ze strony (zł):</label>
+              <input type="number" step="0.01" id="addOnlinePrice" value="199.00" required>
+            </div>
+            <div class="form-group">
+              <label>Cena lokalna (zł):</label>
+              <input type="number" step="0.01" id="addLocalPrice">
+            </div>
+          </div>
+          <div class="form-group checkbox-group">
+            <input type="checkbox" id="addLocalOverride">
+            <label for="addLocalOverride">Włącz nadpisanie ceną lokalną</label>
+          </div>
+          <div class="form-group">
+            <label>URL zdjęcia (opcjonalnie):</label>
+            <input type="url" id="addImageUrl">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Numer pałąka:</label>
+              <input type="number" id="addPoleNum" required min="1">
+            </div>
+            <div class="form-group">
+              <label>Miejsce na pałąku:</label>
+              <select id="addSpotPos">
+                <option value="A">Miejsce A</option>
+                <option value="B">Miejsce B</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline" onclick="closeModal('addRugModal')">Anuluj</button>
+            <button type="submit" class="btn btn-primary">Zapisz i przypisz</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Move / Swap Modal -->
+    <div id="moveModal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="moveModalTitle">Przenieś dywan</h3>
+          <button class="close-btn" onclick="closeModal('moveModal')">✕</button>
+        </div>
+        <div id="moveSourceInfo"></div>
+        <form onsubmit="submitMoveOrSwap(event)">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Docelowy numer pałąka:</label>
+              <input type="number" id="targetPoleInput" required min="1">
+            </div>
+            <div class="form-group">
+              <label>Docelowe miejsce:</label>
+              <select id="targetPosInput">
+                <option value="A">Miejsce A</option>
+                <option value="B">Miejsce B</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline" onclick="closeModal('moveModal')">Anuluj</button>
+            <button type="submit" id="moveSubmitBtn" class="btn btn-primary">Zatwierdź</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Audit History Modal -->
+    <div id="auditModal" class="modal hidden">
+      <div class="modal-content modal-large">
+        <div class="modal-header">
+          <h3>Historia zmian (Audyt)</h3>
+          <button class="close-btn" onclick="closeModal('auditModal')">✕</button>
+        </div>
+        <div id="auditLogsContainer" class="audit-list"></div>
+      </div>
+    </div>
+
+    <!-- User Management Modal (SUPER_ADMIN only) -->
+    <div id="usersModal" class="modal hidden">
+      <div class="modal-content modal-large">
+        <div class="modal-header">
+          <h3>Zarządzanie administratorami</h3>
+          <button class="close-btn" onclick="closeModal('usersModal')">✕</button>
+        </div>
+        <div class="add-user-bar">
+          <input type="email" id="newAdminEmail" placeholder="Adres e-mail Google (np. jan.kowalski@gmail.com)">
+          <button class="btn btn-primary" onclick="addNewAdmin()">+ Dodaj administratora</button>
+        </div>
+        <div id="usersListContainer" class="users-list"></div>
+      </div>
+    </div>
+
+    <!-- Manage Poles Modal -->
+    <div id="managePolesModal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Zarządzanie pałąkami</h3>
+          <button class="close-btn" onclick="closeModal('managePolesModal')">✕</button>
+        </div>
+        <div class="add-user-bar">
+          <input type="number" id="newPoleInput" placeholder="Numer pałąka...">
+          <button class="btn btn-primary" onclick="addNewPole()">+ Dodaj pałąk</button>
+        </div>
+        <div id="polesListContainer" class="poles-list-modal"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
