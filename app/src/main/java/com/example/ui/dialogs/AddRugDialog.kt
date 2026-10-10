@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -37,6 +38,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.ui.platform.LocalContext
 import com.example.data.model.DisplayAssignment
 import com.example.data.model.Pole
 import com.example.data.model.Product
@@ -45,11 +50,13 @@ import com.example.data.model.Product
 fun AddRugDialog(
     poles: List<Pole>,
     currentAssignments: List<DisplayAssignment>,
+    existingProducts: List<Product> = emptyList(),
     initialEan: String = "",
     onOpenScanner: () -> Unit,
     onSaveAndAssign: (product: Product, poleNumber: Int, position: String, replace: Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var ean by remember { mutableStateOf(initialEan) }
     var lmNumber by remember { mutableStateOf("") }
@@ -171,6 +178,96 @@ fun AddRugDialog(
                         .testTag("add_rug_lm_input"),
                     singleLine = true
                 )
+
+                // 1. Catalog auto-lookup (without scraping - using real store database)
+                val cleanEan = ean.trim()
+                val cleanLm = lmNumber.trim()
+                val matchingProduct = remember(cleanEan, cleanLm, existingProducts) {
+                    if (cleanEan.isBlank() && cleanLm.isBlank()) null
+                    else existingProducts.firstOrNull { prod ->
+                        (cleanEan.isNotBlank() && prod.ean.equals(cleanEan, ignoreCase = true)) ||
+                        (cleanLm.isNotBlank() && prod.lmSystemNumber.equals(cleanLm, ignoreCase = true))
+                    }
+                }
+
+                if (matchingProduct != null) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "✓ Znaleziono w bazie sklepu!",
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF2E7D32),
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                                Text(
+                                    text = matchingProduct.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Cena regularna: ${matchingProduct.onlinePrice} zł" +
+                                            if (matchingProduct.localPrice > 0) " | Lokalna: ${matchingProduct.localPrice} zł" else "",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF1B5E20)
+                                )
+                            }
+                            Button(
+                                onClick = {
+                                    name = matchingProduct.name
+                                    ean = matchingProduct.ean
+                                    lmNumber = matchingProduct.lmSystemNumber
+                                    onlinePriceStr = matchingProduct.onlinePrice.toString()
+                                    localPriceStr = if (matchingProduct.localPrice > 0.0) matchingProduct.localPrice.toString() else ""
+                                    localPriceOverride = matchingProduct.localPriceOverride
+                                    if (matchingProduct.dimensions.isNotBlank()) dimensions = matchingProduct.dimensions
+                                    if (matchingProduct.composition.isNotBlank()) composition = matchingProduct.composition
+                                    if (matchingProduct.imageUrl.isNotBlank()) imageUrl = matchingProduct.imageUrl
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                                modifier = Modifier.padding(start = 8.dp)
+                            ) {
+                                Text("Wypełnij")
+                            }
+                        }
+                    }
+                }
+
+                // 2. Direct Official Leroy Merlin Page (Zero-Scraping, unblockable browser session)
+                val queryForLm = cleanLm.ifBlank { cleanEan }
+                if (queryForLm.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedButton(
+                        onClick = {
+                            val url = "https://www.leroymerlin.pl/szukaj?q=${Uri.encode(queryForLm)}"
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Language,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = Color(0xFF2E7D32)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Sprawdź '$queryForLm' na leroymerlin.pl",
+                            color = Color(0xFF2E7D32)
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 

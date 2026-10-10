@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
@@ -110,6 +111,7 @@ fun HomeScreen(viewModel: MainViewModel) {
     val searchResults by viewModel.searchResults.collectAsState()
     val poles by viewModel.poles.collectAsState()
     val assignments by viewModel.displayAssignments.collectAsState()
+    val products by viewModel.products.collectAsState()
     val auditLogs by viewModel.auditLogs.collectAsState()
     val allUsers by viewModel.allUsers.collectAsState()
     val selectedFilter by viewModel.selectedFilter.collectAsState()
@@ -159,6 +161,7 @@ fun HomeScreen(viewModel: MainViewModel) {
         AddRugDialog(
             poles = poles,
             currentAssignments = assignments,
+            existingProducts = products,
             onOpenScanner = { showScanner = true },
             onSaveAndAssign = { product, pole, pos, replace ->
                 viewModel.saveProduct(product)
@@ -413,12 +416,41 @@ fun HomeScreen(viewModel: MainViewModel) {
                     }
 
                     if (searchQuery.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Wyniki wyszukiwania dla: \"$searchQuery\"",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Wyniki wyszukiwania dla: \"$searchQuery\"",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            val cleanQuery = searchQuery.trim()
+                            TextButton(
+                                onClick = {
+                                    val url = "https://www.leroymerlin.pl/szukaj?q=${android.net.Uri.encode(cleanQuery)}"
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                                    context.startActivity(intent)
+                                },
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Language,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color(0xFF2E7D32)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Szukaj w Leroy Merlin",
+                                    color = Color(0xFF2E7D32),
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
                     }
                 }
             }

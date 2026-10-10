@@ -414,6 +414,76 @@ function clearSearch() {
   handleSearch();
 }
 
+// Leroy Merlin direct search & catalog helpers (zero-scraping architecture)
+function openCurrentQueryInLM() {
+  const query = document.getElementById("searchInput")?.value.trim() || "";
+  if (!query) {
+    window.open("https://www.leroymerlin.pl", "_blank");
+    return;
+  }
+  const url = `https://www.leroymerlin.pl/szukaj?q=${encodeURIComponent(query)}`;
+  window.open(url, "_blank");
+}
+
+let currentMatchedProduct = null;
+
+function onAddRugInputChanged() {
+  const ean = document.getElementById("addEan")?.value.trim() || "";
+  const lm = document.getElementById("addLmNumber")?.value.trim() || "";
+  const hintEl = document.getElementById("addRugCatalogHint");
+  const titleEl = document.getElementById("catalogHintTitle");
+  const priceEl = document.getElementById("catalogHintPrice");
+
+  if (!ean && !lm) {
+    if (hintEl) hintEl.style.display = "none";
+    currentMatchedProduct = null;
+    return;
+  }
+
+  // Look up in store catalog (real-time Firestore collection)
+  const matched = products.find(p => 
+    (ean && p.ean && p.ean.toLowerCase() === ean.toLowerCase()) ||
+    (lm && p.lmSystemNumber && p.lmSystemNumber.toLowerCase() === lm.toLowerCase())
+  );
+
+  if (matched) {
+    currentMatchedProduct = matched;
+    if (hintEl && titleEl && priceEl) {
+      titleEl.textContent = matched.name;
+      priceEl.textContent = `Cena regularna: ${matched.onlinePrice} zł` + (matched.localPrice ? ` | Lokalna: ${matched.localPrice} zł` : '');
+      hintEl.style.display = "flex";
+    }
+  } else {
+    currentMatchedProduct = null;
+    if (hintEl) hintEl.style.display = "none";
+  }
+}
+
+function applyCatalogHint() {
+  if (!currentMatchedProduct) return;
+  document.getElementById("addName").value = currentMatchedProduct.name || "";
+  if (currentMatchedProduct.ean) document.getElementById("addEan").value = currentMatchedProduct.ean;
+  if (currentMatchedProduct.lmSystemNumber) document.getElementById("addLmNumber").value = currentMatchedProduct.lmSystemNumber;
+  if (currentMatchedProduct.onlinePrice) document.getElementById("addOnlinePrice").value = currentMatchedProduct.onlinePrice;
+  if (currentMatchedProduct.localPrice) document.getElementById("addLocalPrice").value = currentMatchedProduct.localPrice;
+  if (currentMatchedProduct.localPriceOverride) document.getElementById("addLocalOverride").checked = true;
+  if (currentMatchedProduct.imageUrl) document.getElementById("addImageUrl").value = currentMatchedProduct.imageUrl;
+  const hintEl = document.getElementById("addRugCatalogHint");
+  if (hintEl) hintEl.style.display = "none";
+}
+
+function openLMWebsiteSearch() {
+  const ean = document.getElementById("addEan")?.value.trim() || "";
+  const lm = document.getElementById("addLmNumber")?.value.trim() || "";
+  const query = lm || ean;
+  if (!query) {
+    alert("Wpisz najpierw numer systemowy LM lub kod EAN.");
+    return;
+  }
+  const url = `https://www.leroymerlin.pl/szukaj?q=${encodeURIComponent(query)}`;
+  window.open(url, "_blank");
+}
+
 // Admin Actions
 async function submitAddRug(e) {
   e.preventDefault();
@@ -752,6 +822,9 @@ async function openAuditModal() {
 function openAddRugModal() {
   const nextNum = poles.length > 0 ? (Math.max(...poles.map(p => p.number)) || 1) : 1;
   document.getElementById("addPoleNum").value = nextNum;
+  const hintEl = document.getElementById("addRugCatalogHint");
+  if (hintEl) hintEl.style.display = "none";
+  currentMatchedProduct = null;
   openModal("addRugModal");
 }
 

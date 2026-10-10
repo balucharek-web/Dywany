@@ -27,6 +27,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material3.Icon
+import androidx.compose.ui.platform.LocalContext
 import com.example.data.model.Product
 
 @Composable
@@ -36,6 +43,7 @@ fun ProductEditDialog(
     onUpdateLocalPriceOnly: (newPrice: Double, override: Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf(product.name) }
     var ean by remember { mutableStateOf(product.ean) }
     var lmNumber by remember { mutableStateOf(product.lmSystemNumber) }
@@ -84,6 +92,28 @@ fun ProductEditDialog(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
+
+                val queryToSearch = lmNumber.ifBlank { ean }.trim()
+                if (queryToSearch.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedButton(
+                        onClick = {
+                            val url = "https://www.leroymerlin.pl/szukaj?q=${Uri.encode(queryToSearch)}"
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Language,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = Color(0xFF2E7D32)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Sprawdź '$queryToSearch' na leroymerlin.pl", color = Color(0xFF2E7D32))
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
