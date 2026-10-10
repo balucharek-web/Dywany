@@ -1,6 +1,7 @@
 package com.example.data.repository
 
 import android.content.Context
+import android.util.Log
 import com.example.R
 import com.example.data.model.AuditLog
 import com.example.data.model.DisplayAssignment
@@ -10,6 +11,7 @@ import com.example.data.model.User
 import com.example.data.model.UserRole
 import com.example.data.util.OperationType
 import com.example.data.util.handleFirestoreError
+import com.google.firebase.FirebaseApp
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.FieldValue
@@ -25,11 +27,40 @@ class RugDisplayRepository(
     private val firestore: FirebaseFirestore
 ) {
     companion object {
+        private const val TAG = "RugDisplayRepo"
         const val SUPER_ADMIN_INITIAL_EMAIL = "baluch.arek@gmail.com"
 
         fun create(context: Context): RugDisplayRepository {
-            val dbId = context.getString(R.string.firestore_database_id)
-            val db = FirebaseFirestore.getInstance(dbId)
+            try {
+                if (FirebaseApp.getApps(context).isEmpty()) {
+                    FirebaseApp.initializeApp(context.applicationContext)
+                    Log.d(TAG, "Initialized FirebaseApp in Repository.create")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error ensuring FirebaseApp initialization", e)
+            }
+
+            val dbId = try {
+                context.getString(R.string.firestore_database_id)
+            } catch (e: Exception) {
+                ""
+            }
+
+            val db = try {
+                if (dbId.isNotBlank()) {
+                    FirebaseFirestore.getInstance(dbId)
+                } else {
+                    FirebaseFirestore.getInstance()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting named Firestore database '$dbId', falling back to default", e)
+                try {
+                    FirebaseFirestore.getInstance()
+                } catch (fallbackError: Exception) {
+                    Log.e(TAG, "FATAL: Could not get default Firestore instance either", fallbackError)
+                    throw fallbackError
+                }
+            }
             return RugDisplayRepository(db)
         }
     }
@@ -49,19 +80,24 @@ class RugDisplayRepository(
         val listener = polesRef.orderBy("number").addSnapshotListener { snapshot, error ->
             if (error != null) {
                 handleFirestoreError(error, OperationType.LIST, polesRef.path)
-                close(error)
+                trySend(emptyList())
                 return@addSnapshotListener
             }
-            val poles = snapshot?.documents?.mapNotNull { doc ->
-                val number = (doc.get("number") as? Number)?.toInt() ?: 0
-                Pole(
-                    poleId = doc.id,
-                    number = number,
-                    createdAt = doc.getTimestamp("createdAt"),
-                    updatedAt = doc.getTimestamp("updatedAt")
-                )
-            } ?: emptyList()
-            trySend(poles)
+            try {
+                val poles = snapshot?.documents?.mapNotNull { doc ->
+                    val number = (doc.get("number") as? Number)?.toInt() ?: 0
+                    Pole(
+                        poleId = doc.id,
+                        number = number,
+                        createdAt = doc.getTimestamp("createdAt"),
+                        updatedAt = doc.getTimestamp("updatedAt")
+                    )
+                } ?: emptyList()
+                trySend(poles)
+            } catch (e: Exception) {
+                Log.e("RugDisplayRepo", "Error mapping poles", e)
+                trySend(emptyList())
+            }
         }
         awaitClose { listener.remove() }
     }
@@ -70,28 +106,33 @@ class RugDisplayRepository(
         val listener = assignmentsRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 handleFirestoreError(error, OperationType.LIST, assignmentsRef.path)
-                close(error)
+                trySend(emptyList())
                 return@addSnapshotListener
             }
-            val list = snapshot?.documents?.mapNotNull { doc ->
-                val poleNumber = (doc.get("poleNumber") as? Number)?.toInt() ?: 0
-                val price = (doc.get("price") as? Number)?.toDouble() ?: 0.0
-                DisplayAssignment(
-                    assignmentId = doc.id,
-                    poleNumber = poleNumber,
-                    position = doc.getString("position") ?: "A",
-                    productId = doc.getString("productId") ?: "",
-                    productName = doc.getString("productName") ?: "",
-                    ean = doc.getString("ean") ?: "",
-                    lmSystemNumber = doc.getString("lmSystemNumber") ?: "",
-                    price = price,
-                    localPriceOverride = doc.getBoolean("localPriceOverride") ?: false,
-                    imageUrl = doc.getString("imageUrl") ?: "",
-                    updatedAt = doc.getTimestamp("updatedAt"),
-                    updatedBy = doc.getString("updatedBy") ?: ""
-                )
-            } ?: emptyList()
-            trySend(list)
+            try {
+                val list = snapshot?.documents?.mapNotNull { doc ->
+                    val poleNumber = (doc.get("poleNumber") as? Number)?.toInt() ?: 0
+                    val price = (doc.get("price") as? Number)?.toDouble() ?: 0.0
+                    DisplayAssignment(
+                        assignmentId = doc.id,
+                        poleNumber = poleNumber,
+                        position = doc.getString("position") ?: "A",
+                        productId = doc.getString("productId") ?: "",
+                        productName = doc.getString("productName") ?: "",
+                        ean = doc.getString("ean") ?: "",
+                        lmSystemNumber = doc.getString("lmSystemNumber") ?: "",
+                        price = price,
+                        localPriceOverride = doc.getBoolean("localPriceOverride") ?: false,
+                        imageUrl = doc.getString("imageUrl") ?: "",
+                        updatedAt = doc.getTimestamp("updatedAt"),
+                        updatedBy = doc.getString("updatedBy") ?: ""
+                    )
+                } ?: emptyList()
+                trySend(list)
+            } catch (e: Exception) {
+                Log.e("RugDisplayRepo", "Error mapping display assignments", e)
+                trySend(emptyList())
+            }
         }
         awaitClose { listener.remove() }
     }
@@ -100,30 +141,35 @@ class RugDisplayRepository(
         val listener = productsRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 handleFirestoreError(error, OperationType.LIST, productsRef.path)
-                close(error)
+                trySend(emptyList())
                 return@addSnapshotListener
             }
-            val products = snapshot?.documents?.mapNotNull { doc ->
-                val onlinePrice = (doc.get("onlinePrice") as? Number)?.toDouble() ?: 0.0
-                val localPrice = (doc.get("localPrice") as? Number)?.toDouble() ?: 0.0
-                Product(
-                    productId = doc.id,
-                    name = doc.getString("name") ?: "",
-                    ean = doc.getString("ean") ?: "",
-                    lmSystemNumber = doc.getString("lmSystemNumber") ?: "",
-                    onlinePrice = onlinePrice,
-                    localPrice = localPrice,
-                    localPriceOverride = doc.getBoolean("localPriceOverride") ?: false,
-                    imageUrl = doc.getString("imageUrl") ?: "",
-                    productUrl = doc.getString("productUrl") ?: "",
-                    dimensions = doc.getString("dimensions") ?: "",
-                    composition = doc.getString("composition") ?: "",
-                    lastUpdated = doc.getTimestamp("lastUpdated"),
-                    createdAt = doc.getTimestamp("createdAt"),
-                    updatedBy = doc.getString("updatedBy") ?: ""
-                )
-            } ?: emptyList()
-            trySend(products)
+            try {
+                val products = snapshot?.documents?.mapNotNull { doc ->
+                    val onlinePrice = (doc.get("onlinePrice") as? Number)?.toDouble() ?: 0.0
+                    val localPrice = (doc.get("localPrice") as? Number)?.toDouble() ?: 0.0
+                    Product(
+                        productId = doc.id,
+                        name = doc.getString("name") ?: "",
+                        ean = doc.getString("ean") ?: "",
+                        lmSystemNumber = doc.getString("lmSystemNumber") ?: "",
+                        onlinePrice = onlinePrice,
+                        localPrice = localPrice,
+                        localPriceOverride = doc.getBoolean("localPriceOverride") ?: false,
+                        imageUrl = doc.getString("imageUrl") ?: "",
+                        productUrl = doc.getString("productUrl") ?: "",
+                        dimensions = doc.getString("dimensions") ?: "",
+                        composition = doc.getString("composition") ?: "",
+                        lastUpdated = doc.getTimestamp("lastUpdated"),
+                        createdAt = doc.getTimestamp("createdAt"),
+                        updatedBy = doc.getString("updatedBy") ?: ""
+                    )
+                } ?: emptyList()
+                trySend(products)
+            } catch (e: Exception) {
+                Log.e("RugDisplayRepo", "Error mapping products", e)
+                trySend(emptyList())
+            }
         }
         awaitClose { listener.remove() }
     }
@@ -134,22 +180,27 @@ class RugDisplayRepository(
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     handleFirestoreError(error, OperationType.LIST, auditLogsRef.path)
-                    close(error)
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
-                val logs = snapshot?.documents?.mapNotNull { doc ->
-                    AuditLog(
-                        logId = doc.id,
-                        userId = doc.getString("userId") ?: "",
-                        userEmail = doc.getString("userEmail") ?: "",
-                        operationType = doc.getString("operationType") ?: "",
-                        details = doc.getString("details") ?: "",
-                        oldValue = doc.getString("oldValue") ?: "",
-                        newValue = doc.getString("newValue") ?: "",
-                        timestamp = doc.getTimestamp("timestamp")
-                    )
-                } ?: emptyList()
-                trySend(logs)
+                try {
+                    val logs = snapshot?.documents?.mapNotNull { doc ->
+                        AuditLog(
+                            logId = doc.id,
+                            userId = doc.getString("userId") ?: "",
+                            userEmail = doc.getString("userEmail") ?: "",
+                            operationType = doc.getString("operationType") ?: "",
+                            details = doc.getString("details") ?: "",
+                            oldValue = doc.getString("oldValue") ?: "",
+                            newValue = doc.getString("newValue") ?: "",
+                            timestamp = doc.getTimestamp("timestamp")
+                        )
+                    } ?: emptyList()
+                    trySend(logs)
+                } catch (e: Exception) {
+                    Log.e("RugDisplayRepo", "Error mapping audit logs", e)
+                    trySend(emptyList())
+                }
             }
         awaitClose { listener.remove() }
     }
@@ -157,7 +208,6 @@ class RugDisplayRepository(
     fun observeCurrentUser(uid: String): Flow<User?> = callbackFlow {
         if (uid.isBlank()) {
             trySend(null)
-            close()
             return@callbackFlow
         }
         val listener = usersRef.document(uid).addSnapshotListener { snapshot, error ->

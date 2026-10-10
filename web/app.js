@@ -8,11 +8,9 @@ const firebaseConfig = {
   appId: "1:448858732402:android:73c5582bd06a766a0a0feb"
 };
 
-// Initialize Firebase
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-// Connect to the specific named Firestore database
-const db = firebase.app().firestore("ai-studio-android-ekspozyc-faa4fd35-3317-4477-b9ae-5449adb70e3d");
+// Global Firebase instances
+let auth = null;
+let db = null;
 
 // Application state
 let currentUser = null;
@@ -24,41 +22,125 @@ let currentFilter = "ALL";
 let currentSearchQuery = "";
 let currentJumpPole = "";
 
-// Auth listener
-auth.onAuthStateChanged(async (user) => {
-  if (user) {
-    currentUser = user;
-    const isMasterEmail = user.email.toLowerCase() === "baluch.arek@gmail.com";
-    
-    // Fetch user profile from Firestore
-    try {
-      const userDoc = await db.collection("users").doc(user.uid).get();
-      if (userDoc.exists) {
-        userRole = isMasterEmail ? "SUPER_ADMIN" : (userDoc.data().role || "USER");
-      } else {
-        userRole = isMasterEmail ? "SUPER_ADMIN" : "USER";
-        // Create user document
-        await db.collection("users").doc(user.uid).set({
-          userId: user.uid,
-          email: user.email,
-          displayName: user.displayName || "",
-          role: userRole,
-          active: true,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-      }
-    } catch (e) {
-      console.warn("Błąd pobierania roli, używam domyślnej:", e);
-      userRole = isMasterEmail ? "SUPER_ADMIN" : "USER";
-    }
-
-    renderAuthUI();
-  } else {
-    currentUser = null;
-    userRole = "USER";
-    renderAuthUI();
+// User-friendly error message UI
+function showAppError(msg) {
+  console.error("Application Error:", msg);
+  const banner = document.getElementById("appErrorBanner");
+  const msgEl = document.getElementById("appErrorMessage");
+  if (banner && msgEl) {
+    msgEl.textContent = msg;
+    banner.style.display = "flex";
   }
-});
+}
+
+function dismissAppError() {
+  const banner = document.getElementById("appErrorBanner");
+  if (banner) banner.style.display = "none";
+}
+
+// Comprehensive try-catch block for main initialization logic
+try {
+  if (typeof firebase === "undefined") {
+    throw new Error("Biblioteka Firebase SDK nie została załadowana. Sprawdź połączenie z internetem.");
+  }
+
+  // Initialize Firebase app safely
+  if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+  }
+
+  auth = firebase.auth();
+
+  // Try custom database ID first, with fallback to default database
+  const namedDatabaseId = "ai-studio-android-ekspozyc-faa4fd35-3317-4477-b9ae-5449adb70e3d";
+  try {
+    db = firebase.app().firestore(namedDatabaseId);
+  } catch (namedDbErr) {
+    console.warn("Nie udało się połączyć z bazą o dedykowanym ID, używam bazy domyślnej:", namedDbErr);
+    db = firebase.firestore();
+  }
+
+  // Set up auth state listener safely
+  auth.onAuthStateChanged(async (user) => {
+    try {
+      if (user) {
+        currentUser = user;
+        const isMasterEmail = user.email.toLowerCase() === "baluch.arek@gmail.com";
+        
+        try {
+          const userDoc = await db.collection("users").doc(user.uid).get();
+          if (userDoc.exists) {
+            userRole = isMasterEmail ? "SUPER_ADMIN" : (userDoc.data().role || "USER");
+          } else {
+            userRole = isMasterEmail ? "SUPER_ADMIN" : "USER";
+            await db.collection("users").doc(user.uid).set({
+              userId: user.uid,
+              email: user.email,
+              displayName: user.displayName || "",
+              role: userRole,
+              active: true,
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          }
+        } catch (e) {
+          console.warn("Błąd odczytu profilu użytkownika:", e);
+          userRole = isMasterEmail ? "SUPER_ADMIN" : "USER";
+        }
+      } else {
+        currentUser = null;
+        userRole = "USER";
+      }
+      renderAuthUI();
+    } catch (authErr) {
+      console.error("Błąd przetwarzania sesji użytkownika:", authErr);
+      showAppError("Błąd autoryzacji: " + authErr.message);
+    }
+  }, (authListenErr) => {
+    console.error("Błąd nasłuchiwania autoryzacji:", authListenErr);
+    showAppError("Błąd usługi uwierzytelniania: " + authListenErr.message);
+  });
+
+  // Attach real-time Firestore listeners safely with error callbacks
+  setupFirestoreListeners();
+
+} catch (initError) {
+  console.error("Krytyczny błąd inicjalizacji Firebase:", initError);
+  showAppError("Wystąpił błąd podczas uruchamiania usług aplikacji: " + (initError.message || initError));
+}
+
+function setupFirestoreListeners() {
+  if (!db) return;
+
+  try {
+    db.collection("poles").orderBy("number").onSnapshot((snapshot) => {
+      poles = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      renderPoles();
+    }, (error) => {
+      console.warn("Błąd nasłuchiwania pałąków:", error);
+      showAppError("Nie udało się pobrać listy pałąków ekspozycyjnych: " + error.message);
+    });
+
+    db.collection("displayAssignments").onSnapshot((snapshot) => {
+      displayAssignments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      renderPoles();
+      if (currentSearchQuery) handleSearch();
+    }, (error) => {
+      console.warn("Błąd nasłuchiwania ekspozycji:", error);
+      showAppError("Nie udało się pobrać przypisań dywanów: " + error.message);
+    });
+
+    db.collection("products").onSnapshot((snapshot) => {
+      products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      if (currentSearchQuery) handleSearch();
+    }, (error) => {
+      console.warn("Błąd nasłuchiwania katalogu produktów:", error);
+      showAppError("Nie udało się pobrać katalogu produktów: " + error.message);
+    });
+  } catch (listenerError) {
+    console.error("Błąd konfiguracji nasłuchu Firestore:", listenerError);
+    showAppError("Błąd nasłuchu bazy danych: " + (listenerError.message || listenerError));
+  }
+}
 
 function renderAuthUI() {
   const loginBtn = document.getElementById("loginBtn");
@@ -69,62 +151,53 @@ function renderAuthUI() {
   const usersBtn = document.getElementById("usersBtn");
 
   if (currentUser) {
-    loginBtn.classList.add("hidden");
-    userInfo.classList.remove("hidden");
-    userEmail.textContent = currentUser.email;
-    userRoleSpan.textContent = userRole;
+    if (loginBtn) loginBtn.classList.add("hidden");
+    if (userInfo) userInfo.classList.remove("hidden");
+    if (userEmail) userEmail.textContent = currentUser.email;
+    if (userRoleSpan) userRoleSpan.textContent = userRole;
 
     const isAdmin = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
     if (isAdmin) {
-      adminToolbar.classList.remove("hidden");
-      if (userRole === "SUPER_ADMIN") {
-        usersBtn.classList.remove("hidden");
-      } else {
-        usersBtn.classList.add("hidden");
+      if (adminToolbar) adminToolbar.classList.remove("hidden");
+      if (usersBtn) {
+        if (userRole === "SUPER_ADMIN") {
+          usersBtn.classList.remove("hidden");
+        } else {
+          usersBtn.classList.add("hidden");
+        }
       }
     } else {
-      adminToolbar.classList.add("hidden");
+      if (adminToolbar) adminToolbar.classList.add("hidden");
     }
   } else {
-    loginBtn.classList.remove("hidden");
-    userInfo.classList.add("hidden");
-    adminToolbar.classList.add("hidden");
+    if (loginBtn) loginBtn.classList.remove("hidden");
+    if (userInfo) userInfo.classList.add("hidden");
+    if (adminToolbar) adminToolbar.classList.add("hidden");
   }
 
   renderPoles();
   if (currentSearchQuery) handleSearch();
 }
 
-// Google Sign-In
 async function loginWithGoogle() {
+  if (!auth) {
+    showAppError("Usługa autoryzacji Firebase nie została załadowana.");
+    return;
+  }
   const provider = new firebase.auth.GoogleAuthProvider();
   try {
     await auth.signInWithPopup(provider);
   } catch (err) {
+    console.error("Błąd logowania Google:", err);
     alert("Błąd logowania: " + err.message);
   }
 }
 
 async function logout() {
-  await auth.signOut();
+  if (auth) {
+    await auth.signOut();
+  }
 }
-
-// Real-time Firestore Listeners
-db.collection("poles").orderBy("number").onSnapshot((snapshot) => {
-  poles = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  renderPoles();
-});
-
-db.collection("displayAssignments").onSnapshot((snapshot) => {
-  displayAssignments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  renderPoles();
-  if (currentSearchQuery) handleSearch();
-});
-
-db.collection("products").onSnapshot((snapshot) => {
-  products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  if (currentSearchQuery) handleSearch();
-});
 
 // Render Poles Board
 function renderPoles() {

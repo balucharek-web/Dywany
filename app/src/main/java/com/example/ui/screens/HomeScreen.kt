@@ -133,11 +133,15 @@ fun HomeScreen(viewModel: MainViewModel) {
         }
     }
 
-    // Auto-sync current auth state on start
+    // Auto-sync current auth state on start safely
     LaunchedEffect(Unit) {
-        val currentFbUser = FirebaseAuth.getInstance().currentUser
-        if (currentFbUser != null && currentUser == null) {
-            viewModel.onUserSignedIn(currentFbUser)
+        try {
+            val currentFbUser = FirebaseAuth.getInstance().currentUser
+            if (currentFbUser != null && currentUser == null) {
+                viewModel.onUserSignedIn(currentFbUser)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("HomeScreen", "Error checking FirebaseAuth currentUser on start", e)
         }
     }
 
