@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.ManageAccounts
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ViewCarousel
 import androidx.compose.material3.AlertDialog
@@ -131,10 +132,9 @@ fun HomeScreen(viewModel: MainViewModel) {
     var spotToMove by remember { mutableStateOf<DisplayAssignment?>(null) }
     var spotToSwap by remember { mutableStateOf<DisplayAssignment?>(null) }
 
-    var showLeroyLookupDialog by remember { mutableStateOf(false) }
-    var leroyLookupQuery by remember { mutableStateOf("") }
-    var pendingExtractedProduct by remember { mutableStateOf<Product?>(null) }
-    var showAssignExtractedDialog by remember { mutableStateOf(false) }
+    var scannedCodeForAddRug by remember { mutableStateOf<String?>(null) }
+    var scannerTargetIsAddRug by remember { mutableStateOf(false) }
+    var initialAddRugCode by remember { mutableStateOf("") }
 
     LaunchedEffect(uiMessage) {
         uiMessage?.let {
@@ -156,105 +156,21 @@ fun HomeScreen(viewModel: MainViewModel) {
     }
 
     // Dialog implementations
-    if (showLeroyLookupDialog) {
-        LeroyMerlinLookupDialog(
-            initialQuery = leroyLookupQuery,
-            onProductExtracted = { name, price, img, lm ->
-                val prod = Product(
-                    productId = if (lm.isNotBlank()) "lm_$lm" else "ext_${System.currentTimeMillis()}",
-                    name = name,
-                    lmSystemNumber = lm,
-                    onlinePrice = price,
-                    localPrice = price,
-                    imageUrl = img
-                )
-                viewModel.saveProduct(prod)
-                pendingExtractedProduct = prod
-                showAssignExtractedDialog = true
-                showLeroyLookupDialog = false
-            },
-            onFullProductExtracted = { full ->
-                val prod = Product(
-                    productId = if (full.lmNumber.isNotBlank()) "lm_${full.lmNumber}" else if (full.ean.isNotBlank()) "ean_${full.ean}" else "ext_${System.currentTimeMillis()}",
-                    name = full.name,
-                    ean = full.ean,
-                    lmSystemNumber = full.lmNumber,
-                    onlinePrice = full.price,
-                    localPrice = full.price,
-                    imageUrl = full.imageUrl,
-                    dimensions = full.dimensions,
-                    composition = full.composition
-                )
-                viewModel.saveProduct(prod)
-                pendingExtractedProduct = prod
-                showAssignExtractedDialog = true
-                showLeroyLookupDialog = false
-            },
-            onDismiss = { showLeroyLookupDialog = false }
-        )
-    }
-
-    if (showAssignExtractedDialog && pendingExtractedProduct != null) {
-        val prod = pendingExtractedProduct!!
-        AlertDialog(
-            onDismissRequest = { showAssignExtractedDialog = false },
-            title = {
-                Text("Pobrano produkt z Leroy Merlin", fontWeight = FontWeight.Bold)
-            },
-            text = {
-                Column {
-                    Text(
-                        text = prod.name,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1B5E20)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("Cena regularna: ${String.format("%.2f", prod.onlinePrice)} zł")
-                    if (prod.lmSystemNumber.isNotBlank()) {
-                        Text("Nr ref. Leroy Merlin: ${prod.lmSystemNumber}")
-                    }
-                    if (prod.ean.isNotBlank()) {
-                        Text("Kod EAN: ${prod.ean}")
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Produkt został pomyślnie dodany do katalogu sklepu. Czy chcesz przypisać go teraz do wolnego pałąka ekspozycyjnego?",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.DarkGray
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showAssignExtractedDialog = false
-                        viewModel.onSearchQueryChanged(prod.lmSystemNumber.ifBlank { prod.ean }.ifBlank { prod.name })
-                        showAddRugDialog = true
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
-                ) {
-                    Text("Powieś na pałąku")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showAssignExtractedDialog = false
-                        viewModel.onSearchQueryChanged(prod.lmSystemNumber.ifBlank { prod.ean }.ifBlank { prod.name })
-                    }
-                ) {
-                    Text("Tylko zapisz")
-                }
-            }
-        )
-    }
-
     if (showScanner) {
         BarcodeScannerDialog(
             onBarcodeScanned = { code ->
-                viewModel.onBarcodeScanned(code)
+                if (scannerTargetIsAddRug) {
+                    scannedCodeForAddRug = code
+                } else {
+                    viewModel.onBarcodeScanned(code)
+                }
+                showScanner = false
+                scannerTargetIsAddRug = false
             },
-            onDismiss = { showScanner = false }
+            onDismiss = {
+                showScanner = false
+                scannerTargetIsAddRug = false
+            }
         )
     }
 
@@ -263,12 +179,22 @@ fun HomeScreen(viewModel: MainViewModel) {
             poles = poles,
             currentAssignments = assignments,
             existingProducts = products,
-            onOpenScanner = { showScanner = true },
+            initialCode = initialAddRugCode,
+            scannedCode = scannedCodeForAddRug,
+            onScannedCodeConsumed = { scannedCodeForAddRug = null },
+            onOpenScanner = {
+                scannerTargetIsAddRug = true
+                showScanner = true
+            },
             onSaveAndAssign = { product, pole, pos, replace ->
                 viewModel.saveProduct(product)
                 viewModel.assignProduct(pole, pos, product, replace)
             },
-            onDismiss = { showAddRugDialog = false }
+            onDismiss = {
+                showAddRugDialog = false
+                initialAddRugCode = ""
+                scannedCodeForAddRug = null
+            }
         )
     }
 
@@ -428,7 +354,10 @@ fun HomeScreen(viewModel: MainViewModel) {
                         )
                         Row {
                             TextButton(
-                                onClick = { showAddRugDialog = true },
+                                onClick = {
+                                    initialAddRugCode = ""
+                                    showAddRugDialog = true
+                                },
                                 modifier = Modifier.testTag("add_rug_top_button")
                             ) {
                                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -440,6 +369,13 @@ fun HomeScreen(viewModel: MainViewModel) {
                             ) {
                                 Icon(Icons.Default.ViewCarousel, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Text("Pałąki")
+                            }
+                            TextButton(
+                                onClick = { viewModel.triggerPriceSync() },
+                                modifier = Modifier.testTag("sync_prices_top_button")
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Text("Aktualizuj ceny LM")
                             }
                             TextButton(
                                 onClick = { showAuditHistoryDialog = true },
@@ -515,66 +451,15 @@ fun HomeScreen(viewModel: MainViewModel) {
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(6.dp))
-
-                        // Leroy Merlin Direct Search Assistant Button
-                        Button(
-                            onClick = {
-                                leroyLookupQuery = searchQuery.trim()
-                                showLeroyLookupDialog = true
-                            },
-                            modifier = Modifier
-                                .size(56.dp)
-                                .testTag("open_leroy_search_button"),
-                            shape = RoundedCornerShape(12.dp),
-                            contentPadding = PaddingValues(0.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20))
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "Wyszukiwarka Leroy Merlin",
-                                tint = Color.White,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
                     }
 
                     if (searchQuery.isNotBlank()) {
                         Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "Wyniki wyszukiwania dla: \"$searchQuery\"",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.weight(1f)
-                            )
-                            val cleanQuery = searchQuery.trim()
-                            TextButton(
-                                onClick = {
-                                    leroyLookupQuery = cleanQuery
-                                    showLeroyLookupDialog = true
-                                },
-                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Search,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = Color(0xFF2E7D32)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "Wyszukaj w Leroy Merlin",
-                                    color = Color(0xFF2E7D32),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
+                        Text(
+                            text = "Wyniki wyszukiwania w spisie sklepu dla: \"$searchQuery\"",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }
@@ -596,9 +481,9 @@ fun HomeScreen(viewModel: MainViewModel) {
                     items = searchResults,
                     searchQuery = searchQuery,
                     isAdmin = currentUser?.isAdminOrSuper() == true,
-                    onSearchLeroy = {
-                        leroyLookupQuery = searchQuery.trim()
-                        showLeroyLookupDialog = true
+                    onAddNewRug = { code ->
+                        initialAddRugCode = code
+                        showAddRugDialog = true
                     },
                     onEdit = { rugToEdit = it },
                     onMove = { spotToMove = it },
@@ -632,7 +517,7 @@ private fun SearchResultsList(
     items: List<SearchResultItem>,
     searchQuery: String,
     isAdmin: Boolean,
-    onSearchLeroy: () -> Unit,
+    onAddNewRug: (String) -> Unit,
     onEdit: (Product) -> Unit,
     onMove: (DisplayAssignment) -> Unit,
     onSwap: (DisplayAssignment) -> Unit,
@@ -662,34 +547,36 @@ private fun SearchResultsList(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "Brak dywanu w lokalnym spisie",
+                        text = "Brak dywanu w spisie sklepu",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Nie znaleziono pozycji dla: \"$searchQuery\".\nMożesz wyszukać i pobrać pełne dane produktu bezpośrednio z oficjalnego katalogu Leroy Merlin.",
+                        text = "Nie znaleziono pozycji dla: \"$searchQuery\".\nMożesz dodać ten dywan do katalogu ekspozycji.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.DarkGray,
                         textAlign = TextAlign.Center
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = onSearchLeroy,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Wyszukaj w Leroy Merlin (Asystent)",
-                            fontWeight = FontWeight.Bold
-                        )
+                    if (isAdmin) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = { onAddNewRug(searchQuery) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Dodaj ten dywan do ekspozycji",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
@@ -712,29 +599,6 @@ private fun SearchResultsList(
                         }
                     }
                 )
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = onSearchLeroy,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = Color(0xFF2E7D32)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Szukaj innych wyników dla \"$searchQuery\" w Leroy Merlin",
-                        color = Color(0xFF2E7D32),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }

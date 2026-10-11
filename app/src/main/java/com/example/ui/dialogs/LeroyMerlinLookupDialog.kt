@@ -82,9 +82,10 @@ data class ExtractedProduct(
 )
 
 private fun buildLeroyUrl(query: String): String {
-    val q = query.trim()
-    return if (q.isNotBlank()) {
-        "https://www.leroymerlin.pl/szukaj?q=${Uri.encode(q)}"
+    val parsed = com.example.data.util.ProductCodeParser.parse(query)
+    val validCode = parsed.getLeroySearchQuery()
+    return if (validCode != null) {
+        "https://www.leroymerlin.pl/szukaj?q=${Uri.encode(validCode)}"
     } else {
         "https://www.leroymerlin.pl/dywany-i-wykladziny/dywany,a1226.html"
     }

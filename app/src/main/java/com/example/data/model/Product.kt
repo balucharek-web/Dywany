@@ -16,7 +16,10 @@ data class Product(
     val composition: String = "",
     val lastUpdated: Timestamp? = null,
     val createdAt: Timestamp? = null,
-    val updatedBy: String = ""
+    val updatedBy: String = "",
+    val lastPriceSyncAt: Timestamp? = null,
+    val previousOnlinePrice: Double? = null,
+    val priceChangeNotice: String? = null
 ) {
     /**
      * Zwraca cenę, która powinna być aktualnie prezentowana na ekspozycji.

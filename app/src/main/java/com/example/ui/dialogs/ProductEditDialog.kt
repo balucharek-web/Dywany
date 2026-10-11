@@ -59,9 +59,10 @@ fun ProductEditDialog(
     var showLmAssistantDialog by remember { mutableStateOf(false) }
 
     if (showLmAssistantDialog) {
-        val q = lmNumber.ifBlank { ean }.ifBlank { name }
+        val parsedCode = com.example.data.util.ProductCodeParser.parse(lmNumber.trim().ifBlank { ean.trim() })
+        val validCode = parsedCode.getLeroySearchQuery() ?: ""
         LeroyMerlinLookupDialog(
-            initialQuery = q,
+            initialQuery = validCode,
             onProductExtracted = { extName, extPrice, extImg, extLm ->
                 if (extName.isNotBlank()) name = extName
                 if (extPrice > 0.0) onlinePriceStr = extPrice.toString()
@@ -122,41 +123,25 @@ fun ProductEditDialog(
                     singleLine = true
                 )
 
-                val queryToSearch = lmNumber.ifBlank { ean }.trim()
-                Spacer(modifier = Modifier.height(6.dp))
-                Button(
-                    onClick = { showLmAssistantDialog = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = Color.White
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("🔍 Aktualizuj dane z Leroy Merlin", color = Color.White, fontWeight = FontWeight.Bold)
-                }
+                val cleanCodeQuery = lmNumber.trim().ifBlank { ean.trim() }
+                val parsedForSearch = remember(cleanCodeQuery) { com.example.data.util.ProductCodeParser.parse(cleanCodeQuery) }
+                val validSearchCode = parsedForSearch.getLeroySearchQuery()
 
-                if (queryToSearch.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedButton(
-                        onClick = {
-                            val url = "https://www.leroymerlin.pl/szukaj?q=${Uri.encode(queryToSearch)}"
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                            context.startActivity(intent)
-                        },
-                        modifier = Modifier.fillMaxWidth()
+                if (validSearchCode != null) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Button(
+                        onClick = { showLmAssistantDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Language,
+                            imageVector = Icons.Default.Search,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp),
-                            tint = Color(0xFF2E7D32)
+                            tint = Color.White
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Otwórz '$queryToSearch' w przeglądarce", color = Color(0xFF2E7D32))
+                        Text("Aktualizuj dane z Leroy Merlin (kod: $validSearchCode)", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
 

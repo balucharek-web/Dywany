@@ -363,15 +363,16 @@ function handleSearch() {
 
   if (allItemsToDisplay.length === 0) {
     const safeQuery = String(query).replace(/[<>&"']/g, '');
-    const encoded = encodeURIComponent(query);
     resultsList.innerHTML = `
       <div style="padding: 24px; background: white; border-radius: 12px; text-align: center; border: 1px solid #e2e8f0; margin-top: 8px;">
         <div style="font-size: 36px; margin-bottom: 8px;">🔍</div>
-        <h3 style="margin: 0 0 8px 0; color: #1e293b;">Nie znaleziono w lokalnym spisie</h3>
+        <h3 style="margin: 0 0 8px 0; color: #1e293b;">Brak dywanu w spisie sklepu</h3>
         <p style="color: #64748b; margin: 0 0 16px 0;">Brak dywanu dla zapytania: "<strong>${safeQuery}</strong>".</p>
-        <button class="btn btn-primary" onclick="window.open('https://www.leroymerlin.pl/szukaj?q=${encoded}', '_blank')">
-          🌐 Wyszukaj "${safeQuery}" na oficjalnej stronie leroymerlin.pl
-        </button>
+        ${isAdmin ? `
+          <button class="btn btn-primary" onclick="openAddRugModalWithCode('${safeQuery.replace(/'/g, "\\'")}')">
+            ➕ Dodaj ten dywan do ekspozycji
+          </button>
+        ` : ''}
       </div>
     `;
     return;
@@ -478,12 +479,27 @@ function applyCatalogHint() {
   if (hintEl) hintEl.style.display = "none";
 }
 
+function openAddRugModalWithCode(code) {
+  openAddRugModal();
+  if (!code) return;
+  const clean = code.trim();
+  if (/^[0-9]{8}$/.test(clean)) {
+    const lmInput = document.getElementById("addLmNumber");
+    if (lmInput) { lmInput.value = clean; checkAutoMatchCatalog(); }
+  } else if (/^[0-9]{12,14}$/.test(clean)) {
+    const eanInput = document.getElementById("addEan");
+    if (eanInput) { eanInput.value = clean; checkAutoMatchCatalog(); }
+  }
+}
+
 function openLMWebsiteSearch() {
   const ean = document.getElementById("addEan")?.value.trim() || "";
   const lm = document.getElementById("addLmNumber")?.value.trim() || "";
-  const query = lm || ean;
+  const isLm = /^[0-9]{8}$/.test(lm);
+  const isEan = /^[0-9]{12,14}$/.test(ean);
+  const query = (isLm ? lm : null) || (isEan ? ean : null);
   if (!query) {
-    window.open("https://www.leroymerlin.pl/dywany-i-wykladziny/dywany,a1226.html", "_blank");
+    alert("Wyszukiwarka Leroy Merlin wymaga 8-cyfrowego numeru LM lub kodu EAN z etykiety (nie oznaczenia miejsca regałowego).");
     return;
   }
   const url = `https://www.leroymerlin.pl/szukaj?q=${encodeURIComponent(query)}`;

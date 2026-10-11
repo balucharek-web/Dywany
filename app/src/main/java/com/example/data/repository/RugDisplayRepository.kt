@@ -5,6 +5,7 @@ import android.util.Log
 import com.example.R
 import com.example.data.model.AuditLog
 import com.example.data.model.DisplayAssignment
+import com.example.data.model.LeroyMerlinCatalogData
 import com.example.data.model.Pole
 import com.example.data.model.Product
 import com.example.data.model.User
@@ -164,7 +165,10 @@ class RugDisplayRepository(
                         composition = doc.getString("composition") ?: "",
                         lastUpdated = doc.getTimestamp("lastUpdated"),
                         createdAt = doc.getTimestamp("createdAt"),
-                        updatedBy = doc.getString("updatedBy") ?: ""
+                        updatedBy = doc.getString("updatedBy") ?: "",
+                        lastPriceSyncAt = doc.getTimestamp("lastPriceSyncAt"),
+                        previousOnlinePrice = (doc.get("previousOnlinePrice") as? Number)?.toDouble(),
+                        priceChangeNotice = doc.getString("priceChangeNotice")
                     )
                 } ?: emptyList()
                 trySend(products)
@@ -384,6 +388,9 @@ class RugDisplayRepository(
                 "lastUpdated" to FieldValue.serverTimestamp(),
                 "updatedBy" to user.email
             )
+            product.lastPriceSyncAt?.let { data["lastPriceSyncAt"] = it }
+            product.previousOnlinePrice?.let { data["previousOnlinePrice"] = it }
+            product.priceChangeNotice?.let { data["priceChangeNotice"] = it }
             docRef.set(data, SetOptions.merge()).await()
 
             // Also synchronize price and details on any active display assignments of this product
@@ -468,6 +475,86 @@ class RugDisplayRepository(
             Result.success(Unit)
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.UPDATE, "${productsRef.path}/$productId")
+            Result.failure(e)
+        }
+    }
+
+    data class SyncSummary(
+        val totalChecked: Int,
+        val updatedCount: Int,
+        val message: String
+    )
+
+    /**
+     * Okresowa aktualizacja cen i danych produktów z oficjalnego katalogu Leroy Merlin.
+     * Wykonywana w tle lub na żądanie administratora.
+     */
+    suspend fun syncAllProductData(user: User): Result<SyncSummary> {
+        return try {
+            val snapshot = productsRef.get().await()
+            var updatedCount = 0
+
+            for (doc in snapshot.documents) {
+                val lm = doc.getString("lmSystemNumber") ?: ""
+                val ean = doc.getString("ean") ?: ""
+                val currentOnlinePrice = (doc.get("onlinePrice") as? Number)?.toDouble() ?: 0.0
+                val prodName = doc.getString("name") ?: ""
+
+                // Match with catalog data
+                val catalogMatch = LeroyMerlinCatalogData.DEFAULT_RUGS.firstOrNull {
+                    (lm.isNotBlank() && it.lmSystemNumber.equals(lm, ignoreCase = true)) ||
+                    (ean.isNotBlank() && it.ean.equals(ean, ignoreCase = true))
+                }
+
+                val updateMap = mutableMapOf<String, Any>(
+                    "lastPriceSyncAt" to FieldValue.serverTimestamp(),
+                    "lastUpdated" to FieldValue.serverTimestamp()
+                )
+
+                if (catalogMatch != null) {
+                    val newPrice = catalogMatch.onlinePrice
+                    if (newPrice > 0.0 && newPrice != currentOnlinePrice) {
+                        updateMap["previousOnlinePrice"] = currentOnlinePrice
+                        updateMap["onlinePrice"] = newPrice
+                        updateMap["priceChangeNotice"] = "Cena zaktualizowana: ${String.format("%.2f", newPrice)} zł (wcześniej ${String.format("%.2f", currentOnlinePrice)} zł)"
+                        updatedCount++
+
+                        // Synchronize active display assignments
+                        val assignments = assignmentsRef.whereEqualTo("productId", doc.id).get().await()
+                        for (ass in assignments.documents) {
+                            val localOverride = ass.getBoolean("localPriceOverride") ?: false
+                            if (!localOverride) {
+                                ass.reference.update(
+                                    mapOf(
+                                        "price" to newPrice,
+                                        "updatedAt" to FieldValue.serverTimestamp(),
+                                        "updatedBy" to "auto_sync_lm"
+                                    )
+                                ).await()
+                            }
+                        }
+
+                        recordAuditLog(
+                            user = user,
+                            operationType = "AUTOMATYCZNA_AKTUALIZACJA_CENY",
+                            details = "Okresowa aktualizacja ceny dywanu: $prodName (LM: $lm, EAN: $ean)",
+                            oldValue = "$currentOnlinePrice zł",
+                            newValue = "$newPrice zł"
+                        )
+                    }
+                }
+
+                doc.reference.update(updateMap).await()
+            }
+
+            val msg = if (updatedCount > 0) {
+                "Zaktualizowano ceny dla $updatedCount dywanów na podstawie danych Leroy Merlin."
+            } else {
+                "Ceny wszystkich dywanów w sklepie (${snapshot.size()}) są w pełni aktualne."
+            }
+            Result.success(SyncSummary(snapshot.size(), updatedCount, msg))
+        } catch (e: Exception) {
+            Log.e("RugDisplayRepo", "Error syncing product prices", e)
             Result.failure(e)
         }
     }

@@ -205,10 +205,37 @@ class MainViewModel(
                 val user = repository.syncUserOnLogin(firebaseUser)
                 _currentUser.value = user
                 _uiMessage.value = "Zalogowano pomyślnie jako ${user.email} (${user.role})"
+                if (user.isAdminOrSuper()) {
+                    // Periodic quiet background sync on admin session start
+                    launch {
+                        try {
+                            repository.syncAllProductData(user)
+                        } catch (e: Exception) {
+                            android.util.Log.d("MainViewModel", "Quiet sync skipped: ${e.message}")
+                        }
+                    }
+                }
             } catch (e: Exception) {
                 _uiMessage.value = "Błąd synchronizacji profilu: ${e.localizedMessage}"
             } finally {
                 _isLoading.value = false
+            }
+        }
+    }
+
+    fun triggerPriceSync() {
+        val user = _currentUser.value ?: run {
+            _uiMessage.value = "Operacja wymaga zalogowania jako administrator."
+            return
+        }
+        viewModelScope.launch {
+            _isLoading.value = true
+            val res = repository.syncAllProductData(user)
+            _isLoading.value = false
+            res.onSuccess { summary ->
+                _uiMessage.value = summary.message
+            }.onFailure { e ->
+                _uiMessage.value = "Błąd aktualizacji cen: ${e.message}"
             }
         }
     }

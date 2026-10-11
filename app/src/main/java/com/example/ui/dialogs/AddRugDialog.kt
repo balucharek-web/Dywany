@@ -28,7 +28,9 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,15 +54,18 @@ fun AddRugDialog(
     poles: List<Pole>,
     currentAssignments: List<DisplayAssignment>,
     existingProducts: List<Product> = emptyList(),
-    initialEan: String = "",
+    initialCode: String = "",
+    scannedCode: String? = null,
+    onScannedCodeConsumed: () -> Unit = {},
     onOpenScanner: () -> Unit,
     onSaveAndAssign: (product: Product, poleNumber: Int, position: String, replace: Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val parsedInitial = remember(initialCode) { com.example.data.util.ProductCodeParser.parse(initialCode) }
     var name by remember { mutableStateOf("") }
-    var ean by remember { mutableStateOf(initialEan) }
-    var lmNumber by remember { mutableStateOf("") }
+    var ean by remember { mutableStateOf(parsedInitial.ean) }
+    var lmNumber by remember { mutableStateOf(parsedInitial.lmNumber) }
     var onlinePriceStr by remember { mutableStateOf("199.00") }
     var localPriceStr by remember { mutableStateOf("") }
     var localPriceOverride by remember { mutableStateOf(false) }
@@ -76,15 +81,47 @@ fun AddRugDialog(
     var conflictMessage by remember { mutableStateOf("") }
     var showLmAssistantDialog by remember { mutableStateOf(false) }
 
+    LaunchedEffect(scannedCode) {
+        scannedCode?.let { raw ->
+            val parsed = com.example.data.util.ProductCodeParser.parse(raw)
+            if (parsed.isLmNumber) {
+                lmNumber = parsed.lmNumber
+            }
+            if (parsed.isEan) {
+                ean = parsed.ean
+            }
+            // Auto match from existing products
+            val cleanE = parsed.ean
+            val cleanL = parsed.lmNumber
+            val match = existingProducts.firstOrNull { prod ->
+                (cleanL.isNotBlank() && prod.lmSystemNumber.equals(cleanL, ignoreCase = true)) ||
+                (cleanE.isNotBlank() && prod.ean.equals(cleanE, ignoreCase = true))
+            }
+            if (match != null) {
+                name = match.name
+                ean = match.ean
+                lmNumber = match.lmSystemNumber
+                onlinePriceStr = match.onlinePrice.toString()
+                localPriceStr = if (match.localPrice > 0.0) match.localPrice.toString() else ""
+                localPriceOverride = match.localPriceOverride
+                if (match.dimensions.isNotBlank()) dimensions = match.dimensions
+                if (match.composition.isNotBlank()) composition = match.composition
+                if (match.imageUrl.isNotBlank()) imageUrl = match.imageUrl
+            }
+            onScannedCodeConsumed()
+        }
+    }
+
     val pNum = selectedPoleNumber.toIntOrNull() ?: defaultPole
     val targetAssignment = currentAssignments.firstOrNull {
         it.poleNumber == pNum && it.position.equals(selectedPosition, ignoreCase = true)
     }
 
     if (showLmAssistantDialog) {
-        val q = lmNumber.ifBlank { ean }.ifBlank { name }
+        val parsedCode = com.example.data.util.ProductCodeParser.parse(lmNumber.trim().ifBlank { ean.trim() })
+        val validCode = parsedCode.getLeroySearchQuery() ?: ""
         LeroyMerlinLookupDialog(
-            initialQuery = q,
+            initialQuery = validCode,
             onProductExtracted = { extName, extPrice, extImg, extLm ->
                 if (extName.isNotBlank()) name = extName
                 if (extPrice > 0.0) onlinePriceStr = extPrice.toString()
@@ -270,49 +307,40 @@ fun AddRugDialog(
                     }
                 }
 
-                // 2. Direct Official Leroy Merlin Page (Zero-Scraping, unblockable browser session)
-                val queryForLm = cleanLm.ifBlank { cleanEan }
-                if (queryForLm.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    OutlinedButton(
-                        onClick = {
-                            val url = "https://www.leroymerlin.pl/szukaj?q=${Uri.encode(queryForLm)}"
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                            context.startActivity(intent)
-                        },
-                        modifier = Modifier.fillMaxWidth()
+                // 2. Pobieranie danych z oficjalnego serwisu Leroy Merlin (TYLKO po 8-cyfrowym numerze LM lub EAN)
+                val cleanCodeQuery = lmNumber.trim().ifBlank { ean.trim() }
+                val parsedForSearch = remember(cleanCodeQuery) { com.example.data.util.ProductCodeParser.parse(cleanCodeQuery) }
+                val validSearchCode = parsedForSearch.getLeroySearchQuery()
+
+                if (validSearchCode != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { showLmAssistantDialog = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("fetch_lm_data_button"),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Language,
+                            imageVector = Icons.Default.Search,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp),
-                            tint = Color(0xFF2E7D32)
+                            tint = Color.White
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Sprawdź '$queryForLm' na leroymerlin.pl",
-                            color = Color(0xFF2E7D32)
+                            text = "Pobierz dane z Leroy Merlin (kod: $validSearchCode)",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
                         )
                     }
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-                Button(
-                    onClick = { showLmAssistantDialog = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = Color.White
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+                } else if (cleanCodeQuery.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "🔍 Wyszukaj dane w Leroy Merlin (Asystent)",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
+                        text = "Wyszukiwarka Leroy Merlin wymaga kodu EAN lub 8-cyfrowego numeru LM z etykiety (nie oznaczenia miejsca na regale).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFD32F2F)
                     )
                 }
 
