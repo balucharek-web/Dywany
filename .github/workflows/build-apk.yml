@@ -3,7 +3,11 @@ name: Build APK
 on:
   push:
     branches: [ "main" ]
+    tags: [ "v*" ]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -28,8 +32,27 @@ jobs:
     - name: Build Debug APK
       run: ./gradlew assembleDebug
 
+    - name: Prepare APK naming
+      run: |
+        cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/EkspozycjaDywanow-v4.1.0.apk
+
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: EkspozycjaDywanow-APK
-        path: app/build/outputs/apk/debug/app-debug.apk
+        path: app/build/outputs/apk/debug/EkspozycjaDywanow-v4.1.0.apk
+
+    - name: Publish Release APK
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: app/build/outputs/apk/debug/EkspozycjaDywanow-v4.1.0.apk
+        name: Ekspozycja Dywanów Leroy Merlin ${{ github.ref_name }} (APK)
+        body: |
+          Wydanie v4.1.0 – Asystent Leroy Merlin oraz naprawa uprawnień Firestore.
+          
+          Główne zmiany:
+          - Asystent wyszukiwania produktów bezpośrednio w polskim serwisie leroymerlin.pl (zero-scraping architecture)
+          - Odczytywanie nazwy, ceny, numeru referencyjnego LM, EAN, zdjęcia i wymiarów z kart produktów
+          - Usunięcie błędów PERMISSION_DENIED przy starcie (bramkowanie odczytu dziennika audytu i profili użytkowników)
+          - Bezpośredni plik instalacyjny APK v4.1.0
