@@ -362,10 +362,16 @@ function handleSearch() {
   });
 
   if (allItemsToDisplay.length === 0) {
+    const safeQuery = String(query).replace(/[<>&"']/g, '');
+    const encoded = encodeURIComponent(query);
     resultsList.innerHTML = `
-      <div style="padding: 20px; background: white; border-radius: 8px;">
-        <h3>Nie znaleziono produktu</h3>
-        <p style="color: gray; margin-top: 4px;">Brak pasującego dywanu dla zapytania: "${query}".</p>
+      <div style="padding: 24px; background: white; border-radius: 12px; text-align: center; border: 1px solid #e2e8f0; margin-top: 8px;">
+        <div style="font-size: 36px; margin-bottom: 8px;">🔍</div>
+        <h3 style="margin: 0 0 8px 0; color: #1e293b;">Nie znaleziono w lokalnym spisie</h3>
+        <p style="color: #64748b; margin: 0 0 16px 0;">Brak dywanu dla zapytania: "<strong>${safeQuery}</strong>".</p>
+        <button class="btn btn-primary" onclick="window.open('https://www.leroymerlin.pl/szukaj?q=${encoded}', '_blank')">
+          🌐 Wyszukaj "${safeQuery}" na oficjalnej stronie leroymerlin.pl
+        </button>
       </div>
     `;
     return;
@@ -418,7 +424,7 @@ function clearSearch() {
 function openCurrentQueryInLM() {
   const query = document.getElementById("searchInput")?.value.trim() || "";
   if (!query) {
-    window.open("https://www.leroymerlin.pl", "_blank");
+    window.open("https://www.leroymerlin.pl/dywany-i-wykladziny/dywany,a1226.html", "_blank");
     return;
   }
   const url = `https://www.leroymerlin.pl/szukaj?q=${encodeURIComponent(query)}`;
@@ -477,7 +483,7 @@ function openLMWebsiteSearch() {
   const lm = document.getElementById("addLmNumber")?.value.trim() || "";
   const query = lm || ean;
   if (!query) {
-    alert("Wpisz najpierw numer systemowy LM lub kod EAN.");
+    window.open("https://www.leroymerlin.pl/dywany-i-wykladziny/dywany,a1226.html", "_blank");
     return;
   }
   const url = `https://www.leroymerlin.pl/szukaj?q=${encodeURIComponent(query)}`;

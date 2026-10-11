@@ -13,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -73,10 +74,36 @@ fun AddRugDialog(
 
     var showConflictDialog by remember { mutableStateOf(false) }
     var conflictMessage by remember { mutableStateOf("") }
+    var showLmAssistantDialog by remember { mutableStateOf(false) }
 
     val pNum = selectedPoleNumber.toIntOrNull() ?: defaultPole
     val targetAssignment = currentAssignments.firstOrNull {
         it.poleNumber == pNum && it.position.equals(selectedPosition, ignoreCase = true)
+    }
+
+    if (showLmAssistantDialog) {
+        val q = lmNumber.ifBlank { ean }.ifBlank { name }
+        LeroyMerlinLookupDialog(
+            initialQuery = q,
+            onProductExtracted = { extName, extPrice, extImg, extLm ->
+                if (extName.isNotBlank()) name = extName
+                if (extPrice > 0.0) onlinePriceStr = extPrice.toString()
+                if (extImg.isNotBlank()) imageUrl = extImg
+                if (extLm.isNotBlank()) lmNumber = extLm
+                showLmAssistantDialog = false
+            },
+            onFullProductExtracted = { full ->
+                if (full.name.isNotBlank()) name = full.name
+                if (full.price > 0.0) onlinePriceStr = full.price.toString()
+                if (full.imageUrl.isNotBlank()) imageUrl = full.imageUrl
+                if (full.lmNumber.isNotBlank()) lmNumber = full.lmNumber
+                if (ean.isBlank() && full.ean.isNotBlank()) ean = full.ean
+                if (full.dimensions.isNotBlank()) dimensions = full.dimensions
+                if (full.composition.isNotBlank()) composition = full.composition
+                showLmAssistantDialog = false
+            },
+            onDismiss = { showLmAssistantDialog = false }
+        )
     }
 
     if (showConflictDialog) {
@@ -267,6 +294,26 @@ fun AddRugDialog(
                             color = Color(0xFF2E7D32)
                         )
                     }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+                Button(
+                    onClick = { showLmAssistantDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = Color.White
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "🔍 Wyszukaj dane w Leroy Merlin (Asystent)",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))

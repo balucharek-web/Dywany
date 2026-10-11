@@ -13,9 +13,11 @@ import com.example.data.util.OperationType
 import com.example.data.util.handleFirestoreError
 import com.google.firebase.FirebaseApp
 import com.google.firebase.Timestamp
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -175,11 +177,21 @@ class RugDisplayRepository(
     }
 
     fun observeAuditLogs(): Flow<List<AuditLog>> = callbackFlow {
+        val authUser = FirebaseAuth.getInstance().currentUser
+        if (authUser == null) {
+            trySend(emptyList())
+            awaitClose { }
+            return@callbackFlow
+        }
         val listener = auditLogsRef.orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
             .limit(100)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    handleFirestoreError(error, OperationType.LIST, auditLogsRef.path)
+                    if (error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                        Log.d("RugDisplayRepo", "Brak uprawnień do przeglądania dziennika audytu (dostęp tylko dla administratorów).")
+                    } else {
+                        handleFirestoreError(error, OperationType.LIST, auditLogsRef.path)
+                    }
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
@@ -206,13 +218,19 @@ class RugDisplayRepository(
     }
 
     fun observeCurrentUser(uid: String): Flow<User?> = callbackFlow {
-        if (uid.isBlank()) {
+        val authUser = FirebaseAuth.getInstance().currentUser
+        if (uid.isBlank() || authUser == null) {
             trySend(null)
+            awaitClose { }
             return@callbackFlow
         }
         val listener = usersRef.document(uid).addSnapshotListener { snapshot, error ->
             if (error != null) {
-                handleFirestoreError(error, OperationType.GET, "${usersRef.path}/$uid")
+                if (error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                    Log.d("RugDisplayRepo", "Brak uprawnień do odczytu profilu użytkownika: $uid")
+                } else {
+                    handleFirestoreError(error, OperationType.GET, "${usersRef.path}/$uid")
+                }
                 trySend(null)
                 return@addSnapshotListener
             }
@@ -235,9 +253,19 @@ class RugDisplayRepository(
     }
 
     fun observeAllUsers(): Flow<List<User>> = callbackFlow {
+        val authUser = FirebaseAuth.getInstance().currentUser
+        if (authUser == null) {
+            trySend(emptyList())
+            awaitClose { }
+            return@callbackFlow
+        }
         val listener = usersRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
-                handleFirestoreError(error, OperationType.LIST, usersRef.path)
+                if (error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                    Log.d("RugDisplayRepo", "Brak uprawnień do odczytu listy użytkowników (dostęp dla zalogowanych).")
+                } else {
+                    handleFirestoreError(error, OperationType.LIST, usersRef.path)
+                }
                 trySend(emptyList())
                 return@addSnapshotListener
             }
@@ -302,6 +330,35 @@ class RugDisplayRepository(
     // -------------------------------------------------------------
     // PRODUCT ACTIONS & AUDIT
     // -------------------------------------------------------------
+
+    suspend fun ensureDefaultCatalogSeeded(defaultRugs: List<Product>) {
+        try {
+            val snap = productsRef.limit(1).get().await()
+            if (snap.isEmpty) {
+                for (rug in defaultRugs) {
+                    val data = hashMapOf<String, Any>(
+                        "productId" to rug.productId,
+                        "name" to rug.name,
+                        "ean" to rug.ean,
+                        "lmSystemNumber" to rug.lmSystemNumber,
+                        "onlinePrice" to rug.onlinePrice,
+                        "localPrice" to rug.localPrice,
+                        "localPriceOverride" to rug.localPriceOverride,
+                        "imageUrl" to rug.imageUrl,
+                        "productUrl" to rug.productUrl,
+                        "dimensions" to rug.dimensions,
+                        "composition" to rug.composition,
+                        "lastUpdated" to FieldValue.serverTimestamp(),
+                        "createdAt" to FieldValue.serverTimestamp(),
+                        "updatedBy" to "system_catalog"
+                    )
+                    productsRef.document(rug.productId).set(data, SetOptions.merge()).await()
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("RugDisplayRepo", "Auto-seeding default catalog deferred: ${e.message}")
+        }
+    }
 
     suspend fun saveOrUpdateProduct(product: Product, user: User): Result<Unit> {
         return try {

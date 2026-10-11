@@ -32,6 +32,9 @@ import android.net.Uri
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.ui.platform.LocalContext
 import com.example.data.model.Product
@@ -53,6 +56,32 @@ fun ProductEditDialog(
     var imageUrl by remember { mutableStateOf(product.imageUrl) }
     var dimensions by remember { mutableStateOf(product.dimensions) }
     var composition by remember { mutableStateOf(product.composition) }
+    var showLmAssistantDialog by remember { mutableStateOf(false) }
+
+    if (showLmAssistantDialog) {
+        val q = lmNumber.ifBlank { ean }.ifBlank { name }
+        LeroyMerlinLookupDialog(
+            initialQuery = q,
+            onProductExtracted = { extName, extPrice, extImg, extLm ->
+                if (extName.isNotBlank()) name = extName
+                if (extPrice > 0.0) onlinePriceStr = extPrice.toString()
+                if (extImg.isNotBlank()) imageUrl = extImg
+                if (extLm.isNotBlank()) lmNumber = extLm
+                showLmAssistantDialog = false
+            },
+            onFullProductExtracted = { full ->
+                if (full.name.isNotBlank()) name = full.name
+                if (full.price > 0.0) onlinePriceStr = full.price.toString()
+                if (full.imageUrl.isNotBlank()) imageUrl = full.imageUrl
+                if (full.lmNumber.isNotBlank()) lmNumber = full.lmNumber
+                if (ean.isBlank() && full.ean.isNotBlank()) ean = full.ean
+                if (full.dimensions.isNotBlank()) dimensions = full.dimensions
+                if (full.composition.isNotBlank()) composition = full.composition
+                showLmAssistantDialog = false
+            },
+            onDismiss = { showLmAssistantDialog = false }
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -94,8 +123,24 @@ fun ProductEditDialog(
                 )
 
                 val queryToSearch = lmNumber.ifBlank { ean }.trim()
+                Spacer(modifier = Modifier.height(6.dp))
+                Button(
+                    onClick = { showLmAssistantDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = Color.White
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("🔍 Aktualizuj dane z Leroy Merlin", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+
                 if (queryToSearch.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                     OutlinedButton(
                         onClick = {
                             val url = "https://www.leroymerlin.pl/szukaj?q=${Uri.encode(queryToSearch)}"
@@ -111,7 +156,7 @@ fun ProductEditDialog(
                             tint = Color(0xFF2E7D32)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Sprawdź '$queryToSearch' na leroymerlin.pl", color = Color(0xFF2E7D32))
+                        Text("Otwórz '$queryToSearch' w przeglądarce", color = Color(0xFF2E7D32))
                     }
                 }
 

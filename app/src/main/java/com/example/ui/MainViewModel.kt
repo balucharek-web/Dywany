@@ -5,16 +5,21 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.model.AuditLog
 import com.example.data.model.DisplayAssignment
+import com.example.data.model.LeroyMerlinCatalogData
 import com.example.data.model.Pole
 import com.example.data.model.Product
 import com.example.data.model.User
 import com.example.data.repository.RugDisplayRepository
+import com.example.data.util.BarcodeLookupService
 import com.google.firebase.auth.FirebaseUser
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -56,11 +61,47 @@ class MainViewModel(
     val products: StateFlow<List<Product>> = repository.observeProducts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val auditLogs: StateFlow<List<AuditLog>> = repository.observeAuditLogs()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val auditLogs: StateFlow<List<AuditLog>> = _currentUser.flatMapLatest { user ->
+        if (user != null && user.isAdminOrSuper()) {
+            repository.observeAuditLogs()
+        } else {
+            flowOf(emptyList())
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val allUsers: StateFlow<List<User>> = repository.observeAllUsers()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val allUsers: StateFlow<List<User>> = _currentUser.flatMapLatest { user ->
+        if (user != null && user.isSuperAdmin()) {
+            repository.observeAllUsers()
+        } else {
+            flowOf(emptyList())
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    init {
+        viewModelScope.launch {
+            repository.ensureDefaultCatalogSeeded(LeroyMerlinCatalogData.DEFAULT_RUGS)
+        }
+    }
+
+    fun lookupEanOnline(ean: String, onResult: (Product?) -> Unit) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            val prod = BarcodeLookupService.lookupEan(ean)
+            _isLoading.value = false
+            onResult(prod)
+        }
+    }
+
+    fun seedDefaultCatalog() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            repository.ensureDefaultCatalogSeeded(LeroyMerlinCatalogData.DEFAULT_RUGS)
+            _isLoading.value = false
+            _uiMessage.value = "Załadowano wzorcowy asortyment Leroy Merlin."
+        }
+    }
 
     // Combined search results
     val searchResults: StateFlow<List<SearchResultItem>> = combine(
