@@ -34,25 +34,31 @@ jobs:
 
     - name: Prepare APK naming
       run: |
-        cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/EkspozycjaDywanow-v4.1.0.apk
+        TAG_NAME="${{ github.ref_name }}"
+        if [ -z "$TAG_NAME" ] || [ "$TAG_NAME" = "main" ]; then
+          TAG_NAME="v4.2.0"
+        fi
+        cp app/build/outputs/apk/debug/app-debug.apk "app/build/outputs/apk/debug/EkspozycjaDywanow-${TAG_NAME}.apk"
+        echo "APK_FILE=app/build/outputs/apk/debug/EkspozycjaDywanow-${TAG_NAME}.apk" >> $GITHUB_ENV
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: EkspozycjaDywanow-APK
-        path: app/build/outputs/apk/debug/EkspozycjaDywanow-v4.1.0.apk
+        path: ${{ env.APK_FILE }}
 
     - name: Publish Release APK
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
-        files: app/build/outputs/apk/debug/EkspozycjaDywanow-v4.1.0.apk
+        files: ${{ env.APK_FILE }}
         name: Ekspozycja Dywanów Leroy Merlin ${{ github.ref_name }} (APK)
         body: |
-          Wydanie v4.1.0 – Asystent Leroy Merlin oraz naprawa uprawnień Firestore.
+          Wydanie ${{ github.ref_name }} – Asystent Leroy Merlin, skanowanie kodów i okresowa aktualizacja danych.
           
           Główne zmiany:
-          - Asystent wyszukiwania produktów bezpośrednio w polskim serwisie leroymerlin.pl (zero-scraping architecture)
-          - Odczytywanie nazwy, ceny, numeru referencyjnego LM, EAN, zdjęcia i wymiarów z kart produktów
-          - Usunięcie błędów PERMISSION_DENIED przy starcie (bramkowanie odczytu dziennika audytu i profili użytkowników)
-          - Bezpośredni plik instalacyjny APK v4.1.0
+          - Skanowanie etykiet z automatycznym rozpoznawaniem kodu EAN oraz 8-cyfrowego numeru LM.
+          - Wyszukiwanie danych na oficjalnej stronie Leroy Merlin aktywne wyłącznie podczas dodawania dywanu (brak szukania po miejscu regału).
+          - Okresowa aktualizacja cen i danych powieszonych dywanów w sklepie.
+          - Naprawa uprawnień Firestore (brak błędów PERMISSION_DENIED przy starcie).
+          - Bezpośredni plik instalacyjny APK: EkspozycjaDywanow-${{ github.ref_name }}.apk
