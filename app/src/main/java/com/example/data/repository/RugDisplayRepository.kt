@@ -299,28 +299,36 @@ class RugDisplayRepository(
         val displayName = firebaseUser.displayName.orEmpty()
         val docRef = usersRef.document(uid)
 
-        val snap = docRef.get().await()
+        val snap = try {
+            docRef.get().await()
+        } catch (e: Exception) {
+            Log.e(TAG, "Nie można pobrać profilu użytkownika: ${e.message}", e)
+            null
+        }
         val isMasterEmail = email == SUPER_ADMIN_INITIAL_EMAIL.lowercase()
 
         val role = when {
             isMasterEmail -> "SUPER_ADMIN"
-            snap.exists() -> snap.getString("role") ?: "USER"
+            snap != null && snap.exists() -> snap.getString("role") ?: "USER"
             else -> "USER"
         }
 
-        val data = hashMapOf(
-            "userId" to uid,
-            "email" to email,
-            "displayName" to displayName,
-            "role" to role,
-            "active" to true,
-            "updatedAt" to FieldValue.serverTimestamp()
-        )
-        if (!snap.exists()) {
-            data["createdAt"] = FieldValue.serverTimestamp()
+        try {
+            val data = hashMapOf(
+                "userId" to uid,
+                "email" to email,
+                "displayName" to displayName,
+                "role" to role,
+                "active" to true,
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            if (snap == null || !snap.exists()) {
+                data["createdAt"] = FieldValue.serverTimestamp()
+            }
+            docRef.set(data, SetOptions.merge()).await()
+        } catch (e: Exception) {
+            Log.e(TAG, "Nie można zapisać profilu użytkownika w Firestore: ${e.message}", e)
         }
-
-        docRef.set(data, SetOptions.merge()).await()
 
         return User(
             userId = uid,

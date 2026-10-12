@@ -188,6 +188,10 @@ class MainViewModel(
         _uiMessage.value = null
     }
 
+    fun showError(message: String) {
+        _uiMessage.value = message
+    }
+
     fun onSearchQueryChanged(newQuery: String) {
         searchQuery.value = newQuery
     }

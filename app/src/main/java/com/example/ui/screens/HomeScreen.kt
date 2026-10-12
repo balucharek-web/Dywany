@@ -278,9 +278,16 @@ fun HomeScreen(viewModel: MainViewModel) {
                     if (currentUser == null) {
                         Button(
                             onClick = {
-                                performGoogleSignIn(context, scope) { fbUser ->
-                                    viewModel.onUserSignedIn(fbUser)
-                                }
+                                performGoogleSignIn(
+                                    context = context,
+                                    scope = scope,
+                                    onSuccess = { fbUser ->
+                                        viewModel.onUserSignedIn(fbUser)
+                                    },
+                                    onError = { err ->
+                                        viewModel.showError("Błąd logowania Google: $err")
+                                    }
+                                )
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                             modifier = Modifier.testTag("sign_in_google_button")
@@ -994,15 +1001,40 @@ private fun SpotBox(
 // CREDENTIAL MANAGER GOOGLE SIGN IN
 // -------------------------------------------------------------
 
+fun findActivity(context: android.content.Context): Activity? {
+    var ctx = context
+    while (ctx is android.content.ContextWrapper) {
+        if (ctx is Activity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
+}
+
 fun performGoogleSignIn(
     context: android.content.Context,
     scope: kotlinx.coroutines.CoroutineScope,
-    onSuccess: (com.google.firebase.auth.FirebaseUser) -> Unit
+    onSuccess: (com.google.firebase.auth.FirebaseUser) -> Unit,
+    onError: (String) -> Unit = {}
 ) {
+    val activity = findActivity(context)
+    if (activity == null) {
+        val err = "Nie można odnaleźć okna aplikacji (Activity) do logowania Google."
+        Log.e("Auth", err)
+        onError(err)
+        return
+    }
+
     val clientId = try {
         context.getString(R.string.default_web_client_id)
     } catch (e: Exception) {
         Log.e("Auth", "Brak default_web_client_id", e)
+        onError("Brak identyfikatora logowania Google (default_web_client_id).")
+        return
+    }
+
+    if (clientId.isBlank()) {
+        Log.e("Auth", "Pusty default_web_client_id")
+        onError("Nieprawidłowy identyfikator logowania Google.")
         return
     }
 
@@ -1012,18 +1044,29 @@ fun performGoogleSignIn(
 
     scope.launch {
         try {
-            val result = credentialManager.getCredential(context as Activity, request)
+            val result = credentialManager.getCredential(activity, request)
             val credential = result.credential
             if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                 val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
                 val authCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
                 val authResult = FirebaseAuth.getInstance().signInWithCredential(authCredential).await()
-                authResult.user?.let(onSuccess)
+                val user = authResult.user
+                if (user != null) {
+                    onSuccess(user)
+                } else {
+                    onError("Nie udało się uzyskać konta użytkownika z Firebase.")
+                }
+            } else {
+                val err = "Otrzymano nieobsługiwany typ poświadczenia: ${credential.type}"
+                Log.w("Auth", err)
+                onError(err)
             }
         } catch (e: GetCredentialCancellationException) {
-            Log.w("Auth", "Logowanie anulowane przez użytkownika: ${e.message}")
+            Log.w("Auth", "Logowanie anulowane przez użytkownika")
         } catch (e: Exception) {
             Log.e("Auth", "Błąd logowania Google Sign-In", e)
+            val msg = e.localizedMessage ?: e.message ?: "Wystąpił błąd podczas logowania przez Google."
+            onError(msg)
         }
     }
 }
