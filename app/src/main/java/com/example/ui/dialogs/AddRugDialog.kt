@@ -142,6 +142,7 @@ fun AddRugDialog(
             when (val res = LeroyProductLookupEngine.lookupProduct(codeToSearch, existingProducts)) {
                 is ProductLookupResult.Success -> {
                     populateFromExtracted(res.product, res.source)
+                    fetchStatusMessage = res.message
                 }
                 is ProductLookupResult.NotFound -> {
                     fetchStatusMessage = res.message

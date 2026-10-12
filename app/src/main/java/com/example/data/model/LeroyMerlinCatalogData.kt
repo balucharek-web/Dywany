@@ -2,20 +2,6 @@ package com.example.data.model
 
 object LeroyMerlinCatalogData {
     val DEFAULT_RUGS = listOf(
-        // Egipski dywan z kodu użytkownika (6226047976625 / LM: 047976625 / 47976625)
-        Product(
-            productId = "lm_47976625",
-            name = "Dywan Oriental Weavers Cleopatra / Lotus Beżowy",
-            ean = "6226047976625",
-            lmSystemNumber = "047976625",
-            onlinePrice = 349.00,
-            localPrice = 0.0,
-            localPriceOverride = false,
-            imageUrl = "https://images.unsplash.com/photo-1600121848594-d8644e57abab?w=600&auto=format&fit=crop",
-            productUrl = "https://www.leroymerlin.pl/dywany-i-wykladziny/dywany,a1226.html",
-            dimensions = "160x230 cm",
-            composition = "100% Polipropylen Heat-Set"
-        ),
         Product(
             productId = "lm_82645123",
             name = "Dywan Agnella Diamond Szary Klasyczny",

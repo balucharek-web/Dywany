@@ -5,8 +5,6 @@ import com.example.data.model.LeroyMerlinCatalogData
 import com.example.data.model.Product
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import java.util.concurrent.TimeUnit
 
 data class ExtractedProduct(
     val name: String = "",
@@ -30,12 +28,12 @@ sealed class ProductLookupResult {
 }
 
 /**
- * Automatyczny silnik pobierania danych o produktach Leroy Merlin bezpośrednio do pól formularzy.
- * Działa wielopoziomowo w tle bez otwierania uciążliwego okna przeglądarki ani stron 404:
- * 1. Sprawdza produkty obecne w bazie sklepu (Firestore / pamięć podręczna).
- * 2. Sprawdza katalog wzorcowy Leroy Merlin (kolekcje dywanów w tym egipskie, Agnella, Inspire).
- * 3. Sprawdza otwarty rejestr kodów EAN.
- * 4. Analizuje i dekoduje strukturę kodów producenta (np. EAN 622... z etykiet egipskich dywanów).
+ * Rzetelny silnik wyszukiwania i pobierania danych produktów.
+ * Nigdy nie wymyśla fałszywych nazw dywanów dla nieznanych kodów (np. masek przeciwpyłowych, narzędzi).
+ * 1. Sprawdza produkty zapisane w bazie sklepu (Firestore / lokalne).
+ * 2. Sprawdza zweryfikowany katalog wzorcowy Leroy Merlin po ścisłym dopasowaniu kodu.
+ * 3. Sprawdza otwarty międzynarodowy rejestr kodów EAN i zwraca prawdziwą nazwę artykułu.
+ * 4. W razie braku w bazach uczciwie prosi użytkownika o uzupełnienie danych z etykiety.
  */
 object LeroyProductLookupEngine {
     private const val TAG = "LeroyLookupEngine"
@@ -53,11 +51,11 @@ object LeroyProductLookupEngine {
         val eanToQuery = parsed.ean
         val lmToQuery = parsed.lmNumber
 
-        Log.d(TAG, "Szukanie produktu dla: '$clean' (EAN: '$eanToQuery', LM: '$lmToQuery')")
+        Log.d(TAG, "Wyszukiwanie produktu dla: '$clean' (EAN: '$eanToQuery', LM: '$lmToQuery')")
 
         // 1. Sprawdź w dotychczasowych produktach w bazie sklepu
         val inStore = existingProducts.firstOrNull { p ->
-            (lmToQuery.isNotBlank() && (p.lmSystemNumber.equals(lmToQuery, ignoreCase = true) || p.lmSystemNumber.endsWith(lmToQuery))) ||
+            (lmToQuery.isNotBlank() && p.lmSystemNumber.equals(lmToQuery, ignoreCase = true)) ||
             (eanToQuery.isNotBlank() && p.ean.equals(eanToQuery, ignoreCase = true)) ||
             (clean.length >= 8 && (p.ean == clean || p.lmSystemNumber == clean))
         }
@@ -70,19 +68,19 @@ object LeroyProductLookupEngine {
                     imageUrl = inStore.imageUrl,
                     lmNumber = inStore.lmSystemNumber,
                     ean = inStore.ean,
-                    dimensions = inStore.dimensions.ifBlank { "160x230 cm" },
-                    composition = inStore.composition.ifBlank { "100% Polipropylen" }
+                    dimensions = inStore.dimensions,
+                    composition = inStore.composition
                 ),
                 source = "Baza produktów sklepu",
-                message = "Pobrano dane z bazy sklepu: ${inStore.name}"
+                message = "Znaleziono w bazie sklepu: ${inStore.name}"
             )
         }
 
-        // 2. Sprawdź w katalogu Leroy Merlin
+        // 2. Sprawdź w oficjalnym katalogu wzorcowym Leroy Merlin
         val inCatalog = LeroyMerlinCatalogData.DEFAULT_RUGS.firstOrNull { p ->
-            (lmToQuery.isNotBlank() && (p.lmSystemNumber.equals(lmToQuery, ignoreCase = true) || p.lmSystemNumber.endsWith(lmToQuery) || lmToQuery.endsWith(p.lmSystemNumber))) ||
+            (lmToQuery.isNotBlank() && p.lmSystemNumber.equals(lmToQuery, ignoreCase = true)) ||
             (eanToQuery.isNotBlank() && p.ean.equals(eanToQuery, ignoreCase = true)) ||
-            (clean.length >= 8 && (p.ean.contains(clean) || clean.contains(p.ean) || p.lmSystemNumber.contains(clean) || clean.contains(p.lmSystemNumber)))
+            (clean.length >= 8 && (p.ean == clean || p.lmSystemNumber == clean))
         }
         if (inCatalog != null) {
             return@withContext ProductLookupResult.Success(
@@ -106,81 +104,41 @@ object LeroyProductLookupEngine {
             try {
                 val eanMatch = BarcodeLookupService.lookupEan(queryCode)
                 if (eanMatch != null && eanMatch.name.isNotBlank()) {
+                    val realName = eanMatch.name
+                    val isRug = realName.contains("dywan", ignoreCase = true) ||
+                            realName.contains("chodnik", ignoreCase = true) ||
+                            realName.contains("wykładzina", ignoreCase = true) ||
+                            realName.contains("rug", ignoreCase = true) ||
+                            realName.contains("carpet", ignoreCase = true)
+
+                    val statusMsg = if (isRug) {
+                        "Pobrano z rejestru EAN: $realName"
+                    } else {
+                        "Wykryto artykuł: $realName (Uwaga: to nie jest dywan)"
+                    }
+
                     return@withContext ProductLookupResult.Success(
                         product = ExtractedProduct(
-                            name = eanMatch.name,
-                            price = if (eanMatch.onlinePrice > 0.0) eanMatch.onlinePrice else 199.00,
+                            name = realName,
+                            price = eanMatch.onlinePrice,
                             imageUrl = eanMatch.imageUrl,
                             lmNumber = lmToQuery,
                             ean = queryCode,
-                            dimensions = eanMatch.dimensions.ifBlank { "160x230 cm" },
-                            composition = eanMatch.composition.ifBlank { "100% Polipropylen" }
+                            dimensions = eanMatch.dimensions,
+                            composition = eanMatch.composition
                         ),
-                        source = "Rejestr kodów kreskowych EAN",
-                        message = "Pobrano z rejestru kodów: ${eanMatch.name}"
+                        source = "Rejestr EAN",
+                        message = statusMsg
                     )
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Błąd odpytywania rejestru EAN: ${e.message}")
+                Log.w(TAG, "Błąd rejestru EAN: ${e.message}")
             }
         }
 
-        // 4. Inteligentna detekcja dla kodów egipskich producentów (np. 6226047976625 ze zdjęcia etykiety)
-        if (clean.length == 13 && clean.startsWith("622")) {
-            // Kod producenta Oriental Weavers (Egipt) - wyodrębnij 8-cyfrowy indeks LM
-            val extractedLm = if (clean.length >= 12) clean.substring(4, 12) else "047976625"
-            return@withContext ProductLookupResult.Success(
-                product = ExtractedProduct(
-                    name = "Dywan Oriental Weavers Cleopatra / Lotus Beżowy",
-                    price = 349.00,
-                    imageUrl = "https://images.unsplash.com/photo-1600121848594-d8644e57abab?w=600&auto=format&fit=crop",
-                    lmNumber = extractedLm,
-                    ean = clean,
-                    dimensions = "160x230 cm",
-                    composition = "100% Polipropylen Heat-Set"
-                ),
-                source = "Katalog Oriental Weavers (Egipt / LM)",
-                message = "Pobrano dane dywanu egipskiego (Oriental Weavers)"
-            )
-        }
-
-        // 5. Kod marki własnej Leroy Merlin (Inspire 327600...)
-        if (clean.startsWith("327600") && clean.length == 13) {
-            val autoLm = clean.takeLast(8)
-            return@withContext ProductLookupResult.Success(
-                product = ExtractedProduct(
-                    name = "Dywan Inspire Milo Skandynawski Szary",
-                    price = 279.00,
-                    imageUrl = "https://images.unsplash.com/photo-1600121848594-d8644e57abab?w=600&auto=format&fit=crop",
-                    lmNumber = autoLm,
-                    ean = clean,
-                    dimensions = "160x230 cm",
-                    composition = "100% Polipropylen"
-                ),
-                source = "Kolekcja Inspire Leroy Merlin",
-                message = "Pobrano dane kolekcji Inspire Leroy Merlin"
-            )
-        }
-
-        // 6. Jeżeli podano poprawny 8-cyfrowy numer referencyjny LM
-        if (clean.length == 8 && clean.all { it.isDigit() }) {
-            return@withContext ProductLookupResult.Success(
-                product = ExtractedProduct(
-                    name = "Dywan Leroy Merlin ref. $clean",
-                    price = 199.00,
-                    imageUrl = "https://images.unsplash.com/photo-1579656381226-5fc0f0100c3b?w=600&auto=format&fit=crop",
-                    lmNumber = clean,
-                    ean = "",
-                    dimensions = "160x230 cm",
-                    composition = "100% Polipropylen"
-                ),
-                source = "Indeks Leroy Merlin",
-                message = "Pobrano dane referencji Leroy Merlin $clean"
-            )
-        }
-
+        // 4. Jeśli produktu nie znaleziono w żadnej bazie - brak zmyślania!
         return@withContext ProductLookupResult.NotFound(
-            "Nie odnaleziono w internetowym katalogu dla kodu \"$clean\". Uzupełnij dane ręcznie lub podaj 8-cyfrowy numer LM."
+            "Nie odnaleziono artykułu dla kodu \"$clean\". Uzupełnij nazwę i cenę ręcznie z etykiety."
         )
     }
 }
