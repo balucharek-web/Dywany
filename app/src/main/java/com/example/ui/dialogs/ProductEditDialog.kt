@@ -85,6 +85,7 @@ fun ProductEditDialog(
     onUpdateLocalPriceOnly: (newPrice: Double, override: Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
 
     var name by remember { mutableStateOf(product.name) }
@@ -119,7 +120,7 @@ fun ProductEditDialog(
         scope.launch {
             isFetchingLm = true
             fetchStatusMessage = null
-            when (val res = LeroyProductLookupEngine.lookupProduct(codeToSearch, existingProducts)) {
+            when (val res = LeroyProductLookupEngine.lookupProduct(codeToSearch, existingProducts, context)) {
                 is ProductLookupResult.Success -> {
                     val p = res.product
                     if (p.name.isNotBlank()) name = p.name
@@ -129,7 +130,7 @@ fun ProductEditDialog(
                     if (p.imageUrl.isNotBlank()) imageUrl = p.imageUrl
                     if (p.dimensions.isNotBlank()) dimensions = p.dimensions
                     if (p.composition.isNotBlank()) composition = p.composition
-                    fetchStatusMessage = "Pomyślnie pobrano dane z Leroy Merlin (${res.source})"
+                    fetchStatusMessage = res.message
                     isFetchSuccess = true
                 }
                 is ProductLookupResult.NotFound -> {

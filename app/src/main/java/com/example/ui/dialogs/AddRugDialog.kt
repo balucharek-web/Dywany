@@ -91,6 +91,7 @@ fun AddRugDialog(
     onSaveAndAssign: (product: Product, poleNumber: Int, position: String, replace: Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val parsedInitial = remember(initialCode) { com.example.data.util.ProductCodeParser.parse(initialCode) }
 
@@ -139,7 +140,7 @@ fun AddRugDialog(
         scope.launch {
             isFetchingLm = true
             fetchStatusMessage = null
-            when (val res = LeroyProductLookupEngine.lookupProduct(codeToSearch, existingProducts)) {
+            when (val res = LeroyProductLookupEngine.lookupProduct(codeToSearch, existingProducts, context)) {
                 is ProductLookupResult.Success -> {
                     populateFromExtracted(res.product, res.source)
                     fetchStatusMessage = res.message

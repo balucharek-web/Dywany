@@ -1,5 +1,6 @@
 package com.example.data.util
 
+import android.content.Context
 import android.util.Log
 import com.example.data.model.LeroyMerlinCatalogData
 import com.example.data.model.Product
@@ -28,19 +29,17 @@ sealed class ProductLookupResult {
 }
 
 /**
- * Rzetelny silnik wyszukiwania i pobierania danych produktów.
- * Nigdy nie wymyśla fałszywych nazw dywanów dla nieznanych kodów (np. masek przeciwpyłowych, narzędzi).
- * 1. Sprawdza produkty zapisane w bazie sklepu (Firestore / lokalne).
- * 2. Sprawdza zweryfikowany katalog wzorcowy Leroy Merlin po ścisłym dopasowaniu kodu.
- * 3. Sprawdza otwarty międzynarodowy rejestr kodów EAN i zwraca prawdziwą nazwę artykułu.
- * 4. W razie braku w bazach uczciwie prosi użytkownika o uzupełnienie danych z etykiety.
+ * Główny silnik wyszukiwania i pobierania danych produktów.
+ * Jeśli produktu nie ma w lokalnej bazie sklepu, pobiera rzeczywiste dane z oficjalnej strony leroymerlin.pl
+ * i wkleja je bezpośrednio do pól aplikacji.
  */
 object LeroyProductLookupEngine {
     private const val TAG = "LeroyLookupEngine"
 
     suspend fun lookupProduct(
         rawCode: String,
-        existingProducts: List<Product> = emptyList()
+        existingProducts: List<Product> = emptyList(),
+        context: Context? = null
     ): ProductLookupResult = withContext(Dispatchers.IO) {
         val clean = rawCode.trim()
         if (clean.isBlank()) {
@@ -53,7 +52,7 @@ object LeroyProductLookupEngine {
 
         Log.d(TAG, "Wyszukiwanie produktu dla: '$clean' (EAN: '$eanToQuery', LM: '$lmToQuery')")
 
-        // 1. Sprawdź w dotychczasowych produktach w bazie sklepu
+        // 1. Sprawdź w dotychczasowych produktach w bazie sklepu (Firestore / pamięć podręczna)
         val inStore = existingProducts.firstOrNull { p ->
             (lmToQuery.isNotBlank() && p.lmSystemNumber.equals(lmToQuery, ignoreCase = true)) ||
             (eanToQuery.isNotBlank() && p.ean.equals(eanToQuery, ignoreCase = true)) ||
@@ -98,7 +97,37 @@ object LeroyProductLookupEngine {
             )
         }
 
-        // 3. Sprawdź w otwartym rejestrze kodów kreskowych (Open Products Facts)
+        // 3. POBRANIE BEZPOŚREDNIO Z OFICJALNEJ STRONY LEROYMERLIN.PL (LIVE HEADLESS SCRAPER)
+        if (context != null) {
+            // Spróbuj najpierw po 8-cyfrowym numerze referencyjnym LM, jeśli jest, a w drugiej kolejności po EAN / query
+            val searchCandidates = mutableListOf<String>()
+            if (lmToQuery.isNotBlank()) searchCandidates.add(lmToQuery)
+            if (eanToQuery.isNotBlank() && eanToQuery != lmToQuery) searchCandidates.add(eanToQuery)
+            if (searchCandidates.isEmpty()) searchCandidates.add(clean)
+
+            for (queryCand in searchCandidates) {
+                try {
+                    Log.d(TAG, "Próba pobrania ze strony leroymerlin.pl dla: $queryCand")
+                    val webExtracted = LeroyMerlinLiveScraper.searchAndExtract(context, queryCand)
+                    if (webExtracted != null && webExtracted.name.isNotBlank()) {
+                        val finalLm = webExtracted.lmNumber.ifBlank { lmToQuery }
+                        val finalEan = webExtracted.ean.ifBlank { eanToQuery }
+                        return@withContext ProductLookupResult.Success(
+                            product = webExtracted.copy(
+                                lmNumber = finalLm,
+                                ean = finalEan
+                            ),
+                            source = "Oficjalna strona leroymerlin.pl",
+                            message = "Pobrano dane ze strony leroymerlin.pl: ${webExtracted.name}"
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Błąd pobierania z leroymerlin.pl dla $queryCand: ${e.message}")
+                }
+            }
+        }
+
+        // 4. Sprawdź w otwartym rejestrze kodów kreskowych (Open Products Facts) jako uzupełnienie
         if (eanToQuery.isNotBlank() || clean.length in 8..14) {
             val queryCode = eanToQuery.ifBlank { clean }
             try {
@@ -112,9 +141,9 @@ object LeroyProductLookupEngine {
                             realName.contains("carpet", ignoreCase = true)
 
                     val statusMsg = if (isRug) {
-                        "Pobrano z rejestru EAN: $realName"
+                        "Pobrano z rejestru kodów: $realName"
                     } else {
-                        "Wykryto artykuł: $realName (Uwaga: to nie jest dywan)"
+                        "Wykryto artykuł: $realName (Uwaga: artykuł spoza działu dywanów)"
                     }
 
                     return@withContext ProductLookupResult.Success(
@@ -136,9 +165,9 @@ object LeroyProductLookupEngine {
             }
         }
 
-        // 4. Jeśli produktu nie znaleziono w żadnej bazie - brak zmyślania!
+        // 5. Jeśli produkt nie został odnaleziony na leroymerlin.pl ani w bazach
         return@withContext ProductLookupResult.NotFound(
-            "Nie odnaleziono artykułu dla kodu \"$clean\". Uzupełnij nazwę i cenę ręcznie z etykiety."
+            "Nie odnaleziono artykułu na stronie leroymerlin.pl dla zapytania \"$clean\". Sprawdź 8-cyfrowy numer referencyjny z żółtej etykiety."
         )
     }
 }
