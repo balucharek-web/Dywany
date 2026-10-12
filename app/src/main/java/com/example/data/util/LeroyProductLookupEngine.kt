@@ -134,18 +134,6 @@ object LeroyProductLookupEngine {
                 val eanMatch = BarcodeLookupService.lookupEan(queryCode)
                 if (eanMatch != null && eanMatch.name.isNotBlank()) {
                     val realName = eanMatch.name
-                    val isRug = realName.contains("dywan", ignoreCase = true) ||
-                            realName.contains("chodnik", ignoreCase = true) ||
-                            realName.contains("wykładzina", ignoreCase = true) ||
-                            realName.contains("rug", ignoreCase = true) ||
-                            realName.contains("carpet", ignoreCase = true)
-
-                    val statusMsg = if (isRug) {
-                        "Pobrano z rejestru kodów: $realName"
-                    } else {
-                        "Wykryto artykuł: $realName (Uwaga: artykuł spoza działu dywanów)"
-                    }
-
                     return@withContext ProductLookupResult.Success(
                         product = ExtractedProduct(
                             name = realName,
@@ -157,7 +145,7 @@ object LeroyProductLookupEngine {
                             composition = eanMatch.composition
                         ),
                         source = "Rejestr EAN",
-                        message = statusMsg
+                        message = "Pobrano z rejestru kodów: $realName"
                     )
                 }
             } catch (e: Exception) {

@@ -381,7 +381,7 @@ fun ProductEditDialog(
 
                 // SEKCJA 2: NAZWA PRODUKTU
                 Text(
-                    text = "Nazwa dywanu",
+                    text = "Nazwa produktu",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -390,7 +390,7 @@ fun ProductEditDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    placeholder = { Text("np. Dywan Oriental Weavers Cleopatra Beżowy") },
+                    placeholder = { Text("np. Dywan, Maska przeciwpyłowa, itp.") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 )

@@ -251,13 +251,13 @@ fun AddRugDialog(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Dodaj dywan na ekspozycję",
+                            text = "Dodaj produkt na ekspozycję",
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Zeskanuj etykietę lub pobierz dane bezpośrednio z Leroy Merlin",
+                            text = "Zeskanuj dowolny kod EAN lub LM – dane zostaną pobrane z Leroy Merlin",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -497,7 +497,7 @@ fun AddRugDialog(
 
                 // NAZWA PRODUKTU
                 Text(
-                    text = "Nazwa dywanu",
+                    text = "Nazwa produktu",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -506,7 +506,7 @@ fun AddRugDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    placeholder = { Text("np. Dywan Oriental Weavers Cleopatra") },
+                    placeholder = { Text("np. Dywan, Maska przeciwpyłowa, itp.") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("add_rug_name_input"),

@@ -40,7 +40,7 @@ object BarcodeLookupService {
                 if (json.optInt("status") == 1 && json.has("product")) {
                     val p = json.getJSONObject("product")
                     val name = p.optString("product_name_pl").ifBlank {
-                        p.optString("product_name").ifBlank { "Dywan EAN $cleanEan" }
+                        p.optString("product_name").ifBlank { "Produkt EAN $cleanEan" }
                     }
                     val img = p.optString("image_url").ifBlank {
                         p.optString("image_front_url")
