@@ -228,6 +228,7 @@ fun HomeScreen(viewModel: MainViewModel) {
     rugToEdit?.let { prod ->
         ProductEditDialog(
             product = prod,
+            existingProducts = products,
             onSaveProduct = { viewModel.saveProduct(it) },
             onUpdateLocalPriceOnly = { newPrice, override ->
                 viewModel.updateLocalPrice(prod.productId, newPrice, override)

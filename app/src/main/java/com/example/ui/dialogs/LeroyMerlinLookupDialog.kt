@@ -69,17 +69,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
+import com.example.data.util.ExtractedProduct
 import org.json.JSONObject
-
-data class ExtractedProduct(
-    val name: String = "",
-    val price: Double = 0.0,
-    val imageUrl: String = "",
-    val lmNumber: String = "",
-    val ean: String = "",
-    val dimensions: String = "",
-    val composition: String = ""
-)
 
 private fun buildLeroyUrl(query: String): String {
     val parsed = com.example.data.util.ProductCodeParser.parse(query)

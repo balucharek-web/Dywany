@@ -1,7 +1,13 @@
 package com.example.ui.dialogs
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,45 +16,69 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import android.content.Intent
-import android.net.Uri
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import coil.compose.AsyncImage
 import com.example.data.model.DisplayAssignment
 import com.example.data.model.Pole
 import com.example.data.model.Product
+import com.example.data.util.ExtractedProduct
+import com.example.data.util.LeroyProductLookupEngine
+import com.example.data.util.ProductLookupResult
+import kotlinx.coroutines.launch
 
+private val POPULAR_DIMENSIONS = listOf("80x150 cm", "120x170 cm", "140x200 cm", "160x230 cm", "200x290 cm", "200x300 cm")
+private val POPULAR_COMPOSITIONS = listOf("100% Polipropylen", "100% Wełna", "100% Poliester", "Heat-Set Carving", "Płaskotkany (Juta)")
+
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun AddRugDialog(
     poles: List<Pole>,
@@ -61,8 +91,9 @@ fun AddRugDialog(
     onSaveAndAssign: (product: Product, poleNumber: Int, position: String, replace: Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val parsedInitial = remember(initialCode) { com.example.data.util.ProductCodeParser.parse(initialCode) }
+
     var name by remember { mutableStateOf("") }
     var ean by remember { mutableStateOf(parsedInitial.ean) }
     var lmNumber by remember { mutableStateOf(parsedInitial.lmNumber) }
@@ -75,40 +106,71 @@ fun AddRugDialog(
 
     val defaultPole = poles.firstOrNull()?.number ?: 1
     var selectedPoleNumber by remember { mutableStateOf(defaultPole.toString()) }
-    var selectedPosition by remember { mutableStateOf("A") } // Strictly "A" or "B"
+    var selectedPosition by remember { mutableStateOf("A") } // "A" or "B"
 
     var showConflictDialog by remember { mutableStateOf(false) }
     var conflictMessage by remember { mutableStateOf("") }
-    var showLmAssistantDialog by remember { mutableStateOf(false) }
 
+    // Stan automatycznego pobierania danych prosto do pól
+    var isFetchingLm by remember { mutableStateOf(false) }
+    var fetchStatusMessage by remember { mutableStateOf<String?>(null) }
+    var isFetchSuccess by remember { mutableStateOf(false) }
+
+    fun populateFromExtracted(p: ExtractedProduct, source: String) {
+        if (p.name.isNotBlank()) name = p.name
+        if (p.price > 0.0) onlinePriceStr = String.format("%.2f", p.price).replace(",", ".")
+        if (p.lmNumber.isNotBlank()) lmNumber = p.lmNumber
+        if (p.ean.isNotBlank() && ean.isBlank()) ean = p.ean
+        if (p.imageUrl.isNotBlank()) imageUrl = p.imageUrl
+        if (p.dimensions.isNotBlank()) dimensions = p.dimensions
+        if (p.composition.isNotBlank()) composition = p.composition
+        fetchStatusMessage = "Pomyślnie pobrano dane z Leroy Merlin ($source)"
+        isFetchSuccess = true
+    }
+
+    fun triggerAutoFetch(codeOverride: String? = null) {
+        val codeToSearch = (codeOverride ?: lmNumber.trim().ifBlank { ean.trim() }).trim()
+        if (codeToSearch.isBlank()) {
+            fetchStatusMessage = "Wpisz kod EAN lub numer LM, aby pobrać dane."
+            isFetchSuccess = false
+            return
+        }
+
+        scope.launch {
+            isFetchingLm = true
+            fetchStatusMessage = null
+            when (val res = LeroyProductLookupEngine.lookupProduct(codeToSearch, existingProducts)) {
+                is ProductLookupResult.Success -> {
+                    populateFromExtracted(res.product, res.source)
+                }
+                is ProductLookupResult.NotFound -> {
+                    fetchStatusMessage = res.message
+                    isFetchSuccess = false
+                }
+                is ProductLookupResult.Error -> {
+                    fetchStatusMessage = res.message
+                    isFetchSuccess = false
+                }
+            }
+            isFetchingLm = false
+        }
+    }
+
+    // Automatyczne pobranie po zeskanowaniu kodu
     LaunchedEffect(scannedCode) {
         scannedCode?.let { raw ->
             val parsed = com.example.data.util.ProductCodeParser.parse(raw)
-            if (parsed.isLmNumber) {
-                lmNumber = parsed.lmNumber
-            }
-            if (parsed.isEan) {
-                ean = parsed.ean
-            }
-            // Auto match from existing products
-            val cleanE = parsed.ean
-            val cleanL = parsed.lmNumber
-            val match = existingProducts.firstOrNull { prod ->
-                (cleanL.isNotBlank() && prod.lmSystemNumber.equals(cleanL, ignoreCase = true)) ||
-                (cleanE.isNotBlank() && prod.ean.equals(cleanE, ignoreCase = true))
-            }
-            if (match != null) {
-                name = match.name
-                ean = match.ean
-                lmNumber = match.lmSystemNumber
-                onlinePriceStr = match.onlinePrice.toString()
-                localPriceStr = if (match.localPrice > 0.0) match.localPrice.toString() else ""
-                localPriceOverride = match.localPriceOverride
-                if (match.dimensions.isNotBlank()) dimensions = match.dimensions
-                if (match.composition.isNotBlank()) composition = match.composition
-                if (match.imageUrl.isNotBlank()) imageUrl = match.imageUrl
-            }
+            if (parsed.isLmNumber) lmNumber = parsed.lmNumber
+            if (parsed.isEan) ean = parsed.ean
+            triggerAutoFetch(raw)
             onScannedCodeConsumed()
+        }
+    }
+
+    // Automatyczne pobranie przy starcie z initialCode
+    LaunchedEffect(initialCode) {
+        if (initialCode.isNotBlank() && name.isBlank()) {
+            triggerAutoFetch(initialCode)
         }
     }
 
@@ -117,39 +179,11 @@ fun AddRugDialog(
         it.poleNumber == pNum && it.position.equals(selectedPosition, ignoreCase = true)
     }
 
-    if (showLmAssistantDialog) {
-        val parsedCode = com.example.data.util.ProductCodeParser.parse(lmNumber.trim().ifBlank { ean.trim() })
-        val validCode = parsedCode.getLeroySearchQuery() ?: ""
-        LeroyMerlinLookupDialog(
-            initialQuery = validCode,
-            onProductExtracted = { extName, extPrice, extImg, extLm ->
-                if (extName.isNotBlank()) name = extName
-                if (extPrice > 0.0) onlinePriceStr = extPrice.toString()
-                if (extImg.isNotBlank()) imageUrl = extImg
-                if (extLm.isNotBlank()) lmNumber = extLm
-                showLmAssistantDialog = false
-            },
-            onFullProductExtracted = { full ->
-                if (full.name.isNotBlank()) name = full.name
-                if (full.price > 0.0) onlinePriceStr = full.price.toString()
-                if (full.imageUrl.isNotBlank()) imageUrl = full.imageUrl
-                if (full.lmNumber.isNotBlank()) lmNumber = full.lmNumber
-                if (ean.isBlank() && full.ean.isNotBlank()) ean = full.ean
-                if (full.dimensions.isNotBlank()) dimensions = full.dimensions
-                if (full.composition.isNotBlank()) composition = full.composition
-                showLmAssistantDialog = false
-            },
-            onDismiss = { showLmAssistantDialog = false }
-        )
-    }
-
     if (showConflictDialog) {
         AlertDialog(
             onDismissRequest = { showConflictDialog = false },
             title = { Text("Miejsce jest już zajęte", fontWeight = FontWeight.Bold) },
-            text = {
-                Text(conflictMessage)
-            },
+            text = { Text(conflictMessage) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -159,14 +193,14 @@ fun AddRugDialog(
                         val product = Product(
                             productId = if (lmNumber.isNotBlank()) "lm_${lmNumber.trim()}" else "ean_${ean.trim()}",
                             name = name.ifBlank { "Dywan $lmNumber" },
-                            ean = ean.trim(), // NEVER truncated!
+                            ean = ean.trim(), // Nigdy nie obcinać EAN!
                             lmSystemNumber = lmNumber.trim(),
                             onlinePrice = onlinePrice,
                             localPrice = localPrice,
                             localPriceOverride = localPriceOverride,
-                            imageUrl = imageUrl,
-                            dimensions = dimensions,
-                            composition = composition
+                            imageUrl = imageUrl.trim(),
+                            dimensions = dimensions.trim(),
+                            composition = composition.trim()
                         )
                         onSaveAndAssign(product, pNum, selectedPosition, true)
                         onDismiss()
@@ -188,46 +222,189 @@ fun AddRugDialog(
         )
     }
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = "+ Dodaj dywan na ekspozycję",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-        },
-        text = {
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.96f)
+                .padding(vertical = 16.dp),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            shadowElevation = 12.dp
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .padding(20.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                // EAN row with scan button
+                // NAGŁÓWEK
                 Row(
                     modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Dodaj dywan na ekspozycję",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Zeskanuj etykietę lub pobierz dane bezpośrednio z Leroy Merlin",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Zamknij",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // KARTA WYBORU MIEJSCA NA REGALE (PAŁĄK I STRONA A/B)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "Lokalizacja na ekspozycji",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = selectedPoleNumber,
+                                onValueChange = { selectedPoleNumber = it },
+                                label = { Text("Numer pałąka") },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("add_rug_pole_number_input"),
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+
+                            Row(
+                                modifier = Modifier.weight(1.3f),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    RadioButton(
+                                        selected = selectedPosition == "A",
+                                        onClick = { selectedPosition = "A" },
+                                        modifier = Modifier.testTag("radio_position_A")
+                                    )
+                                    Text("Strona A", fontWeight = FontWeight.Medium)
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    RadioButton(
+                                        selected = selectedPosition == "B",
+                                        onClick = { selectedPosition = "B" },
+                                        modifier = Modifier.testTag("radio_position_B")
+                                    )
+                                    Text("Strona B", fontWeight = FontWeight.Medium)
+                                }
+                            }
+                        }
+
+                        // Wskaźnik czy miejsce jest wolne
+                        if (targetAssignment != null && targetAssignment.isOccupied()) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp)
+                            ) {
+                                Text(
+                                    text = "Miejsce ${pNum}${selectedPosition} jest obecnie zajęte przez: ${targetAssignment.productName}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
+                        } else {
+                            Surface(
+                                color = Color(0xFFE8F5E9),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp)
+                            ) {
+                                Text(
+                                    text = "Miejsce ${pNum}${selectedPosition} jest wolne do powieszenia.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF2E7D32),
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // SEKCJA: KODY PRODUKTU & SKANOWANIE
+                Text(
+                    text = "Kody z etykiety (EAN i LM)",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedTextField(
                         value = ean,
                         onValueChange = { ean = it },
-                        label = { Text("Kod EAN (pełny kod)") },
+                        label = { Text("Kod kreskowy EAN") },
+                        placeholder = { Text("np. 6226047976625") },
                         modifier = Modifier
                             .weight(1f)
                             .testTag("add_rug_ean_input"),
-                        singleLine = true
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        shape = RoundedCornerShape(12.dp)
                     )
-                    IconButton(
+
+                    Button(
                         onClick = onOpenScanner,
-                        modifier = Modifier
-                            .padding(start = 4.dp)
-                            .testTag("add_rug_scan_button")
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.testTag("add_rug_scan_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.QrCodeScanner,
-                            contentDescription = "Skanuj EAN",
-                            tint = Color(0xFF2E7D32)
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
                         )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Skanuj")
                     }
                 }
 
@@ -236,269 +413,303 @@ fun AddRugDialog(
                 OutlinedTextField(
                     value = lmNumber,
                     onValueChange = { lmNumber = it },
-                    label = { Text("Numer systemowy LM (np. 8 cyfr)") },
+                    label = { Text("Numer referencyjny LM (8 cyfr)") },
+                    placeholder = { Text("np. 82645123 lub z etykiety") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("add_rug_lm_input"),
-                    singleLine = true
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    shape = RoundedCornerShape(12.dp)
                 )
 
-                // 1. Catalog auto-lookup (without scraping - using real store database)
-                val cleanEan = ean.trim()
-                val cleanLm = lmNumber.trim()
-                val matchingProduct = remember(cleanEan, cleanLm, existingProducts) {
-                    if (cleanEan.isBlank() && cleanLm.isBlank()) null
-                    else existingProducts.firstOrNull { prod ->
-                        (cleanEan.isNotBlank() && prod.ean.equals(cleanEan, ignoreCase = true)) ||
-                        (cleanLm.isNotBlank() && prod.lmSystemNumber.equals(cleanLm, ignoreCase = true))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // PRZYCISK: AUTOMATYCZNE POBRANIE DANYCH BEZPOŚREDNIO DO PÓL
+                Button(
+                    onClick = { triggerAutoFetch() },
+                    enabled = !isFetchingLm,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("fetch_lm_data_button"),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                ) {
+                    if (isFetchingLm) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Pobieranie danych z Leroy Merlin...", color = Color.White, fontWeight = FontWeight.Bold)
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Pobierz dane produktu bezpośrednio do pól",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
                     }
                 }
 
-                if (matchingProduct != null) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
-                    ) {
-                        Row(
+                AnimatedVisibility(visible = fetchStatusMessage != null) {
+                    fetchStatusMessage?.let { msg ->
+                        Surface(
+                            color = if (isFetchSuccess) Color(0xFFE8F5E9) else Color(0xFFFFF3E0),
+                            shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                                .padding(top = 8.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "✓ Znaleziono w bazie sklepu!",
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF2E7D32),
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                                Text(
-                                    text = matchingProduct.name,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    text = "Cena regularna: ${matchingProduct.onlinePrice} zł" +
-                                            if (matchingProduct.localPrice > 0) " | Lokalna: ${matchingProduct.localPrice} zł" else "",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFF1B5E20)
-                                )
-                            }
-                            Button(
-                                onClick = {
-                                    name = matchingProduct.name
-                                    ean = matchingProduct.ean
-                                    lmNumber = matchingProduct.lmSystemNumber
-                                    onlinePriceStr = matchingProduct.onlinePrice.toString()
-                                    localPriceStr = if (matchingProduct.localPrice > 0.0) matchingProduct.localPrice.toString() else ""
-                                    localPriceOverride = matchingProduct.localPriceOverride
-                                    if (matchingProduct.dimensions.isNotBlank()) dimensions = matchingProduct.dimensions
-                                    if (matchingProduct.composition.isNotBlank()) composition = matchingProduct.composition
-                                    if (matchingProduct.imageUrl.isNotBlank()) imageUrl = matchingProduct.imageUrl
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-                                modifier = Modifier.padding(start = 8.dp)
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Wypełnij")
+                                Icon(
+                                    imageVector = if (isFetchSuccess) Icons.Default.Check else Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = if (isFetchSuccess) Color(0xFF2E7D32) else Color(0xFFE65100),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = msg,
+                                    fontSize = 12.sp,
+                                    color = if (isFetchSuccess) Color(0xFF1B5E20) else Color(0xFFBF360C)
+                                )
                             }
                         }
                     }
                 }
 
-                // 2. Pobieranie danych z oficjalnego serwisu Leroy Merlin (TYLKO po 8-cyfrowym numerze LM lub EAN)
-                val cleanCodeQuery = lmNumber.trim().ifBlank { ean.trim() }
-                val parsedForSearch = remember(cleanCodeQuery) { com.example.data.util.ProductCodeParser.parse(cleanCodeQuery) }
-                val validSearchCode = parsedForSearch.getLeroySearchQuery()
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                if (validSearchCode != null) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = { showLmAssistantDialog = true },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("fetch_lm_data_button"),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = Color.White
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Pobierz dane z Leroy Merlin (kod: $validSearchCode)",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                } else if (cleanCodeQuery.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Wyszukiwarka Leroy Merlin wymaga kodu EAN lub 8-cyfrowego numeru LM z etykiety (nie oznaczenia miejsca na regale).",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFD32F2F)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
+                // NAZWA PRODUKTU
+                Text(
+                    text = "Nazwa dywanu",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(6.dp))
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Nazwa dywanu") },
-                    placeholder = { Text("np. Dywan Agnella Eco Soft") },
+                    placeholder = { Text("np. Dywan Oriental Weavers Cleopatra") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("add_rug_name_input"),
-                    singleLine = true
+                    shape = RoundedCornerShape(12.dp)
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = onlinePriceStr,
-                        onValueChange = { onlinePriceStr = it },
-                        label = { Text("Cena ze strony (zł)") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    OutlinedTextField(
-                        value = localPriceStr,
-                        onValueChange = { localPriceStr = it },
-                        label = { Text("Cena lokalna (zł)") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
+                // SEKCJA: CENY I PROMOCJE
+                Text(
+                    text = "Ceny produktu",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(6.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text(
-                        text = "Włącz cenę lokalną (nadpisanie)",
-                        style = MaterialTheme.typography.bodyMedium
+                    OutlinedTextField(
+                        value = onlinePriceStr,
+                        onValueChange = { onlinePriceStr = it },
+                        label = { Text("Cena LM (zł)") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        shape = RoundedCornerShape(10.dp)
                     )
-                    Switch(
-                        checked = localPriceOverride,
-                        onCheckedChange = { localPriceOverride = it }
+                    OutlinedTextField(
+                        value = localPriceStr,
+                        onValueChange = { localPriceStr = it },
+                        label = { Text("Cena w sklepie (zł)") },
+                        placeholder = { Text("0.00") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        shape = RoundedCornerShape(10.dp)
                     )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Włącz cenę lokalną (nadpisanie)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Switch(
+                            checked = localPriceOverride,
+                            onCheckedChange = { localPriceOverride = it }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // WYMIARY I SKŁAD
+                Text(
+                    text = "Wymiary i skład",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(6.dp))
 
                 OutlinedTextField(
                     value = dimensions,
                     onValueChange = { dimensions = it },
-                    label = { Text("Wymiary (np. 160x230 cm)") },
+                    label = { Text("Wymiary") },
+                    placeholder = { Text("np. 160x230 cm") },
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    POPULAR_DIMENSIONS.forEach { dim ->
+                        FilterChip(
+                            selected = dimensions.equals(dim, ignoreCase = true),
+                            onClick = { dimensions = dim },
+                            label = { Text(dim, fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        )
+                    }
+                }
 
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = composition,
+                    onValueChange = { composition = it },
+                    label = { Text("Skład") },
+                    placeholder = { Text("np. 100% Polipropylen") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // ZDJĘCIE
                 OutlinedTextField(
                     value = imageUrl,
                     onValueChange = { imageUrl = it },
                     label = { Text("URL zdjęcia (opcjonalnie)") },
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                if (imageUrl.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    AsyncImage(
+                        model = imageUrl,
+                        contentDescription = "Podgląd",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color.White)
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                    )
+                }
 
-                Card(
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // PRZYCISKI DOLNE
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            text = "Wybór miejsca na pałąku",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("cancel_add_rug_button"),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Anuluj")
+                    }
 
-                        OutlinedTextField(
-                            value = selectedPoleNumber,
-                            onValueChange = { selectedPoleNumber = it },
-                            label = { Text("Numer pałąka (1, 2, 3...)") },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("add_rug_pole_number_input"),
-                            singleLine = true
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Text("Pozycja na pałąku:", style = MaterialTheme.typography.bodyMedium)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(
-                                selected = selectedPosition == "A",
-                                onClick = { selectedPosition = "A" },
-                                modifier = Modifier.testTag("radio_position_A")
+                    Button(
+                        onClick = {
+                            val onlinePrice = onlinePriceStr.replace(",", ".").toDoubleOrNull() ?: 199.00
+                            val localPrice = localPriceStr.replace(",", ".").toDoubleOrNull() ?: 0.0
+                            val product = Product(
+                                productId = if (lmNumber.isNotBlank()) "lm_${lmNumber.trim()}" else "ean_${ean.trim().ifBlank { System.currentTimeMillis().toString() }}",
+                                name = name.ifBlank { "Dywan ref. ${lmNumber.ifBlank { ean }}" },
+                                ean = ean.trim(), // Nigdy nie obcinać EAN!
+                                lmSystemNumber = lmNumber.trim(),
+                                onlinePrice = onlinePrice,
+                                localPrice = localPrice,
+                                localPriceOverride = localPriceOverride,
+                                imageUrl = imageUrl.trim(),
+                                dimensions = dimensions.trim(),
+                                composition = composition.trim()
                             )
-                            Text("Miejsce A")
-                            Spacer(modifier = Modifier.width(16.dp))
-                            RadioButton(
-                                selected = selectedPosition == "B",
-                                onClick = { selectedPosition = "B" },
-                                modifier = Modifier.testTag("radio_position_B")
-                            )
-                            Text("Miejsce B")
-                        }
+
+                            if (targetAssignment != null && targetAssignment.isOccupied()) {
+                                conflictMessage = "Miejsce ${pNum}${selectedPosition} jest już zajęte przez \"${targetAssignment.productName}\". Czy chcesz je zastąpić?"
+                                showConflictDialog = true
+                            } else {
+                                onSaveAndAssign(product, pNum, selectedPosition, false)
+                                onDismiss()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .weight(1.3f)
+                            .testTag("save_and_assign_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Zapisz i powieś", fontWeight = FontWeight.Bold)
                     }
                 }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val onlinePrice = onlinePriceStr.replace(",", ".").toDoubleOrNull() ?: 0.0
-                    val localPrice = localPriceStr.replace(",", ".").toDoubleOrNull() ?: 0.0
-                    val product = Product(
-                        productId = if (lmNumber.isNotBlank()) "lm_${lmNumber.trim()}" else "ean_${ean.trim()}",
-                        name = name.ifBlank { "Dywan $lmNumber" },
-                        ean = ean.trim(), // NEVER truncated!
-                        lmSystemNumber = lmNumber.trim(),
-                        onlinePrice = onlinePrice,
-                        localPrice = localPrice,
-                        localPriceOverride = localPriceOverride,
-                        imageUrl = imageUrl,
-                        dimensions = dimensions,
-                        composition = composition
-                    )
-
-                    // Check conflict
-                    if (targetAssignment != null && targetAssignment.isOccupied()) {
-                        conflictMessage = "Miejsce ${pNum}${selectedPosition} jest już zajęte przez:\n\"${targetAssignment.productName}\" (LM: ${targetAssignment.lmSystemNumber}).\nCzy chcesz zastąpić ten produkt?"
-                        showConflictDialog = true
-                    } else {
-                        onSaveAndAssign(product, pNum, selectedPosition, false)
-                        onDismiss()
-                    }
-                },
-                modifier = Modifier.testTag("save_and_assign_rug_button")
-            ) {
-                Text("Zapisz i przypisz")
-            }
-        },
-        dismissButton = {
-            OutlinedButton(
-                onClick = onDismiss,
-                modifier = Modifier.testTag("cancel_add_rug_button")
-            ) {
-                Text("Anuluj")
-            }
         }
-    )
+    }
 }

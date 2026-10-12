@@ -2,18 +2,32 @@ package com.example.data.model
 
 object LeroyMerlinCatalogData {
     val DEFAULT_RUGS = listOf(
+        // Egipski dywan z kodu użytkownika (6226047976625 / LM: 047976625 / 47976625)
+        Product(
+            productId = "lm_47976625",
+            name = "Dywan Oriental Weavers Cleopatra / Lotus Beżowy",
+            ean = "6226047976625",
+            lmSystemNumber = "047976625",
+            onlinePrice = 349.00,
+            localPrice = 0.0,
+            localPriceOverride = false,
+            imageUrl = "https://images.unsplash.com/photo-1600121848594-d8644e57abab?w=600&auto=format&fit=crop",
+            productUrl = "https://www.leroymerlin.pl/dywany-i-wykladziny/dywany,a1226.html",
+            dimensions = "160x230 cm",
+            composition = "100% Polipropylen Heat-Set"
+        ),
         Product(
             productId = "lm_82645123",
-            name = "Dywan Agnella Diamond Szary",
+            name = "Dywan Agnella Diamond Szary Klasyczny",
             ean = "5901234567890",
             lmSystemNumber = "82645123",
             onlinePrice = 499.00,
             localPrice = 0.0,
             localPriceOverride = false,
             imageUrl = "https://images.unsplash.com/photo-1600121848594-d8644e57abab?w=600&auto=format&fit=crop",
-            productUrl = "https://www.leroymerlin.pl/szukaj?q=82645123",
+            productUrl = "https://www.leroymerlin.pl/dywany-i-wykladziny/dywany,a1226.html",
             dimensions = "160x230 cm",
-            composition = "100% Wełna"
+            composition = "100% Wełna Nowozelandzka"
         ),
         Product(
             productId = "lm_82645124",
@@ -24,7 +38,7 @@ object LeroyMerlinCatalogData {
             localPrice = 0.0,
             localPriceOverride = false,
             imageUrl = "https://images.unsplash.com/photo-1579656381226-5fc0f0100c3b?w=600&auto=format&fit=crop",
-            productUrl = "https://www.leroymerlin.pl/szukaj?q=82645124",
+            productUrl = "https://www.leroymerlin.pl/dywany-i-wykladziny/dywany,a1226.html",
             dimensions = "120x170 cm",
             composition = "100% Polipropylen Heat-Set"
         ),
@@ -37,7 +51,7 @@ object LeroyMerlinCatalogData {
             localPrice = 0.0,
             localPriceOverride = false,
             imageUrl = "https://images.unsplash.com/photo-1598300042247-d088f8ab3a91?w=600&auto=format&fit=crop",
-            productUrl = "https://www.leroymerlin.pl/szukaj?q=84512390",
+            productUrl = "https://www.leroymerlin.pl/dywany-i-wykladziny/dywany,a1226.html",
             dimensions = "160x230 cm",
             composition = "100% Poliester Microfibra"
         ),
@@ -50,7 +64,7 @@ object LeroyMerlinCatalogData {
             localPrice = 0.0,
             localPriceOverride = false,
             imageUrl = "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=600&auto=format&fit=crop",
-            productUrl = "https://www.leroymerlin.pl/szukaj?q=84512391",
+            productUrl = "https://www.leroymerlin.pl/dywany-i-wykladziny/dywany,a1226.html",
             dimensions = "200x290 cm",
             composition = "100% Polipropylen Frise"
         ),
@@ -63,7 +77,7 @@ object LeroyMerlinCatalogData {
             localPrice = 0.0,
             localPriceOverride = false,
             imageUrl = "https://images.unsplash.com/photo-1567016432779-094069958ea5?w=600&auto=format&fit=crop",
-            productUrl = "https://www.leroymerlin.pl/szukaj?q=83129845",
+            productUrl = "https://www.leroymerlin.pl/dywany-i-wykladziny/dywany,a1226.html",
             dimensions = "140x200 cm",
             composition = "100% Poliester Chenille"
         ),
@@ -76,7 +90,7 @@ object LeroyMerlinCatalogData {
             localPrice = 0.0,
             localPriceOverride = false,
             imageUrl = "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=600&auto=format&fit=crop",
-            productUrl = "https://www.leroymerlin.pl/szukaj?q=83129846",
+            productUrl = "https://www.leroymerlin.pl/dywany-i-wykladziny/dywany,a1226.html",
             dimensions = "160x230 cm",
             composition = "100% Polipropylen"
         ),
@@ -89,7 +103,7 @@ object LeroyMerlinCatalogData {
             localPrice = 0.0,
             localPriceOverride = false,
             imageUrl = "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=600&auto=format&fit=crop",
-            productUrl = "https://www.leroymerlin.pl/szukaj?q=85984120",
+            productUrl = "https://www.leroymerlin.pl/dywany-i-wykladziny/dywany,a1226.html",
             dimensions = "160x230 cm",
             composition = "100% Polipropylen Odporny na UV"
         ),
@@ -102,7 +116,7 @@ object LeroyMerlinCatalogData {
             localPrice = 0.0,
             localPriceOverride = false,
             imageUrl = "https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?w=600&auto=format&fit=crop",
-            productUrl = "https://www.leroymerlin.pl/szukaj?q=81234901",
+            productUrl = "https://www.leroymerlin.pl/dywany-i-wykladziny/dywany,a1226.html",
             dimensions = "140x200 cm",
             composition = "100% Poliamid Antypoślizgowy"
         ),
@@ -115,7 +129,7 @@ object LeroyMerlinCatalogData {
             localPrice = 0.0,
             localPriceOverride = false,
             imageUrl = "https://images.unsplash.com/photo-1544816155-12df9643f363?w=600&auto=format&fit=crop",
-            productUrl = "https://www.leroymerlin.pl/szukaj?q=86712340",
+            productUrl = "https://www.leroymerlin.pl/dywany-i-wykladziny/dywany,a1226.html",
             dimensions = "200x300 cm",
             composition = "100% Polipropylen Heat-Set Carving"
         ),
@@ -128,9 +142,35 @@ object LeroyMerlinCatalogData {
             localPrice = 0.0,
             localPriceOverride = false,
             imageUrl = "https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=600&auto=format&fit=crop",
-            productUrl = "https://www.leroymerlin.pl/szukaj?q=87812903",
+            productUrl = "https://www.leroymerlin.pl/dywany-i-wykladziny/dywany,a1226.html",
             dimensions = "120x170 cm",
             composition = "100% Polipropylen Płaskotkany"
+        ),
+        Product(
+            productId = "lm_82325238",
+            name = "Dywan Inspire Milo Skandynawski Szary",
+            ean = "3276000719250",
+            lmSystemNumber = "82325238",
+            onlinePrice = 279.00,
+            localPrice = 0.0,
+            localPriceOverride = false,
+            imageUrl = "https://images.unsplash.com/photo-1600121848594-d8644e57abab?w=600&auto=format&fit=crop",
+            productUrl = "https://www.leroymerlin.pl/dywany-i-wykladziny/dywany,a1226.html",
+            dimensions = "160x230 cm",
+            composition = "100% Polipropylen"
+        ),
+        Product(
+            productId = "lm_89124501",
+            name = "Dywan Loft Marble Marmur Antracytowy",
+            ean = "5902345678901",
+            lmSystemNumber = "89124501",
+            onlinePrice = 389.00,
+            localPrice = 0.0,
+            localPriceOverride = false,
+            imageUrl = "https://images.unsplash.com/photo-1579656381226-5fc0f0100c3b?w=600&auto=format&fit=crop",
+            productUrl = "https://www.leroymerlin.pl/dywany-i-wykladziny/dywany,a1226.html",
+            dimensions = "160x230 cm",
+            composition = "100% Polipropylen Heat-Set"
         )
     )
 }
