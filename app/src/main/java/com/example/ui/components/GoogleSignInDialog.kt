@@ -65,21 +65,21 @@ fun GoogleSignInDialog(
                 Surface(
                     color = Color(0xFFE8F5E9),
                     shape = CircleShape,
-                    modifier = Modifier.size(38.dp)
+                    modifier = Modifier.size(42.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Default.Security,
-                            contentDescription = null,
-                            tint = StoreGreenDark,
-                            modifier = Modifier.size(22.dp)
+                        Text(
+                            text = "G",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFF4285F4)
                         )
                     }
                 }
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(
-                        text = "Logowanie kontem Google",
+                        text = "Zaloguj się przez Google",
                         fontWeight = FontWeight.Bold,
                         fontSize = 17.sp
                     )
@@ -94,12 +94,12 @@ fun GoogleSignInDialog(
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "Edycja danych, dodawanie dywanów, zmiana lokalizacji i synchronizacja P2P wymagają autoryzacji.",
+                    text = "Aplikacja jest zabezpieczona kontami Google. Uprawnienia Super Administratora posiada:",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Fast 1-tap Super Admin Account Option
                 Surface(
@@ -127,7 +127,7 @@ fun GoogleSignInDialog(
                         Surface(
                             color = StoreGold,
                             shape = CircleShape,
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.size(38.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
@@ -138,11 +138,13 @@ fun GoogleSignInDialog(
                                 )
                             }
                         }
+
                         Spacer(modifier = Modifier.width(10.dp))
+
                         Column(modifier = Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = "SUPER ADMIN",
+                                    text = "GŁÓWNY SUPER ADMIN",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Black,
                                     color = Color(0xFFE65100)
@@ -155,16 +157,34 @@ fun GoogleSignInDialog(
                                 color = Color(0xFF111111)
                             )
                         }
-                        Text(
-                            text = "Zaloguj",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = StoreGreenDark
-                        )
+
+                        Button(
+                            onClick = {
+                                viewModel.loginWithGoogleEmail(InitialData.SUPER_ADMIN_EMAIL) { success, msg ->
+                                    if (success) {
+                                        onSuccess(msg)
+                                        onDismiss()
+                                    } else {
+                                        errorMessage = msg
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20)),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "Zaloguj",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Divider(modifier = Modifier.weight(1f))
                     Text(
@@ -176,7 +196,8 @@ fun GoogleSignInDialog(
                     )
                     Divider(modifier = Modifier.weight(1f))
                 }
-                Spacer(modifier = Modifier.height(14.dp))
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 if (errorMessage != null) {
                     Surface(
@@ -198,7 +219,7 @@ fun GoogleSignInDialog(
                     value = emailInput,
                     onValueChange = { emailInput = it },
                     label = { Text("Adres e-mail Google") },
-                    placeholder = { Text("np. pracownik@gmail.com") },
+                    placeholder = { Text("np. imie.nazwisko@gmail.com") },
                     modifier = Modifier.fillMaxWidth().testTag("google_email_input"),
                     singleLine = true
                 )
