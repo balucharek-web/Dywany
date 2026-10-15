@@ -1,6 +1,6 @@
 {
-  "name": "Ekspozycja Dywanów",
-  "description": "Aplikacja do zarządzania ekspozycją dywanów w sklepie Leroy Merlin (obsługa pałąków, kodów EAN, cen lokalnych i synchronizacji w czasie rzeczywistym).",
+  "name": "Dywany 038",
+  "description": "Aplikacja P2P magazynu dywanów dla Sklepu 038: skanowanie kodów kreskowych, stany magazynowe, lokalizacje regałów/wieszaków oraz bezpośrednia synchronizacja między pracownikami.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

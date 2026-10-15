@@ -1,82 +1,166 @@
 package com.example
 
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import com.example.data.repository.RugDisplayRepository
-import com.example.ui.MainViewModel
+import com.example.data.model.Product
+import com.example.ui.components.EditProductDialog
+import com.example.ui.components.MoveLocationDialog
+import com.example.ui.screens.AppDestination
+import com.example.ui.screens.HelpScreen
 import com.example.ui.screens.HomeScreen
+import com.example.ui.screens.P2pSyncScreen
+import com.example.ui.screens.PriceTagScreen
+import com.example.ui.screens.ScannerScreen
+import com.example.ui.screens.SettingsScreen
+import com.example.ui.screens.WarehouseMapScreen
 import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.viewmodel.ProductViewModel
 
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: MainViewModel by viewModels {
-        try {
-            MainViewModel.Factory(RugDisplayRepository.create(applicationContext))
-        } catch (e: Exception) {
-            Log.e("MainActivity", "Failed creating MainViewModel with standard repository", e)
-            throw e
-        }
-    }
+    private val viewModel: ProductViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
         setContent {
             MyApplicationTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    var crashError by remember { mutableStateOf<String?>(null) }
+                MainAppContent(viewModel)
+            }
+        }
+    }
+}
 
-                    if (crashError != null) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(24.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = "Wystąpił problem z uruchomieniem aplikacji",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = crashError ?: "",
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Button(onClick = { recreate() }) {
-                                    Text("Spróbuj ponownie")
-                                }
-                            }
+@Composable
+fun MainAppContent(viewModel: ProductViewModel) {
+    var currentDestination by remember { mutableStateOf(AppDestination.DASHBOARD) }
+
+    val editingProduct by viewModel.editingProduct.collectAsState()
+    val movingProduct by viewModel.movingProduct.collectAsState()
+    val priceTagProduct by viewModel.selectedPriceTagProduct.collectAsState()
+
+    // Handle Back Button if not in Home Screen
+    BackHandler(enabled = priceTagProduct != null || currentDestination != AppDestination.DASHBOARD) {
+        when {
+            priceTagProduct != null -> viewModel.selectedPriceTagProduct.value = null
+            editingProduct != null -> viewModel.editingProduct.value = null
+            movingProduct != null -> viewModel.movingProduct.value = null
+            else -> currentDestination = AppDestination.DASHBOARD
+        }
+    }
+
+    if (priceTagProduct != null) {
+        PriceTagScreen(
+            product = priceTagProduct!!,
+            onBack = { viewModel.selectedPriceTagProduct.value = null }
+        )
+    } else {
+        Box(modifier = Modifier.fillMaxSize()) {
+            when (currentDestination) {
+                AppDestination.DASHBOARD -> {
+                    // MAIN HOME SCREEN: Wyszukiwanie dywanów przez wpisanie miejsca (np. 21a), kodu LM, EAN lub skanowanie
+                    // Cała edycja po zalogowaniu kontem Google z super adminem baluch.arek@gmail.com
+                    HomeScreen(
+                        viewModel = viewModel,
+                        onOpenScanner = { currentDestination = AppDestination.SCANNER },
+                        onNavigateToFiszka = { product ->
+                            viewModel.selectedPriceTagProduct.value = product
+                        },
+                        onNavigateToWarehouse = { currentDestination = AppDestination.WAREHOUSE },
+                        onNavigateToP2p = { currentDestination = AppDestination.P2P_SYNC },
+                        onNavigateToExport = { currentDestination = AppDestination.EXPORT_IMPORT }
+                    )
+                }
+
+                AppDestination.SCANNER -> {
+                    ScannerScreen(
+                        viewModel = viewModel,
+                        onNavigateToFiszka = { product ->
+                            viewModel.selectedPriceTagProduct.value = product
                         }
-                    } else {
-                        HomeScreen(viewModel = viewModel)
-                    }
+                    )
+                }
+
+                AppDestination.WAREHOUSE -> {
+                    WarehouseMapScreen(
+                        viewModel = viewModel,
+                        onNavigateToFiszka = { product ->
+                            viewModel.selectedPriceTagProduct.value = product
+                        }
+                    )
+                }
+
+                AppDestination.P2P_SYNC -> {
+                    P2pSyncScreen(
+                        viewModel = viewModel
+                    )
+                }
+
+                AppDestination.EXPORT_IMPORT, AppDestination.STORE_PASSWORD -> {
+                    SettingsScreen(
+                        viewModel = viewModel
+                    )
+                }
+
+                AppDestination.HELP -> {
+                    HelpScreen(
+                        onBack = { currentDestination = AppDestination.DASHBOARD }
+                    )
+                }
+
+                else -> {
+                    HomeScreen(
+                        viewModel = viewModel,
+                        onOpenScanner = { currentDestination = AppDestination.SCANNER },
+                        onNavigateToFiszka = { product ->
+                            viewModel.selectedPriceTagProduct.value = product
+                        },
+                        onNavigateToWarehouse = { currentDestination = AppDestination.WAREHOUSE },
+                        onNavigateToP2p = { currentDestination = AppDestination.P2P_SYNC },
+                        onNavigateToExport = { currentDestination = AppDestination.EXPORT_IMPORT }
+                    )
                 }
             }
         }
+    }
+
+    // Modal: Edit or Add Product (Gated to Admin / Super Admin)
+    editingProduct?.let { product ->
+        EditProductDialog(
+            initialProduct = if (product.nazwa.isBlank()) null else product,
+            prefilledCode = if (product.nazwa.isBlank()) product.ean.ifBlank { product.kodLm } else null,
+            onDismiss = { viewModel.editingProduct.value = null },
+            onSave = { updated -> viewModel.saveProduct(updated) },
+            onDelete = if (product.nazwa.isNotBlank()) {
+                {
+                    viewModel.deleteProduct(product.uuid)
+                    viewModel.editingProduct.value = null
+                }
+            } else null
+        )
+    }
+
+    // Modal: Move Location (Gated to Admin / Super Admin)
+    movingProduct?.let { product ->
+        MoveLocationDialog(
+            product = product,
+            onDismiss = { viewModel.movingProduct.value = null },
+            onConfirm = { newLoc, newSektor ->
+                viewModel.updateProductLocation(product.uuid, newLoc, newSektor)
+            }
+        )
     }
 }

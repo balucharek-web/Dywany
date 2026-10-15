@@ -12,31 +12,45 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = DarkGreenPrimary,
+    primary = StoreGreenAccent,
     onPrimary = Color.Black,
-    primaryContainer = DarkGreenContainer,
+    primaryContainer = StoreGreenDark,
     onPrimaryContainer = Color.White,
-    secondary = AccentAmber,
+    secondary = StoreGold,
+    onSecondary = Color.Black,
+    background = DarkBg,
     surface = DarkSurface,
-    surfaceVariant = DarkSurfaceVariant
+    surfaceVariant = DarkCard,
+    onBackground = DarkTextPrimary,
+    onSurface = DarkTextPrimary,
+    onSurfaceVariant = DarkTextSecondary,
+    outline = DarkBorder
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = LeroyGreenPrimary,
+    primary = StoreGreenPrimary,
     onPrimary = Color.White,
-    primaryContainer = LeroyGreenContainer,
-    onPrimaryContainer = LeroyOnGreenContainer,
-    secondary = LeroyGreenSecondary,
-    tertiary = AccentAmber,
-    surface = Color(0xFFF9FBF7),
-    surfaceVariant = Color(0xFFF0F4EC)
+    primaryContainer = LocationBadgeBg,
+    onPrimaryContainer = StoreGreenDark,
+    secondary = StoreOrange,
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFFFF3E0),
+    onSecondaryContainer = Color(0xFFE65100),
+    tertiary = StoreGold,
+    background = SurfaceLight,
+    surface = Color.White,
+    surfaceVariant = Color(0xFFF1F5F1),
+    onBackground = TextPrimary,
+    onSurface = TextPrimary,
+    onSurfaceVariant = TextSecondary,
+    outline = BorderColor
 )
 
 @Composable
 fun MyApplicationTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false, // Keep consistent Leroy theme
-    content: @Composable () -> Unit,
+    dynamicColor: Boolean = false, // Keep consistent store branding
+    content: @Composable () -> Unit
 ) {
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
@@ -47,5 +61,9 @@ fun MyApplicationTheme(
         else -> LightColorScheme
     }
 
-    MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
+    MaterialTheme(
+        colorScheme = colorScheme,
+        typography = Typography,
+        content = content
+    )
 }

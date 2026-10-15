@@ -16,11 +16,6 @@
 local.properties
 .env
 debug.keystore
-package-lock.json
-*-debug.log
-firebase-debug.log
-firestore-debug.log
-node_modules/
-functions/node_modules/
+-e 
 .build-outputs/
 
