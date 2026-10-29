@@ -17,14 +17,14 @@ export default defineConfig(() => {
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg'],
         manifest: {
-          id: base,
-          name: 'LM Dywany 038 - Sklep Mikołów',
-          short_name: 'Dywany 038',
+          id: `${base}?app=lmdywany_v3`,
+          name: 'LM Dywany',
+          short_name: 'LM Dywany',
           description: 'System ekspozycji dywanów dla Leroy Merlin Sklep 038 Mikołów',
-          theme_color: '#78be20',
-          background_color: '#f3f4f6',
+          theme_color: '#22c55e',
+          background_color: '#22c55e',
           display: 'standalone',
-          start_url: base,
+          start_url: `${base}?utm_source=homescreen`,
           scope: base,
           icons: [
             {

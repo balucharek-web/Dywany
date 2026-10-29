@@ -42,7 +42,7 @@ async function generate() {
       width: 512,
       height: 512,
       channels: 4,
-      background: { r: 15, g: 23, b: 42, alpha: 1 } // #0f172a
+      background: { r: 34, g: 197, b: 94, alpha: 1 } // #22c55e
     }
   })
     .composite([

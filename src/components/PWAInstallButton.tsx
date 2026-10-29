@@ -59,7 +59,7 @@ export function PWAInstallButton({ variant = 'default' }: { variant?: 'default' 
             Zainstaluj aplikację na telefonie
           </div>
           <p className="text-xs text-emerald-800/90 max-w-xs leading-relaxed">
-            Dodaj ikonę <strong className="font-bold text-emerald-950">Dywany 038</strong> do ekranu głównego telefonu, aby mieć natychmiastowy dostęp bez wpisywania adresu.
+            Dodaj ikonę <strong className="font-bold text-emerald-950">LM Dywany</strong> do ekranu głównego telefonu, aby mieć natychmiastowy dostęp bez wpisywania adresu.
           </p>
           <button
             onClick={handleInstallClick}
@@ -88,7 +88,7 @@ export function PWAInstallButton({ variant = 'default' }: { variant?: 'default' 
               <div className="flex items-center gap-2">
                 <LeroyMerlinLogo className="h-8" />
                 <h3 className="text-base sm:text-lg font-black text-gray-900">
-                  Instalacja Dywany 038
+                  Instalacja LM Dywany
                 </h3>
               </div>
               <button
@@ -142,7 +142,7 @@ export function PWAInstallButton({ variant = 'default' }: { variant?: 'default' 
                   2. Wybierz z menu pozycję <strong className="text-emerald-700">„Zainstaluj aplikację”</strong> (lub <strong>„Dodaj do ekranu głównego”</strong>).
                 </p>
                 <p>
-                  3. Potwierdź klikając <strong className="text-emerald-700">„Zainstaluj”</strong>. Na Twoim pulpicie pojawi się ikona <strong>Dywany 038</strong>!
+                  3. Potwierdź klikając <strong className="text-emerald-700">„Zainstaluj”</strong>. Na Twoim pulpicie pojawi się ikona <strong>LM Dywany</strong>!
                 </p>
               </div>
             )}
