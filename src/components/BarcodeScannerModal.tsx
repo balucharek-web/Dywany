@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { X, Flashlight, AlertCircle, RefreshCw, CheckCircle2, Sparkles } from 'lucide-react';
+import { X, Flashlight, AlertCircle, RefreshCw, CheckCircle2 } from 'lucide-react';
 
 interface BarcodeScannerModalProps {
   isOpen: boolean;
@@ -33,10 +33,23 @@ function playBeep() {
 }
 
 /**
+ * Validates EAN-13 checksum algorithm (standard for all European/Polish retail barcodes)
+ */
+function isValidEAN13Checksum(ean: string): boolean {
+  if (!/^\d{13}$/.test(ean)) return false;
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    sum += parseInt(ean[i], 10) * (i % 2 === 0 ? 1 : 3);
+  }
+  const check = (10 - (sum % 10)) % 10;
+  return check === parseInt(ean[12], 10);
+}
+
+/**
  * Intelligent barcode classifier for retail ESL (Electronic Shelf Labels):
- * Given any list of barcodes detected in the camera frame at any angle,
- * picks the genuine product code (EAN-13, REF, EAN-8) and ignores the
- * vertical electronic tag hardware ID.
+ * Immediately selects genuine product codes (EAN-13, REF, EAN-8) regardless of where
+ * they appear in the frame (center, corner, top, bottom, or at any angle),
+ * and ignores vertical electronic shelf tag hardware IDs.
  */
 function pickBestProductBarcode(barcodes: any[]): string | null {
   if (!barcodes || barcodes.length === 0) return null;
@@ -44,44 +57,35 @@ function pickBestProductBarcode(barcodes: any[]): string | null {
   const candidates = barcodes.map((b) => {
     const raw = (b.rawValue || (typeof b === 'string' ? b : '')).trim();
 
-    // 1. Check numeric product format (EAN-13, EAN-8, REF, UPC-A)
-    const isNumeric = /^\d{7,14}$/.test(raw);
+    // 1. Is it a valid 13-digit EAN (product barcode)?
     const isEAN13 = /^\d{13}$/.test(raw);
+    const hasValidChecksum = isEAN13 && isValidEAN13Checksum(raw);
     const isLMStandard = isEAN13 && (raw.startsWith('590') || raw.startsWith('327') || raw.startsWith('59') || raw.startsWith('32'));
 
-    // 2. Check orientation: horizontal product barcode vs vertical tag barcode
-    let isHorizontal = true;
-    if (b.cornerPoints && b.cornerPoints.length >= 4) {
-      const p0 = b.cornerPoints[0];
-      const p1 = b.cornerPoints[1];
-      const p3 = b.cornerPoints[3];
-      const w = Math.hypot(p1.x - p0.x, p1.y - p0.y);
-      const h = Math.hypot(p3.x - p0.x, p3.y - p0.y);
-      // If height is notably greater than width, it's the vertical side tag
-      if (h > w * 1.1) {
-        isHorizontal = false;
-      }
-    } else if (b.boundingBox) {
-      if (b.boundingBox.height > b.boundingBox.width * 1.1) {
-        isHorizontal = false;
-      }
-    }
+    // 2. Is it an 8-digit REF number or EAN-8?
+    const is8DigitRef = /^\d{8}$/.test(raw);
 
-    // Scoring system:
+    // 3. Is it any numeric product code?
+    const isNumeric = /^\d{7,14}$/.test(raw);
+
+    // 4. Is it likely an ESL hardware serial/tag ID?
+    // Electronic shelf label tag IDs usually have letters, hyphens, or non-standard lengths
+    const hasLetters = /[a-zA-Z]/.test(raw);
+
+    // Scoring system prioritizing genuine product barcodes:
     let score = 0;
-    if (isLMStandard) score += 120;
-    else if (isEAN13) score += 100;
-    else if (isNumeric) score += 40;
+    if (hasValidChecksum) score += 300; // Perfect EAN-13 checksum -> guaranteed product code
+    else if (isLMStandard) score += 250; // Standard LM or Polish EAN prefix
+    else if (isEAN13) score += 200; // 13-digit code
+    else if (is8DigitRef) score += 180; // 8-digit REF (standard on LM labels)
+    else if (isNumeric) score += 100;
 
-    if (isHorizontal) score += 50;
-    else score -= 70; // Penalize vertical orientation (the tag hardware barcode)
+    if (hasLetters) score -= 200; // Penalize hardware tag serials
 
-    if (!isNumeric) score -= 100; // Penalize alphanumeric strings (MACs / tag IDs)
-
-    return { raw, score, isHorizontal, isNumeric };
+    return { raw, score, isNumeric };
   });
 
-  // Sort highest score first
+  // Sort by highest score first
   candidates.sort((a, b) => b.score - a.score);
 
   const best = candidates[0];
@@ -115,10 +119,10 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
     isScannedRef.current = true;
     setScannedFeedback(code);
 
-    // Play warehouse chime
+    // Play warehouse confirmation chime
     playBeep();
 
-    // Immediate haptic feedback
+    // Haptic vibration feedback
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
       try {
         navigator.vibrate([60, 40, 60]);
@@ -129,7 +133,7 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
     setTimeout(() => {
       onScanSuccess(code.trim());
       onClose();
-    }, 220);
+    }, 200);
   };
 
   useEffect(() => {
@@ -143,7 +147,7 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
     setHasTorch(false);
 
     const initScanner = async () => {
-      // 1. PRIMARY ENGINE: Native Android Google BarcodeDetector (Omnidirectional 360°, Angle-tolerant, 60 FPS)
+      // 1. PRIMARY ENGINE: Native Android Google BarcodeDetector (Full frame 360°, Any angle, Anywhere in frame, 60 FPS)
       if (hasNativeBarcodeDetector) {
         try {
           const supportedFormats = await (window as any).BarcodeDetector.getSupportedFormats();
@@ -155,7 +159,7 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
             formats: targetFormats.length > 0 ? targetFormats : supportedFormats
           });
 
-          // Request high resolution camera with continuous autofocus
+          // Request high resolution camera with continuous autofocus and autoexposure
           const stream = await navigator.mediaDevices.getUserMedia({
             video: {
               facingMode: { ideal: 'environment' },
@@ -198,7 +202,7 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
               if (videoRef.current && videoRef.current.readyState >= 2) {
                 frameCount++;
                 try {
-                  // PASS 1: Direct full-screen hardware detection (works at any angle, zero overhead)
+                  // PASS 1: Scan ENTIRE frame directly (detects anywhere: corner, edge, center, rotated)
                   const rawResults = await detector.detect(videoRef.current);
                   if (rawResults && rawResults.length > 0) {
                     const bestCode = pickBestProductBarcode(rawResults);
@@ -208,18 +212,19 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
                     }
                   }
 
-                  // PASS 2 (every 2nd frame): Super Contrast Boost for low-light & e-paper e-ink labels
+                  // PASS 2 (every 2nd frame): Full-frame Super Contrast Boost for e-paper and dim aisles
                   if (frameCount % 2 === 0 && ctx) {
                     const vw = videoRef.current.videoWidth;
                     const vh = videoRef.current.videoHeight;
                     if (vw > 0 && vh > 0) {
-                      const sw = Math.min(vw, 1080);
+                      // Process entire frame so barcodes in corners/edges get full contrast boost
+                      const sw = Math.min(vw, 1280);
                       const sh = Math.min(vh, 720);
                       canvas.width = sw;
                       canvas.height = sh;
 
-                      // Strong contrast boost: turns grey e-ink to pure white and barcode lines to pure black
-                      ctx.filter = 'contrast(2.4) brightness(1.2) grayscale(1)';
+                      // Strong contrast boost turns grey e-ink to white and lines to pure black
+                      ctx.filter = 'contrast(2.5) brightness(1.2) grayscale(1)';
                       ctx.drawImage(videoRef.current, 0, 0, sw, sh);
 
                       const enhancedResults = await detector.detect(canvas);
@@ -248,7 +253,7 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
         }
       }
 
-      // 2. FALLBACK ENGINE: Html5Qrcode
+      // 2. FALLBACK ENGINE: Html5Qrcode with FULL-SCREEN scanning (no restrictive center qrbox)
       try {
         const html5QrCode = new Html5Qrcode(containerId, {
           formatsToSupport: [
@@ -266,18 +271,11 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
 
         html5QrCodeRef.current = html5QrCode;
 
+        // Start without restrictive qrbox so it scans the ENTIRE view from edge to edge!
         await html5QrCode.start(
           { facingMode: 'environment' },
           {
             fps: 25,
-            qrbox: (viewfinderWidth, viewfinderHeight) => {
-              // Large box covering the whole label
-              const minDim = Math.min(viewfinderWidth, viewfinderHeight);
-              return {
-                width: Math.floor(minDim * 0.92),
-                height: Math.floor(minDim * 0.92)
-              };
-            },
             aspectRatio: window.innerHeight / window.innerWidth
           },
           (decodedText) => {
@@ -400,7 +398,7 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
           canvas.height = bitmap.height;
           const ctx = canvas.getContext('2d');
           if (ctx) {
-            ctx.filter = 'contrast(2.4) brightness(1.2) grayscale(1)';
+            ctx.filter = 'contrast(2.5) brightness(1.2) grayscale(1)';
             ctx.drawImage(bitmap, 0, 0);
           }
 
@@ -429,11 +427,11 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
       if (best) {
         triggerScanSuccess(best);
       } else {
-        setCameraError('Wykryto kod etykiety zamiast kodu produktu. Spróbuj zbliżyć zdjęcie do kodu pod ceną.');
+        setCameraError('Wykryto kod etykiety zamiast kodu produktu. Upewnij się, że kod produktu jest widoczny.');
       }
     } catch (err) {
       console.warn('Scan file error:', err);
-      setCameraError('Nie udało się odczytać kodu kreskowego z tego zdjęcia. Upewnij się, że kod jest widoczny.');
+      setCameraError('Nie udało się odczytać kodu kreskowego z tego zdjęcia.');
     } finally {
       setIsScanningFile(false);
       if (fileInputRef.current) {
@@ -517,17 +515,17 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
         </button>
       </div>
 
-      {/* Central Viewfinder Box: ENLARGED significantly for whole-label capture */}
+      {/* Central Viewfinder Box: ENLARGED to maximum comfortable size */}
       <div className="relative z-10 flex-1 flex flex-col items-center justify-center pointer-events-none p-2 sm:p-4">
-        {/* Significantly enlarged rounded frame (w-[92vw] max-w-[420px] aspect-[4/3] sm:aspect-square) */}
+        {/* Giant rounded frame (w-[94vw] max-w-[440px] h-[360px] sm:h-[420px]) */}
         <div
-          className={`relative w-[92vw] max-w-[420px] h-[340px] sm:h-[390px] rounded-[38px] border-[4px] transition-all flex items-center justify-center ${
+          className={`relative w-[94vw] max-w-[440px] h-[360px] sm:h-[420px] rounded-[40px] border-[4px] transition-all flex items-center justify-center ${
             scannedFeedback
               ? 'border-emerald-400 bg-emerald-500/25 scale-[1.02]'
               : 'border-[#22c55e]'
           }`}
           style={{
-            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.42)'
+            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.40)'
           }}
         >
           {/* Subtle animated scan glow at top and bottom */}
