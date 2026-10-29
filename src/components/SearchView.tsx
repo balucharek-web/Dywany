@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Carpet } from '../types';
 import { Search, Camera, FileText, MapPin, Tag, Barcode, Calendar, Copy, Check, Sparkles, HelpCircle } from 'lucide-react';
-import { PWAInstallButton } from './PWAInstallButton';
 
 interface SearchViewProps {
   carpets: Carpet[];
@@ -241,10 +240,6 @@ export function SearchView({
                 {sample}
               </button>
             ))}
-          </div>
-
-          <div className="mt-5 w-full">
-            <PWAInstallButton variant="card" />
           </div>
         </div>
       )}
