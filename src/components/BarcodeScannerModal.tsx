@@ -33,7 +33,7 @@ function playBeep() {
 }
 
 /**
- * Validates EAN-13 checksum algorithm (standard for all European/Polish retail barcodes)
+ * EAN-13 Checksum verification
  */
 function isValidEAN13Checksum(ean: string): boolean {
   if (!/^\d{13}$/.test(ean)) return false;
@@ -69,18 +69,17 @@ function pickBestProductBarcode(barcodes: any[]): string | null {
     const isNumeric = /^\d{7,14}$/.test(raw);
 
     // 4. Is it likely an ESL hardware serial/tag ID?
-    // Electronic shelf label tag IDs usually have letters, hyphens, or non-standard lengths
     const hasLetters = /[a-zA-Z]/.test(raw);
 
     // Scoring system prioritizing genuine product barcodes:
     let score = 0;
-    if (hasValidChecksum) score += 300; // Perfect EAN-13 checksum -> guaranteed product code
-    else if (isLMStandard) score += 250; // Standard LM or Polish EAN prefix
-    else if (isEAN13) score += 200; // 13-digit code
-    else if (is8DigitRef) score += 180; // 8-digit REF (standard on LM labels)
+    if (hasValidChecksum) score += 300;
+    else if (isLMStandard) score += 250;
+    else if (isEAN13) score += 200;
+    else if (is8DigitRef) score += 180;
     else if (isNumeric) score += 100;
 
-    if (hasLetters) score -= 200; // Penalize hardware tag serials
+    if (hasLetters) score -= 200;
 
     return { raw, score, isNumeric };
   });
@@ -100,6 +99,9 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [torchOn, setTorchOn] = useState(false);
   const [hasTorch, setHasTorch] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(2.0);
+  const [hasZoom, setHasZoom] = useState(false);
+  const [maxZoom, setMaxZoom] = useState(3.0);
   const [isScanningFile, setIsScanningFile] = useState(false);
   const [scannedFeedback, setScannedFeedback] = useState<string | null>(null);
   const [tapRipple, setTapRipple] = useState<{ x: number; y: number } | null>(null);
@@ -133,7 +135,7 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
     setTimeout(() => {
       onScanSuccess(code.trim());
       onClose();
-    }, 200);
+    }, 180);
   };
 
   useEffect(() => {
@@ -145,6 +147,8 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
     setCameraError(null);
     setTorchOn(false);
     setHasTorch(false);
+    setHasZoom(false);
+    setZoomLevel(2.0);
 
     const initScanner = async () => {
       // 1. PRIMARY ENGINE: Native Android Google BarcodeDetector (Full frame 360°, Any angle, Anywhere in frame, 60 FPS)
@@ -159,7 +163,7 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
             formats: targetFormats.length > 0 ? targetFormats : supportedFormats
           });
 
-          // Request high resolution camera with continuous autofocus and autoexposure
+          // Request high resolution camera with continuous autofocus
           const stream = await navigator.mediaDevices.getUserMedia({
             video: {
               facingMode: { ideal: 'environment' },
@@ -176,12 +180,26 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
 
           streamRef.current = stream;
 
-          // Check torch capability
+          // Check track capabilities (zoom, torch)
           const track = stream.getVideoTracks()[0];
           if (track) {
             const capabilities = (track.getCapabilities ? track.getCapabilities() : {}) as any;
             if (capabilities.torch) {
               setHasTorch(true);
+            }
+            if (capabilities.zoom) {
+              setHasZoom(true);
+              const maxZ = Math.min(capabilities.zoom.max || 3.0, 3.0);
+              const defaultZ = Math.min(2.0, maxZ);
+              setMaxZoom(maxZ);
+              setZoomLevel(defaultZ);
+
+              // Automatically apply 2.0x zoom so ESL label fills the frame and small e-ink barcode is 3x larger on sensor
+              try {
+                await (track as any).applyConstraints({
+                  advanced: [{ zoom: defaultZ }]
+                });
+              } catch (_) {}
             }
           }
 
@@ -189,7 +207,7 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
             videoRef.current.srcObject = stream;
             await videoRef.current.play();
 
-            // Offscreen canvas for dark/low-light boost pass
+            // Prepare 1:1 full-resolution canvas for contrast boost (zero downscaling)
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d', { willReadFrequently: true });
             canvasRef.current = canvas;
@@ -202,7 +220,7 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
               if (videoRef.current && videoRef.current.readyState >= 2) {
                 frameCount++;
                 try {
-                  // PASS 1: Scan ENTIRE frame directly (detects anywhere: corner, edge, center, rotated)
+                  // PASS 1: Native full-screen hardware detection on raw video
                   const rawResults = await detector.detect(videoRef.current);
                   if (rawResults && rawResults.length > 0) {
                     const bestCode = pickBestProductBarcode(rawResults);
@@ -212,20 +230,18 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
                     }
                   }
 
-                  // PASS 2 (every 2nd frame): Full-frame Super Contrast Boost for e-paper and dim aisles
+                  // PASS 2 (every 2nd frame): 1:1 Full-Resolution Contrast Boost for e-paper labels
+                  // NOTE: Zero downscaling ensures thin 1-pixel barcode bars are never blurred
                   if (frameCount % 2 === 0 && ctx) {
                     const vw = videoRef.current.videoWidth;
                     const vh = videoRef.current.videoHeight;
                     if (vw > 0 && vh > 0) {
-                      // Process entire frame so barcodes in corners/edges get full contrast boost
-                      const sw = Math.min(vw, 1280);
-                      const sh = Math.min(vh, 720);
-                      canvas.width = sw;
-                      canvas.height = sh;
+                      canvas.width = vw;
+                      canvas.height = vh;
 
-                      // Strong contrast boost turns grey e-ink to white and lines to pure black
-                      ctx.filter = 'contrast(2.5) brightness(1.2) grayscale(1)';
-                      ctx.drawImage(videoRef.current, 0, 0, sw, sh);
+                      // Strong contrast boost: turns grey e-paper background to pure white and barcode lines to pure black
+                      ctx.filter = 'contrast(2.2) brightness(1.15) grayscale(1)';
+                      ctx.drawImage(videoRef.current, 0, 0);
 
                       const enhancedResults = await detector.detect(canvas);
                       if (enhancedResults && enhancedResults.length > 0) {
@@ -271,7 +287,6 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
 
         html5QrCodeRef.current = html5QrCode;
 
-        // Start without restrictive qrbox so it scans the ENTIRE view from edge to edge!
         await html5QrCode.start(
           { facingMode: 'environment' },
           {
@@ -292,6 +307,10 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
         try {
           const trackCaps = (html5QrCode as any).getRunningTrackCapabilities?.() || {};
           if (trackCaps.torch) setHasTorch(true);
+          if (trackCaps.zoom) {
+            setHasZoom(true);
+            setMaxZoom(Math.min(trackCaps.zoom.max || 3.0, 3.0));
+          }
         } catch (_) {}
       } catch (err: unknown) {
         if (!isMounted) return;
@@ -357,6 +376,35 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
     }
   };
 
+  // Cycle Zoom (1.0x -> 2.0x -> 2.5x)
+  const cycleZoom = async () => {
+    let nextZ = 1.0;
+    if (zoomLevel <= 1.2) nextZ = Math.min(2.0, maxZoom);
+    else if (zoomLevel <= 2.1) nextZ = Math.min(2.5, maxZoom);
+    else nextZ = 1.0;
+
+    try {
+      if (streamRef.current) {
+        const track = streamRef.current.getVideoTracks()[0];
+        if (track && (track as any).applyConstraints) {
+          await (track as any).applyConstraints({
+            advanced: [{ zoom: nextZ }]
+          });
+          setZoomLevel(nextZ);
+          return;
+        }
+      }
+      if (html5QrCodeRef.current) {
+        await (html5QrCodeRef.current as any).applyVideoConstraints({
+          advanced: [{ zoom: nextZ }]
+        });
+        setZoomLevel(nextZ);
+      }
+    } catch (e) {
+      console.warn('Zoom change failed:', e);
+    }
+  };
+
   // Tap-to-focus on screen
   const handleScreenTap = async (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -398,7 +446,7 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
           canvas.height = bitmap.height;
           const ctx = canvas.getContext('2d');
           if (ctx) {
-            ctx.filter = 'contrast(2.5) brightness(1.2) grayscale(1)';
+            ctx.filter = 'contrast(2.2) brightness(1.15) grayscale(1)';
             ctx.drawImage(bitmap, 0, 0);
           }
 
@@ -480,27 +528,41 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
         />
       )}
 
-      {/* Top Bar with circular Close (X) button matching user's original screenshot */}
+      {/* Top Bar with circular Close (X) and Torch / Zoom buttons */}
       <div className="relative z-30 flex items-center justify-between p-4 pt-6 sm:p-6 w-full">
-        {/* Flashlight button */}
-        {hasTorch ? (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleTorch();
-            }}
-            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
-              torchOn
-                ? 'bg-amber-400 text-gray-950 shadow-xl shadow-amber-400/50 scale-105'
-                : 'bg-black/60 text-white hover:bg-black/80 backdrop-blur-xs'
-            }`}
-            title="Latarka (do słabego oświetlenia)"
-          >
-            <Flashlight className="w-5 h-5" />
-          </button>
-        ) : (
-          <div className="w-12" />
-        )}
+        <div className="flex items-center gap-2">
+          {/* Flashlight button */}
+          {hasTorch && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleTorch();
+              }}
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
+                torchOn
+                  ? 'bg-amber-400 text-gray-950 shadow-xl shadow-amber-400/50 scale-105'
+                  : 'bg-black/60 text-white hover:bg-black/80 backdrop-blur-xs'
+              }`}
+              title="Latarka (do słabego oświetlenia)"
+            >
+              <Flashlight className="w-5 h-5" />
+            </button>
+          )}
+
+          {/* Zoom toggle button (1x / 2x / 2.5x) */}
+          {hasZoom && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                cycleZoom();
+              }}
+              className="w-12 h-12 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs text-xs font-black shadow-lg"
+              title="Przełącz zoom"
+            >
+              {zoomLevel.toFixed(1)}×
+            </button>
+          )}
+        </div>
 
         {/* Circular Close Button (X) top right */}
         <button
@@ -515,11 +577,11 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
         </button>
       </div>
 
-      {/* Central Viewfinder Box: ENLARGED to maximum comfortable size */}
+      {/* Central Viewfinder Box matching Screenshot */}
       <div className="relative z-10 flex-1 flex flex-col items-center justify-center pointer-events-none p-2 sm:p-4">
-        {/* Giant rounded frame (w-[94vw] max-w-[440px] h-[360px] sm:h-[420px]) */}
+        {/* Generous rounded frame that covers the entire ESL label comfortably */}
         <div
-          className={`relative w-[94vw] max-w-[440px] h-[360px] sm:h-[420px] rounded-[40px] border-[4px] transition-all flex items-center justify-center ${
+          className={`relative w-[92vw] max-w-[420px] h-[340px] sm:h-[380px] rounded-[36px] border-[3.5px] transition-all flex items-center justify-center ${
             scannedFeedback
               ? 'border-emerald-400 bg-emerald-500/25 scale-[1.02]'
               : 'border-[#22c55e]'
@@ -542,7 +604,7 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
         </div>
       </div>
 
-      {/* Bottom Area with "Skan z zdjęcia" Blue Button matching Screenshot 6 */}
+      {/* Bottom Area with "Skan z zdjęcia" Blue Button */}
       <div className="relative z-30 w-full pb-8 sm:pb-10 pt-4 flex flex-col items-center justify-center gap-3">
         {cameraError && (
           <div className="mx-4 max-w-sm px-4 py-2 bg-black/80 backdrop-blur-md border border-amber-500/50 rounded-xl text-amber-300 text-xs text-center flex items-center gap-2">
