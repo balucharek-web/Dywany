@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Carpet } from '../types';
 import { Search, Camera, FileText, MapPin, Tag, Barcode, Calendar, Copy, Check, Sparkles, HelpCircle } from 'lucide-react';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface SearchViewProps {
   carpets: Carpet[];
@@ -240,6 +241,13 @@ export function SearchView({
                 {sample}
               </button>
             ))}
+          </div>
+
+          <div className="mt-5 pt-4 border-t border-gray-100 w-full flex flex-col items-center">
+            <span className="text-[11px] font-semibold text-gray-500 mb-2">
+              Chcesz mieć szybki dostęp ze skrótu na telefonie?
+            </span>
+            <PWAInstallButton />
           </div>
         </div>
       )}
