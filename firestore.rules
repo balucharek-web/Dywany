@@ -31,6 +31,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Health / connection test rule
+    match /test/connection {
+      allow read: if true;
+    }
+
     // Carpets collection: Anyone can read (search does not require login)
     // Only verified store admins can modify carpets
     match /carpets/{carpetId} {
