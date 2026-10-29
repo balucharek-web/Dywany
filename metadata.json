@@ -1,0 +1,6 @@
+{
+  "name": "LM Dywany 038 - System Ekspozycji Sklep Mikołów",
+  "description": "System ekspozycji dywanów dla Leroy Merlin Sklep 038 Mikołów. Wyszukiwanie, lokalizacje regałów, generowanie fiszek i zarządzanie magazynem z synchronizacją w czasie rzeczywistym.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

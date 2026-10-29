@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "Carpet": {
+      "title": "Carpet",
+      "description": "A carpet or rug allocated in the store warehouse/exhibition slot",
+      "type": "object",
+      "properties": {
+        "magazyn": {
+          "type": "number",
+          "description": "Warehouse rack/bay number, e.g. 1, 2, 3..."
+        },
+        "podmagazyn": {
+          "type": "string",
+          "description": "Sub-bay identifier, typically 'A' or 'B'",
+          "maxLength": 10
+        },
+        "nazwa": {
+          "type": "string",
+          "description": "Product display name and dimensions",
+          "maxLength": 300
+        },
+        "ref": {
+          "type": "string",
+          "description": "Leroy Merlin reference number (ref LM)",
+          "maxLength": 50
+        },
+        "ean": {
+          "type": "string",
+          "description": "EAN barcode number",
+          "maxLength": 50
+        },
+        "miejsce": {
+          "type": "string",
+          "description": "Slot location label, e.g. '1 A'",
+          "maxLength": 50
+        },
+        "dodano": {
+          "type": "string",
+          "description": "Date added or formatted date string",
+          "maxLength": 50
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last update timestamp"
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "Email or ID of user who modified"
+        }
+      },
+      "required": ["magazyn", "podmagazyn", "miejsce"]
+    },
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Authorized administrator email for Sklep 038",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "Email address of the authorized admin",
+          "maxLength": 150
+        },
+        "role": {
+          "type": "string",
+          "description": "Admin role: superadmin or admin",
+          "enum": ["superadmin", "admin"]
+        },
+        "addedBy": {
+          "type": "string",
+          "description": "Email who granted admin rights",
+          "maxLength": 150
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp"
+        }
+      },
+      "required": ["email", "role"]
+    }
+  },
+  "firestore": {
+    "/carpets/{carpetId}": {
+      "schema": "Carpet",
+      "description": "Carpet products exhibited and stored in Sklep 038"
+    },
+    "/admins/{adminId}": {
+      "schema": "AdminUser",
+      "description": "Authorized admin users for managing Sklep 038"
+    }
+  }
+}

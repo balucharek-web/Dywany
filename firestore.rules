@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() &&
+        request.auth.token.email != null &&
+        request.auth.token.email.lower() == 'baluch.arek@gmail.com' &&
+        request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isSuperAdmin() || (
+        isSignedIn() &&
+        request.auth.token.email != null &&
+        request.auth.token.email_verified == true &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.token.email.lower()))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128;
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Carpets collection: Anyone can read (search does not require login)
+    // Only verified store admins can modify carpets
+    match /carpets/{carpetId} {
+      allow read: if true;
+      allow write: if isValidId(carpetId) && isAdmin();
+    }
+
+    // Admins collection: Anyone signed in can read admin list to check role
+    // Only superadmin can create, update, or remove admins
+    match /admins/{adminEmail} {
+      allow read: if isSignedIn();
+      allow write: if isValidId(adminEmail) && isSuperAdmin();
+    }
+  }
+}
