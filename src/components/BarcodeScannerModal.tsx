@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { X, Camera, AlertCircle, Search, Keyboard } from 'lucide-react';
+import { X, Flashlight, AlertCircle, RefreshCw } from 'lucide-react';
 
 interface BarcodeScannerModalProps {
   isOpen: boolean;
@@ -10,18 +10,24 @@ interface BarcodeScannerModalProps {
 
 export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeScannerModalProps) {
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [manualCode, setManualCode] = useState('');
+  const [torchOn, setTorchOn] = useState(false);
+  const [hasTorch, setHasTorch] = useState(false);
+  const [isScanningFile, setIsScanningFile] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
-  const containerId = 'interactive-barcode-reader';
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const containerId = 'esl-barcode-full-scanner';
 
   useEffect(() => {
     if (!isOpen) return;
 
     let isMounted = true;
     setCameraError(null);
+    setTorchOn(false);
+    setHasTorch(false);
 
     const startScanner = async () => {
       try {
+        // Supported formats covering standard retail EAN, ESL (Pricer, SES-imagotag), and Code 128/39/2D
         const html5QrCode = new Html5Qrcode(containerId, {
           formatsToSupport: [
             Html5QrcodeSupportedFormats.EAN_13,
@@ -29,43 +35,67 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
             Html5QrcodeSupportedFormats.CODE_128,
             Html5QrcodeSupportedFormats.CODE_39,
             Html5QrcodeSupportedFormats.UPC_A,
-            Html5QrcodeSupportedFormats.UPC_E
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.DATA_MATRIX,
+            Html5QrcodeSupportedFormats.QR_CODE,
+            Html5QrcodeSupportedFormats.ITF
           ],
           verbose: false
         });
 
         scannerRef.current = html5QrCode;
 
+        // Start camera stream optimized for ESL labels (high resolution, autofocus)
         await html5QrCode.start(
-          { facingMode: 'environment' },
           {
-            fps: 10,
-            qrbox: { width: 280, height: 160 },
-            aspectRatio: 1.333
+            facingMode: 'environment'
+          },
+          {
+            fps: 15,
+            qrbox: (viewfinderWidth, viewfinderHeight) => {
+              const minDim = Math.min(viewfinderWidth, viewfinderHeight);
+              const boxDim = Math.max(220, Math.min(320, Math.floor(minDim * 0.72)));
+              return { width: boxDim, height: boxDim };
+            },
+            aspectRatio: window.innerHeight / window.innerWidth
           },
           (decodedText) => {
             if (isMounted) {
+              // Haptic feedback if supported
+              if (navigator.vibrate) {
+                try {
+                  navigator.vibrate(80);
+                } catch (_) {}
+              }
               onScanSuccess(decodedText.trim());
               onClose();
             }
           },
           () => {
-            // scan frame error ignored
+            // frame decode miss (silent)
           }
         );
+
+        // Check if flashlight / torch capability is available on device stream
+        try {
+          const streamTracks = (html5QrCode as any).getRunningTrackCapabilities?.() || [];
+          if (streamTracks && streamTracks.torch) {
+            setHasTorch(true);
+          }
+        } catch (_) {}
       } catch (err: unknown) {
         if (!isMounted) return;
         const errMsg = err instanceof Error ? err.message : String(err);
-        console.warn('Camera start error:', errMsg);
+        console.warn('Camera scanner error:', errMsg);
         setCameraError(
-          'Nie udało się uruchomić kamery (brak dostępu lub urządzenie nie posiada kamery). Możesz wpisać kod kreskowy ręcznie poniżej.'
+          'Nie udało się uruchomić aparatu (brak uprawnień lub urządzenie nie zezwala na dostęp). Możesz użyć opcji „Skan z zdjęcia” poniżej.'
         );
       }
     };
 
     const timer = setTimeout(() => {
       startScanner();
-    }, 200);
+    }, 150);
 
     return () => {
       isMounted = false;
@@ -75,7 +105,9 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
           .stop()
           .catch(() => {})
           .then(() => {
-            scannerRef.current?.clear();
+            try {
+              scannerRef.current?.clear();
+            } catch (_) {}
           });
       }
     };
@@ -83,81 +115,143 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
 
   if (!isOpen) return null;
 
-  const handleManualSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (manualCode.trim()) {
-      onScanSuccess(manualCode.trim());
+  // Toggle camera flashlight
+  const toggleTorch = async () => {
+    if (!scannerRef.current) return;
+    try {
+      const nextTorch = !torchOn;
+      await (scannerRef.current as any).applyVideoConstraints({
+        advanced: [{ torch: nextTorch }]
+      });
+      setTorchOn(nextTorch);
+    } catch (e) {
+      console.warn('Torch toggle not supported on this track:', e);
+    }
+  };
+
+  // Handle image file scanning
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsScanningFile(true);
+    setCameraError(null);
+
+    try {
+      let fileScanner = scannerRef.current;
+      if (!fileScanner) {
+        fileScanner = new Html5Qrcode('esl-file-scanner-temp');
+      }
+
+      // Try scanning the image with all supported barcode formats
+      const decodedText = await fileScanner.scanFile(file, true);
+      if (navigator.vibrate) {
+        try {
+          navigator.vibrate(80);
+        } catch (_) {}
+      }
+      onScanSuccess(decodedText.trim());
       onClose();
+    } catch (err) {
+      console.warn('Failed to decode barcode from image:', err);
+      setCameraError('Nie udało się odczytać kodu kreskowego z tego zdjęcia. Upewnij się, że kod jest ostry i dobrze oświetlony.');
+    } finally {
+      setIsScanningFile(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs">
-      <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-200 bg-gray-50">
-          <div className="flex items-center gap-2 font-bold text-gray-800 text-sm sm:text-base">
-            <Camera className="w-5 h-5 text-blue-600" />
-            Skaner kodów kreskowych EAN
-          </div>
+    <div className="fixed inset-0 z-50 bg-black flex flex-col justify-between overflow-hidden select-none">
+      {/* Hidden container for temp file scan */}
+      <div id="esl-file-scanner-temp" className="hidden" />
+
+      {/* Hidden file input for "Skan z zdjęcia" */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept="image/*"
+        className="hidden"
+      />
+
+      {/* Camera Video Viewport filling entire screen */}
+      <div className="absolute inset-0 z-0 bg-black overflow-hidden flex items-center justify-center">
+        <div id={containerId} className="w-full h-full object-cover"></div>
+      </div>
+
+      {/* Top Bar with circular Close (X) button matching Screenshot 6 */}
+      <div className="relative z-20 flex items-center justify-between p-4 pt-6 sm:p-6 w-full">
+        {/* Flashlight toggle if available */}
+        {hasTorch ? (
           <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-200 transition-colors"
+            onClick={toggleTorch}
+            className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${
+              torchOn
+                ? 'bg-amber-400 text-gray-950 shadow-lg shadow-amber-400/50'
+                : 'bg-black/60 text-white hover:bg-black/80 backdrop-blur-xs'
+            }`}
+            title="Włącz/wyłącz latarkę"
           >
-            <X className="w-5 h-5" />
+            <Flashlight className="w-5 h-5" />
           </button>
+        ) : (
+          <div className="w-11" />
+        )}
+
+        {/* Circular Close Button (X) top right */}
+        <button
+          onClick={onClose}
+          className="w-11 h-11 rounded-full bg-black/70 hover:bg-black text-white flex items-center justify-center shadow-lg backdrop-blur-xs transition-transform active:scale-95 cursor-pointer"
+          title="Zamknij skaner"
+        >
+          <X className="w-6 h-6 stroke-[2.5]" />
+        </button>
+      </div>
+
+      {/* Central ESL Green Viewfinder Box matching Screenshot 6 */}
+      <div className="relative z-10 flex-1 flex items-center justify-center pointer-events-none p-4">
+        {/* Viewfinder box with rounded corners and neon green border */}
+        <div
+          className="relative w-[78vw] max-w-[320px] aspect-square rounded-[32px] border-[3.5px] border-[#22c55e] transition-all"
+          style={{
+            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.42)'
+          }}
+        >
+          {/* Subtle animated scanline */}
+          <div className="absolute inset-x-2 top-0 h-1 bg-gradient-to-r from-transparent via-[#22c55e] to-transparent animate-pulse rounded-full" />
         </div>
+      </div>
 
-        {/* Camera viewport */}
-        <div className="p-4 flex flex-col items-center">
-          <div className="relative w-full aspect-4/3 bg-black rounded-xl overflow-hidden shadow-inner flex items-center justify-center">
-            <div id={containerId} className="w-full h-full"></div>
-
-            {cameraError && (
-              <div className="absolute inset-0 bg-gray-900/90 p-5 flex flex-col items-center justify-center text-center text-white">
-                <AlertCircle className="w-10 h-10 text-amber-400 mb-2" />
-                <p className="text-xs text-gray-300 max-w-xs">{cameraError}</p>
-              </div>
-            )}
+      {/* Bottom Area with "Skan z zdjęcia" Blue Button matching Screenshot 6 */}
+      <div className="relative z-20 w-full pb-8 sm:pb-10 pt-4 flex flex-col items-center justify-center gap-3">
+        {cameraError && (
+          <div className="mx-4 max-w-sm px-4 py-2 bg-black/80 backdrop-blur-md border border-amber-500/50 rounded-xl text-amber-300 text-xs text-center flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>{cameraError}</span>
           </div>
+        )}
 
-          <p className="text-[11px] text-gray-500 text-center mt-2">
-            Skieruj aparat na kod kreskowy dywanu (EAN-13 na etykiecie LM)
-          </p>
-
-          {/* Manual barcode input form */}
-          <div className="w-full mt-4 pt-3 border-t border-gray-200">
-            <form onSubmit={handleManualSubmit} className="flex gap-2">
-              <div className="relative flex-1">
-                <Keyboard className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Wpisz EAN ręcznie (np. 3276007888454)"
-                  value={manualCode}
-                  onChange={(e) => setManualCode(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                />
-              </div>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition-colors"
-              >
-                <Search className="w-3.5 h-3.5" />
-                Szukaj
-              </button>
-            </form>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="px-5 py-3 border-t border-gray-200 bg-gray-50 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-xs sm:text-sm font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-colors"
-          >
-            Anuluj
-          </button>
-        </div>
+        {/* Blue button matching Screenshot 6: [📸 Skan z zdjęcia] */}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isScanningFile}
+          className="py-2.5 px-6 rounded-2xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-sm shadow-xl flex items-center gap-2 active:scale-95 transition-all cursor-pointer"
+        >
+          {isScanningFile ? (
+            <>
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              <span>Odczytywanie zdjęcia...</span>
+            </>
+          ) : (
+            <>
+              <span className="text-base">📸</span>
+              <span>Skan z zdjęcia</span>
+            </>
+          )}
+        </button>
       </div>
     </div>
   );
