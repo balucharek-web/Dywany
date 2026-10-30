@@ -153,8 +153,6 @@ export function EditCarpetModal({
               >
                 <option value="A">Podmagazyn A</option>
                 <option value="B">Podmagazyn B</option>
-                <option value="C">Podmagazyn C</option>
-                <option value="D">Podmagazyn D</option>
               </select>
             </div>
 

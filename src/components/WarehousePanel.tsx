@@ -446,33 +446,23 @@ export function WarehousePanel({
                   )}
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  {isSuperAdmin && (
-                    <button
-                      onClick={() =>
-                        setDeletingBayModal({
-                          bayNum,
-                          carpetsInBay: carpetsByBay.get(bayNum) || []
-                        })
-                      }
-                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
-                      title={`Usuń Magazyn ${bayNum} (tylko Super Admin)`}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-
+                {isSuperAdmin && (
                   <button
-                    onClick={() => onAddProduct(bayNum)}
-                    className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-xs sm:text-sm shadow-xs transition-transform active:scale-95 cursor-pointer"
+                    onClick={() =>
+                      setDeletingBayModal({
+                        bayNum,
+                        carpetsInBay: carpetsByBay.get(bayNum) || []
+                      })
+                    }
+                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                    title={`Usuń Magazyn ${bayNum} (tylko Super Admin)`}
                   >
-                    <Plus className="w-4 h-4" />
-                    Dodaj produkt
+                    <Trash2 className="w-4 h-4" />
                   </button>
-                </div>
+                )}
               </div>
 
-              {/* Sub-bay slots */}
+              {/* Sub-bay slots: strictly 2 places per bay - Podmagazyn A and Podmagazyn B */}
               <div className="flex flex-col gap-3">
                 {/* Podmagazyn A */}
                 {carpetA ? (
@@ -509,17 +499,6 @@ export function WarehousePanel({
                     onAdd={() => onAddProduct(bayNum, 'B')}
                   />
                 )}
-
-                {/* Any extra custom sub-bays if present */}
-                {otherCarpets.map((carpet) => (
-                  <SlotCard
-                    key={carpet.id}
-                    carpet={carpet}
-                    onEdit={() => onEditProduct(carpet)}
-                    onDelete={() => onDeleteProduct(carpet.id, carpet.nazwa)}
-                    onGenerateFiszka={() => onGenerateFiszka(carpet)}
-                  />
-                ))}
               </div>
             </div>
           );
@@ -776,17 +755,21 @@ function EmptySlotCard({
   onAdd: () => void;
 }) {
   return (
-    <div className="border border-dashed border-gray-200 bg-gray-50/40 rounded-xl p-3 flex items-center justify-between gap-2 text-xs">
-      <div>
-        <span className="font-bold text-gray-600">Podmagazyn {subBay}</span>
-        <span className="text-gray-400 ml-2 italic">Wolne miejsce ({bay} {subBay})</span>
+    <div className="border border-dashed border-gray-300 bg-white hover:bg-blue-50/20 rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-3 text-xs sm:text-sm transition-colors">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="font-extrabold text-xs text-gray-700 bg-gray-100 px-2.5 py-1 rounded-md border border-gray-200">
+          Podmagazyn {subBay}
+        </span>
+        <span className="text-gray-400 italic text-xs">
+          Wolne miejsce ({bay} {subBay})
+        </span>
       </div>
       <button
         onClick={onAdd}
-        className="flex items-center gap-1 px-3 py-1 rounded-md text-blue-600 hover:bg-blue-50 font-bold transition-colors cursor-pointer"
+        className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-xs sm:text-sm shadow-xs transition-transform active:scale-95 cursor-pointer shrink-0"
       >
         <Plus className="w-3.5 h-3.5" />
-        Przypisz dywan
+        <span>Przypisz dywan</span>
       </button>
     </div>
   );
