@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   collection,
   onSnapshot,
@@ -14,7 +14,7 @@ import {
   User
 } from 'firebase/auth';
 import { db, auth, googleProvider, handleFirestoreError, OperationType } from './firebase';
-import { Carpet, AdminUser, SUPER_ADMIN_EMAIL, STORE_NUMBER, STORE_CITY } from './types';
+import { Carpet, AdminUser, Warehouse, SUPER_ADMIN_EMAIL, STORE_NUMBER, STORE_CITY } from './types';
 import { initialCarpets } from './data/seedData';
 import { Header } from './components/Header';
 import { SearchView } from './components/SearchView';
@@ -34,6 +34,8 @@ export default function App() {
   const [currentView, setCurrentView] = useState<'search' | 'warehouse'>('search');
   const [carpets, setCarpets] = useState<Carpet[]>([]);
   const [admins, setAdmins] = useState<AdminUser[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [superAdminTab, setSuperAdminTab] = useState<'admins' | 'warehouses'>('admins');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -130,6 +132,50 @@ export default function App() {
 
     return () => unsubscribeAdmins();
   }, [currentUser]);
+
+  // Real-time synchronization of Warehouses from Firestore
+  useEffect(() => {
+    const unsubscribeWarehouses = onSnapshot(
+      collection(db, 'warehouses'),
+      (snapshot) => {
+        const loaded: Warehouse[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          loaded.push({
+            id: docSnap.id,
+            number: Number(data.number) || Number(docSnap.id),
+            name: data.name || '',
+            createdAt: data.createdAt,
+            createdBy: data.createdBy
+          });
+        });
+        loaded.sort((a, b) => a.number - b.number);
+        setWarehouses(loaded);
+      },
+      (error) => {
+        console.warn('Warehouses collection snapshot notice:', error.message);
+      }
+    );
+
+    return () => unsubscribeWarehouses();
+  }, []);
+
+  // Compute active warehouse bays (from Firestore, fallback to 1..120 default + carpets)
+  const activeBays = useMemo(() => {
+    if (warehouses.length > 0) {
+      return warehouses.map((w) => w.number);
+    }
+    const defaultList: number[] = [];
+    for (let i = 1; i <= 120; i++) {
+      defaultList.push(i);
+    }
+    carpets.forEach((c) => {
+      if (c.magazyn && !defaultList.includes(c.magazyn)) {
+        defaultList.push(c.magazyn);
+      }
+    });
+    return defaultList.sort((a, b) => a - b);
+  }, [warehouses, carpets]);
 
   // Authorization checks
   const isSuperAdmin = Boolean(
@@ -279,6 +325,99 @@ export default function App() {
     }
   };
 
+  // Super Admin: Add Warehouses
+  const handleAddWarehouses = async (numbers: number[]) => {
+    if (!isSuperAdmin) {
+      throw new Error('Tylko Super Admin może dodawać magazyny.');
+    }
+
+    try {
+      const batch = writeBatch(db);
+
+      // If warehouses collection is currently empty, seed all current activeBays first
+      if (warehouses.length === 0) {
+        activeBays.forEach((b) => {
+          batch.set(doc(db, 'warehouses', String(b)), {
+            number: b,
+            createdAt: new Date().toISOString().split('T')[0],
+            createdBy: currentUser?.email || SUPER_ADMIN_EMAIL
+          });
+        });
+      }
+
+      numbers.forEach((num) => {
+        batch.set(doc(db, 'warehouses', String(num)), {
+          number: num,
+          createdAt: new Date().toISOString().split('T')[0],
+          createdBy: currentUser?.email || SUPER_ADMIN_EMAIL
+        });
+      });
+
+      await batch.commit();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'warehouses');
+    }
+  };
+
+  // Super Admin: Delete Warehouse
+  const handleDeleteWarehouse = async (bayNumber: number, deleteCarpets: boolean) => {
+    if (!isSuperAdmin) {
+      throw new Error('Tylko Super Admin może usuwać magazyny.');
+    }
+
+    try {
+      const batch = writeBatch(db);
+
+      if (warehouses.length === 0) {
+        // First initialize all current activeBays EXCEPT bayNumber
+        activeBays
+          .filter((b) => b !== bayNumber)
+          .forEach((b) => {
+            batch.set(doc(db, 'warehouses', String(b)), {
+              number: b,
+              createdAt: new Date().toISOString().split('T')[0],
+              createdBy: currentUser?.email || SUPER_ADMIN_EMAIL
+            });
+          });
+      } else {
+        batch.delete(doc(db, 'warehouses', String(bayNumber)));
+      }
+
+      // If deleteCarpets, remove any carpets in this bay
+      if (deleteCarpets) {
+        const toDelete = carpets.filter((c) => c.magazyn === bayNumber);
+        toDelete.forEach((c) => {
+          batch.delete(doc(db, 'carpets', c.id));
+        });
+      }
+
+      await batch.commit();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `warehouses/${bayNumber}`);
+    }
+  };
+
+  // Super Admin: Initialize default 1-120 in Firestore
+  const handleInitializeWarehouses = async (count: number = 120) => {
+    if (!isSuperAdmin) {
+      throw new Error('Tylko Super Admin może inicjalizować magazyny.');
+    }
+
+    try {
+      const batch = writeBatch(db);
+      for (let i = 1; i <= count; i++) {
+        batch.set(doc(db, 'warehouses', String(i)), {
+          number: i,
+          createdAt: new Date().toISOString().split('T')[0],
+          createdBy: currentUser?.email || SUPER_ADMIN_EMAIL
+        });
+      }
+      await batch.commit();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'warehouses/init');
+    }
+  };
+
   // Scanner callback
   const handleScanSuccess = (decodedText: string) => {
     setSearchQuery(decodedText);
@@ -384,6 +523,7 @@ export default function App() {
         ) : (
           <WarehousePanel
             carpets={carpets}
+            activeBays={activeBays}
             onAddProduct={(bay, subBay) => handleOpenAdd(bay, subBay)}
             onEditProduct={handleOpenEdit}
             onDeleteProduct={handleDeleteCarpet}
@@ -393,7 +533,12 @@ export default function App() {
             onLogout={handleLogout}
             onGenerateFiszka={(c) => handleOpenFiszkiBatch(c)}
             isSuperAdmin={isSuperAdmin}
-            onOpenSuperAdminModal={() => setIsAdminManagementOpen(true)}
+            onOpenSuperAdminModal={(tab) => {
+              setSuperAdminTab(tab || 'admins');
+              setIsAdminManagementOpen(true);
+            }}
+            onDeleteWarehouse={handleDeleteWarehouse}
+            onAddWarehouses={handleAddWarehouses}
           />
         )}
       </main>
@@ -426,6 +571,7 @@ export default function App() {
 
       <StockExpoModal
         carpets={carpets}
+        activeBays={activeBays}
         isOpen={isStockExpoOpen}
         onClose={() => setIsStockExpoOpen(false)}
         onSelectSlot={(bay, sub) => {
@@ -448,7 +594,7 @@ export default function App() {
         }}
         carpetToEdit={carpetToEdit}
         onSave={handleSaveCarpet}
-        existingMagazyny={Array.from(new Set(carpets.map((c) => c.magazyn)))}
+        existingMagazyny={activeBays}
       />
 
       <AdminManagementModal
@@ -458,6 +604,12 @@ export default function App() {
         onAddAdmin={handleAddAdminEmail}
         onRemoveAdmin={handleRemoveAdminEmail}
         currentSuperAdminEmail={SUPER_ADMIN_EMAIL}
+        activeBays={activeBays}
+        carpets={carpets}
+        onAddWarehouses={handleAddWarehouses}
+        onDeleteWarehouse={handleDeleteWarehouse}
+        onInitializeWarehouses={handleInitializeWarehouses}
+        initialTab={superAdminTab}
       />
 
       <HelpModal

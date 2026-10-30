@@ -6,19 +6,24 @@ interface StockExpoModalProps {
   isOpen: boolean;
   carpets: Carpet[];
   totalBays?: number;
+  activeBays?: number[];
   onClose: () => void;
   onSelectSlot?: (magazyn: number, podmagazyn: string) => void;
 }
 
-export function StockExpoModal({ isOpen, carpets, totalBays = 40, onClose, onSelectSlot }: StockExpoModalProps) {
+export function StockExpoModal({ isOpen, carpets, totalBays = 120, activeBays, onClose, onSelectSlot }: StockExpoModalProps) {
   if (!isOpen) return null;
   // Compute analytics
   const stats = useMemo(() => {
-    // Standard store 038 has bays 1..40, with sub-bays A and B
-    const totalSlots = totalBays * 2;
+    // If explicit activeBays provided, use them; otherwise range 1..totalBays
+    const baysToCount = activeBays && activeBays.length > 0
+      ? activeBays
+      : Array.from({ length: totalBays }, (_, i) => i + 1);
+
+    const totalSlots = baysToCount.length * 2;
     const occupiedCount = carpets.length;
     const emptyCount = Math.max(0, totalSlots - occupiedCount);
-    const occupancyPercentage = Math.round((occupiedCount / totalSlots) * 100);
+    const occupancyPercentage = totalSlots > 0 ? Math.round((occupiedCount / totalSlots) * 100) : 0;
 
     // Find duplicates by EAN or Ref
     const eanMap = new Map<string, Carpet[]>();
@@ -36,13 +41,13 @@ export function StockExpoModal({ isOpen, carpets, totalBays = 40, onClose, onSel
     const occupiedSet = new Set(carpets.map((c) => `${c.magazyn}_${c.podmagazyn.toUpperCase()}`));
     const emptySlots: { magazyn: number; podmagazyn: string; label: string }[] = [];
 
-    for (let m = 1; m <= totalBays; m++) {
+    baysToCount.forEach((m) => {
       ['A', 'B'].forEach((sub) => {
         if (!occupiedSet.has(`${m}_${sub}`)) {
           emptySlots.push({ magazyn: m, podmagazyn: sub, label: `${m} ${sub}` });
         }
       });
-    }
+    });
 
     return {
       totalSlots,

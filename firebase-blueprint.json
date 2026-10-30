@@ -76,6 +76,31 @@
         }
       },
       "required": ["email", "role"]
+    },
+    "Warehouse": {
+      "title": "Warehouse",
+      "description": "Store warehouse bay / rack number for Sklep 038",
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "number",
+          "description": "Warehouse rack number, e.g. 15, 120"
+        },
+        "name": {
+          "type": "string",
+          "description": "Optional custom name or description",
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp"
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "Creator email"
+        }
+      },
+      "required": ["number"]
     }
   },
   "firestore": {
@@ -86,6 +111,10 @@
     "/admins/{adminId}": {
       "schema": "AdminUser",
       "description": "Authorized admin users for managing Sklep 038"
+    },
+    "/warehouses/{warehouseId}": {
+      "schema": "Warehouse",
+      "description": "Configured warehouse bays in Sklep 038"
     }
   }
 }

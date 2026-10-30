@@ -49,5 +49,12 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isValidId(adminEmail) && isSuperAdmin();
     }
+
+    // Warehouses collection: Anyone can read configured bays
+    // Only superadmin can add or remove warehouses
+    match /warehouses/{warehouseId} {
+      allow read: if true;
+      allow write: if isValidId(warehouseId) && isSuperAdmin();
+    }
   }
 }

@@ -18,6 +18,14 @@ export interface AdminUser {
   createdAt: string;
 }
 
+export interface Warehouse {
+  id: string; // e.g. "15" or doc id
+  number: number;
+  name?: string;
+  createdAt?: string;
+  createdBy?: string;
+}
+
 export const SUPER_ADMIN_EMAIL = 'baluch.arek@gmail.com';
 export const STORE_NUMBER = '038';
 export const STORE_CITY = 'MIKOŁÓW';
