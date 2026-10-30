@@ -73,9 +73,8 @@ export async function testConnection() {
   try {
     await getDoc(doc(db, 'test', 'connection'));
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firestore is operating in offline cache mode.');
-    }
+    // Non-blocking offline or initial connection warning
+    console.warn('Firestore initial connection status:', error instanceof Error ? error.message : error);
   }
 }
-testConnection();
+testConnection().catch(() => {});
