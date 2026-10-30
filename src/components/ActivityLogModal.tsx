@@ -5,14 +5,10 @@ import {
   History,
   X,
   Search,
-  Filter,
   Download,
   PlusCircle,
   Pencil,
   Trash2,
-  FileSpreadsheet,
-  Warehouse,
-  ShieldCheck,
   User,
   Clock,
   ArrowUpDown
@@ -27,37 +23,31 @@ interface ActivityLogModalProps {
 
 export function ActivityLogModal({ isOpen, onClose, logs }: ActivityLogModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedAction, setSelectedAction] = useState<string>('all');
+  const [selectedAction, setSelectedAction] = useState<'all' | 'add' | 'edit' | 'delete'>('all');
   const [selectedUser, setSelectedUser] = useState<string>('all');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
 
-  // Unique users who made changes
+  // Only consider carpet management operations: who added, who edited, who removed
+  const carpetLogs = useMemo(() => {
+    return logs.filter((log) => ['add', 'edit', 'delete'].includes(log.action));
+  }, [logs]);
+
+  // Unique users who performed these actions
   const uniqueUsers = useMemo(() => {
     const set = new Set<string>();
-    logs.forEach((log) => {
+    carpetLogs.forEach((log) => {
       if (log.userEmail) set.add(log.userEmail);
     });
     return Array.from(set).sort();
-  }, [logs]);
+  }, [carpetLogs]);
 
   // Filtered and sorted logs
   const filteredLogs = useMemo(() => {
-    return logs
+    return carpetLogs
       .filter((log) => {
-        // Action filter
-        if (selectedAction !== 'all') {
-          if (selectedAction === 'carpets' && !['add', 'edit', 'delete'].includes(log.action)) {
-            return false;
-          }
-          if (selectedAction === 'warehouses' && !['add_warehouse', 'delete_warehouse'].includes(log.action)) {
-            return false;
-          }
-          if (selectedAction === 'admins' && !['add_admin', 'remove_admin'].includes(log.action)) {
-            return false;
-          }
-          if (['add', 'edit', 'delete', 'import'].includes(selectedAction) && log.action !== selectedAction) {
-            return false;
-          }
+        // Action filter: all, add, edit, delete
+        if (selectedAction !== 'all' && log.action !== selectedAction) {
+          return false;
         }
 
         // User filter
@@ -84,7 +74,7 @@ export function ActivityLogModal({ isOpen, onClose, logs }: ActivityLogModalProp
         const timeB = new Date(b.timestamp).getTime();
         return sortOrder === 'desc' ? timeB - timeA : timeA - timeB;
       });
-  }, [logs, selectedAction, selectedUser, searchQuery, sortOrder]);
+  }, [carpetLogs, selectedAction, selectedUser, searchQuery, sortOrder]);
 
   // Export audit log to Excel
   const handleExportXLSX = () => {
@@ -92,30 +82,30 @@ export function ActivityLogModal({ isOpen, onClose, logs }: ActivityLogModalProp
       'Data i godzina': formatDateTime(log.timestamp),
       'Użytkownik (Kto dokonał zmiany)': log.userEmail,
       'Typ operacji': getActionLabel(log.action),
-      'Obiekt / Cel': log.target,
-      'Miejsce': log.miejsce || '',
+      'Dywan / Pozycja': log.target,
+      'Miejsce w magazynie': log.miejsce || '',
       'REF LM': log.ref || '',
       'Kod EAN': log.ean || '',
-      'Szczegóły zmiany': log.details
+      'Szczegóły operacji': log.details
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(exportRows);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Historia zmian 038');
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Rejestr zmian dywanów');
 
     worksheet['!cols'] = [
       { wch: 20 },
       { wch: 30 },
-      { wch: 18 },
+      { wch: 20 },
       { wch: 35 },
-      { wch: 12 },
+      { wch: 16 },
       { wch: 14 },
       { wch: 18 },
       { wch: 45 }
     ];
 
     const dateStr = new Date().toISOString().split('T')[0];
-    XLSX.writeFile(workbook, `rejestr_zmian_sklep038_${dateStr}.xlsx`);
+    XLSX.writeFile(workbook, `rejestr_zmian_dywany_sklep038_${dateStr}.xlsx`);
   };
 
   if (!isOpen) return null;
@@ -126,18 +116,18 @@ export function ActivityLogModal({ isOpen, onClose, logs }: ActivityLogModalProp
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-200 bg-linear-to-r from-gray-50 to-white">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shadow-xs">
+            <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shadow-xs">
               <History className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-black text-gray-900 tracking-tight flex items-center gap-2">
-                Historia i Rejestr Zmian
+                Rejestr zmian w magazynie
                 <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
                   Na żywo
                 </span>
               </h2>
               <p className="text-xs text-gray-500">
-                Pełny audyt kto, co i kiedy dodał, zmodyfikował lub usunął w bazie sklepu 038
+                Sprawdź kto zmienił dywan, kto zdjął dywan lub kto dodał dywan w sklepie 038
               </p>
             </div>
           </div>
@@ -172,7 +162,7 @@ export function ActivityLogModal({ isOpen, onClose, logs }: ActivityLogModalProp
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Szukaj po emailu, nazwie dywanu, kodzie REF, EAN lub miejscu..."
+                placeholder="Szukaj po emailu, nazwie dywanu, REF, EAN lub miejscu..."
                 className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-600 focus:border-transparent"
               />
               {searchQuery && (
@@ -213,30 +203,30 @@ export function ActivityLogModal({ isOpen, onClose, logs }: ActivityLogModalProp
             </button>
           </div>
 
-          {/* Action categories chips */}
+          {/* Action chips: exactly "kto zmienił dywan, kto zdjął dywan albo kto dodał dywan" */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
             <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mr-1">
-              Typ:
+              Opcje:
             </span>
             {[
-              { id: 'all', label: 'Wszystkie' },
-              { id: 'edit', label: 'Edycje dywanów' },
-              { id: 'add', label: 'Nowe dywany' },
-              { id: 'delete', label: 'Usunięcia' },
-              { id: 'import', label: 'Importy' },
-              { id: 'warehouses', label: 'Magazyny' },
-              { id: 'admins', label: 'Uprawnienia' }
+              { id: 'all', label: 'Wszystkie akcje' },
+              { id: 'edit', label: 'Kto zmienił dywan' },
+              { id: 'delete', label: 'Kto zdjął dywan' },
+              { id: 'add', label: 'Kto dodał dywan' }
             ].map((chip) => (
               <button
                 key={chip.id}
-                onClick={() => setSelectedAction(chip.id)}
-                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap ${
+                onClick={() => setSelectedAction(chip.id as any)}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap text-xs flex items-center gap-1.5 ${
                   selectedAction === chip.id
-                    ? 'bg-blue-600 text-white shadow-2xs'
-                    : 'bg-white text-gray-600 hover:bg-gray-200/70 border border-gray-200'
+                    ? 'bg-purple-600 text-white shadow-2xs'
+                    : 'bg-white text-gray-700 hover:bg-gray-200/70 border border-gray-200'
                 }`}
               >
-                {chip.label}
+                {chip.id === 'add' && <PlusCircle className="w-3.5 h-3.5" />}
+                {chip.id === 'edit' && <Pencil className="w-3.5 h-3.5" />}
+                {chip.id === 'delete' && <Trash2 className="w-3.5 h-3.5" />}
+                <span>{chip.label}</span>
               </button>
             ))}
           </div>
@@ -250,7 +240,7 @@ export function ActivityLogModal({ isOpen, onClose, logs }: ActivityLogModalProp
               return (
                 <div
                   key={log.id}
-                  className="p-3 sm:p-3.5 hover:bg-blue-50/40 rounded-xl transition-colors flex flex-col sm:flex-row sm:items-start justify-between gap-3 text-xs"
+                  className="p-3 sm:p-3.5 hover:bg-purple-50/40 rounded-xl transition-colors flex flex-col sm:flex-row sm:items-start justify-between gap-3 text-xs"
                 >
                   <div className="flex items-start gap-3">
                     {/* Action Icon */}
@@ -315,11 +305,11 @@ export function ActivityLogModal({ isOpen, onClose, logs }: ActivityLogModalProp
           ) : (
             <div className="py-16 text-center text-gray-400 flex flex-col items-center justify-center">
               <History className="w-12 h-12 text-gray-300 mb-2 stroke-[1.5]" />
-              <div className="font-bold text-gray-700 text-sm">Brak wpisów w historii</div>
+              <div className="font-bold text-gray-700 text-sm">Brak wpisów w historii dywanów</div>
               <p className="text-xs text-gray-500 mt-1 max-w-sm">
                 {searchQuery || selectedAction !== 'all' || selectedUser !== 'all'
                   ? 'Żadne zarejestrowane zmiany nie spełniają wybranych kryteriów wyszukiwania.'
-                  : 'Brak zarejestrowanych operacji w bazie. Wszelkie przyszłe dodania, edycje i usunięcia będą tu rejestrowane.'}
+                  : 'Wszelkie operacje (kto dodał, zmienił lub zdjął dywan) będą automatycznie zapisywane tutaj.'}
               </p>
             </div>
           )}
@@ -328,9 +318,9 @@ export function ActivityLogModal({ isOpen, onClose, logs }: ActivityLogModalProp
         {/* Footer */}
         <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500">
           <div>
-            Zarejestrowano ogółem: <strong className="text-gray-800">{logs.length}</strong> operacji
-            {filteredLogs.length !== logs.length && (
-              <span className="ml-1 text-blue-600 font-semibold">
+            Zarejestrowano ogółem: <strong className="text-gray-800">{carpetLogs.length}</strong> operacji
+            {filteredLogs.length !== carpetLogs.length && (
+              <span className="ml-1 text-purple-600 font-semibold">
                 (wyświetlane: {filteredLogs.length})
               </span>
             )}
@@ -350,21 +340,11 @@ export function ActivityLogModal({ isOpen, onClose, logs }: ActivityLogModalProp
 function getActionLabel(action: ActivityAction): string {
   switch (action) {
     case 'add':
-      return 'Dodanie dywanu';
+      return 'Dodał dywan';
     case 'edit':
-      return 'Edycja dywanu';
+      return 'Zmienił dywan';
     case 'delete':
-      return 'Usunięcie dywanu';
-    case 'import':
-      return 'Import bazy';
-    case 'add_warehouse':
-      return 'Dodanie magazynu';
-    case 'delete_warehouse':
-      return 'Usunięcie magazynu';
-    case 'add_admin':
-      return 'Nadanie praw administratora';
-    case 'remove_admin':
-      return 'Odebranie praw administratora';
+      return 'Zdjął dywan';
     default:
       return action;
   }
@@ -375,39 +355,19 @@ function renderActionBadge(action: ActivityAction) {
     case 'add':
       return (
         <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
-          Dodano
+          Dodał dywan
         </span>
       );
     case 'edit':
       return (
         <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-800 border border-blue-200">
-          Edycja
+          Zmienił dywan
         </span>
       );
     case 'delete':
       return (
-        <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-red-100 text-red-800 border border-red-200">
-          Usunięto
-        </span>
-      );
-    case 'import':
-      return (
-        <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-teal-100 text-teal-800 border border-teal-200">
-          Import bazy
-        </span>
-      );
-    case 'add_warehouse':
-    case 'delete_warehouse':
-      return (
-        <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-800 border border-indigo-200">
-          Magazyn
-        </span>
-      );
-    case 'add_admin':
-    case 'remove_admin':
-      return (
-        <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-200">
-          Uprawnienia
+        <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-200">
+          Zdjął dywan
         </span>
       );
     default:
@@ -435,28 +395,8 @@ function renderActionIcon(action: ActivityAction) {
       );
     case 'delete':
       return (
-        <div className="w-8 h-8 rounded-xl bg-red-50 text-red-600 flex items-center justify-center border border-red-100 shadow-2xs">
+        <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-100 shadow-2xs">
           <Trash2 className="w-4 h-4" />
-        </div>
-      );
-    case 'import':
-      return (
-        <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center border border-teal-100 shadow-2xs">
-          <FileSpreadsheet className="w-4 h-4" />
-        </div>
-      );
-    case 'add_warehouse':
-    case 'delete_warehouse':
-      return (
-        <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100 shadow-2xs">
-          <Warehouse className="w-4 h-4" />
-        </div>
-      );
-    case 'add_admin':
-    case 'remove_admin':
-      return (
-        <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center border border-purple-100 shadow-2xs">
-          <ShieldCheck className="w-4 h-4" />
         </div>
       );
     default:

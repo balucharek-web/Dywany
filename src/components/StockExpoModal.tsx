@@ -38,7 +38,7 @@ export function StockExpoModal({ isOpen, carpets, totalBays = 120, activeBays, o
     const duplicates = Array.from(eanMap.entries()).filter(([_, list]) => list.length > 1);
 
     // List empty slots
-    const occupiedSet = new Set(carpets.map((c) => `${c.magazyn}_${c.podmagazyn.toUpperCase()}`));
+    const occupiedSet = new Set(carpets.map((c) => `${c.magazyn}_${String(c.podmagazyn || '').toUpperCase()}`));
     const emptySlots: { magazyn: number; podmagazyn: string; label: string }[] = [];
 
     baysToCount.forEach((m) => {

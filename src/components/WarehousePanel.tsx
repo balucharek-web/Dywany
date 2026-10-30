@@ -296,14 +296,14 @@ export function WarehousePanel({
           Eksportuj bazę do XLSX
         </button>
 
-        {/* Row 5: Historia zmian w bazie (Rejestr audytu: kto co zmienił) */}
+        {/* Row 5: Historia zmian w bazie (Rejestr audytu: kto dodał / zmienił / zdjął dywan) */}
         <button
           onClick={onOpenActivityLogs}
           className="w-full py-3 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
-          title="Zobacz pełny rejestr kto dodał, edytował lub usunął pozycje w bazie"
+          title="Zobacz kto dodał, zmienił lub zdjął dywan"
         >
           <History className="w-4 h-4" />
-          Historia zmian (Kto co zmienił)
+          Historia zmian (Kto dodał / zmienił / zdjął dywan)
         </button>
 
         {/* Row 6: Wyloguj (red) */}
@@ -416,11 +416,17 @@ export function WarehousePanel({
           }
 
           // Slots: standard sub-bays A and B
-          const carpetA = bayCarpets.find((c) => c.podmagazyn.toUpperCase() === 'A');
-          const carpetB = bayCarpets.find((c) => c.podmagazyn.toUpperCase() === 'B');
-          const otherCarpets = bayCarpets.filter(
-            (c) => c.podmagazyn.toUpperCase() !== 'A' && c.podmagazyn.toUpperCase() !== 'B'
+          const safeBayCarpets = bayCarpets || [];
+          const carpetA = safeBayCarpets.find(
+            (c) => String(c?.podmagazyn || '').trim().toUpperCase() === 'A'
           );
+          const carpetB = safeBayCarpets.find(
+            (c) => String(c?.podmagazyn || '').trim().toUpperCase() === 'B'
+          );
+          const otherCarpets = safeBayCarpets.filter((c) => {
+            const p = String(c?.podmagazyn || '').trim().toUpperCase();
+            return p !== 'A' && p !== 'B';
+          });
 
           return (
             <div

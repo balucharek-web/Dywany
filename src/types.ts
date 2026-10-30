@@ -26,15 +26,7 @@ export interface Warehouse {
   createdBy?: string;
 }
 
-export type ActivityAction =
-  | 'add'
-  | 'edit'
-  | 'delete'
-  | 'import'
-  | 'add_warehouse'
-  | 'delete_warehouse'
-  | 'add_admin'
-  | 'remove_admin';
+export type ActivityAction = 'add' | 'edit' | 'delete';
 
 export interface ActivityLog {
   id: string;

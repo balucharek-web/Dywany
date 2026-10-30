@@ -32,7 +32,24 @@ import { ActivityLogModal } from './components/ActivityLogModal';
 import { ShieldAlert, LogOut, CheckCircle2 } from 'lucide-react';
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<'search' | 'warehouse'>('search');
+  const [currentView, setCurrentView] = useState<'search' | 'warehouse'>(() => {
+    try {
+      const saved = localStorage.getItem('lm_current_view');
+      return saved === 'warehouse' ? 'warehouse' : 'search';
+    } catch {
+      return 'search';
+    }
+  });
+
+  const handleSetCurrentView = (view: 'search' | 'warehouse') => {
+    setCurrentView(view);
+    try {
+      localStorage.setItem('lm_current_view', view);
+    } catch {
+      // ignore
+    }
+  };
+
   const [carpets, setCarpets] = useState<Carpet[]>([]);
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -82,8 +99,8 @@ export default function App() {
           loadedCarpets.push({
             id: docSnap.id,
             magazyn: Number(data.magazyn) || 1,
-            podmagazyn: data.podmagazyn || 'A',
-            miejsce: data.miejsce || `${data.magazyn} ${data.podmagazyn}`,
+            podmagazyn: String(data.podmagazyn || 'A').toUpperCase().trim() || 'A',
+            miejsce: data.miejsce || `${Number(data.magazyn) || 1} ${String(data.podmagazyn || 'A').toUpperCase().trim() || 'A'}`,
             nazwa: data.nazwa || '',
             ref: data.ref || '',
             ean: data.ean || '',
@@ -231,7 +248,8 @@ export default function App() {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       if (result.user) {
-        setCurrentView('warehouse');
+        setCurrentUser(result.user);
+        handleSetCurrentView('warehouse');
       }
     } catch (err) {
       console.error('Google Sign In Error:', err);
@@ -242,7 +260,7 @@ export default function App() {
   // Logout
   const handleLogout = async () => {
     await signOut(auth);
-    setCurrentView('search');
+    handleSetCurrentView('search');
   };
 
   // Switch account (sign out current and prompt account chooser immediately)
@@ -251,7 +269,8 @@ export default function App() {
       await signOut(auth);
       const result = await signInWithPopup(auth, googleProvider);
       if (result.user) {
-        setCurrentView('warehouse');
+        setCurrentUser(result.user);
+        handleSetCurrentView('warehouse');
       }
     } catch (err: unknown) {
       console.log('Switch account closed or cancelled:', err);
@@ -315,8 +334,8 @@ export default function App() {
         isExisting ? 'edit' : 'add',
         payload.nazwa || `Dywan ${payload.miejsce}`,
         isExisting
-          ? `Zaktualizowano dane dywanu "${payload.nazwa}" (Miejsce: ${payload.miejsce}, REF: ${payload.ref || '-'}, EAN: ${payload.ean || '-'})`
-          : `Dodano nowy dywan "${payload.nazwa}" do magazynu (Miejsce: ${payload.miejsce}, REF: ${payload.ref || '-'}, EAN: ${payload.ean || '-'})`,
+          ? `Zmienił dywan "${payload.nazwa}" (Miejsce: ${payload.miejsce}, REF: ${payload.ref || '-'}, EAN: ${payload.ean || '-'})`
+          : `Dodał dywan "${payload.nazwa}" do magazynu (Miejsce: ${payload.miejsce}, REF: ${payload.ref || '-'}, EAN: ${payload.ean || '-'})`,
         {
           miejsce: payload.miejsce,
           ref: payload.ref,
@@ -342,7 +361,7 @@ export default function App() {
         await logActivity(
           'delete',
           name || `Dywan ${carpetId}`,
-          `Usunięto pozycję "${name}" z miejsca ${carpetToDelete?.miejsce || carpetId} (REF: ${carpetToDelete?.ref || '-'}, EAN: ${carpetToDelete?.ean || '-'})`,
+          `Zdjął dywan "${name}" z miejsca ${carpetToDelete?.miejsce || carpetId} (REF: ${carpetToDelete?.ref || '-'}, EAN: ${carpetToDelete?.ean || '-'})`,
           {
             miejsce: carpetToDelete?.miejsce,
             ref: carpetToDelete?.ref,
@@ -391,11 +410,6 @@ export default function App() {
       });
 
       await batch.commit();
-      await logActivity(
-        'import',
-        `Import bazy: ${incoming.length} dywanów`,
-        `Zaimportowano ${incoming.length} pozycji w trybie: ${mode === 'replace' ? 'zastąpienie całej bazy' : 'aktualizacja/scalenie'}`
-      );
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'carpets/batch');
     }
@@ -417,11 +431,6 @@ export default function App() {
 
     try {
       await setDoc(doc(db, 'admins', docId), payload);
-      await logActivity(
-        'add_admin',
-        `Administrator: ${normalized}`,
-        `Nadano uprawnienia administratora sklepu 038 dla użytkownika ${normalized}`
-      );
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `admins/${docId}`);
     }
@@ -435,11 +444,6 @@ export default function App() {
     const docId = email.trim().toLowerCase();
     try {
       await deleteDoc(doc(db, 'admins', docId));
-      await logActivity(
-        'remove_admin',
-        `Administrator: ${email}`,
-        `Odebrano uprawnienia administratora sklepu 038 dla użytkownika ${email}`
-      );
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `admins/${docId}`);
     }
@@ -474,11 +478,6 @@ export default function App() {
       });
 
       await batch.commit();
-      await logActivity(
-        'add_warehouse',
-        `Magazyny: ${numbers.join(', ')}`,
-        `Dodano nowe magazyny do rejestru: ${numbers.join(', ')}`
-      );
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'warehouses');
     }
@@ -517,11 +516,6 @@ export default function App() {
       }
 
       await batch.commit();
-      await logActivity(
-        'delete_warehouse',
-        `Magazyn ${bayNumber}`,
-        `Usunięto magazyn ${bayNumber}${deleteCarpets ? ' wraz ze znajdującymi się w nim dywanami' : ''}`
-      );
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `warehouses/${bayNumber}`);
     }
@@ -543,11 +537,6 @@ export default function App() {
         });
       }
       await batch.commit();
-      await logActivity(
-        'add_warehouse',
-        `Inicjalizacja 1-${count}`,
-        `Zainicjalizowano domyślny zestaw magazynów 1 do ${count}`
-      );
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'warehouses/init');
     }
@@ -613,7 +602,7 @@ export default function App() {
           if (view === 'warehouse' && (!currentUser || !isAdmin)) {
             setIsLoginModalOpen(true);
           } else {
-            setCurrentView(view);
+            handleSetCurrentView(view);
           }
         }}
         user={currentUser}
@@ -623,7 +612,6 @@ export default function App() {
         onLogoutClick={handleLogout}
         onSwitchAccount={handleSwitchAccount}
         onOpenSuperAdminModal={() => setIsAdminManagementOpen(true)}
-        onOpenActivityLogs={() => setIsActivityLogModalOpen(true)}
         isSyncing={isSyncing}
       />
 
@@ -655,7 +643,13 @@ export default function App() {
 
       {/* Main View Area */}
       <main className="flex-1 pb-16">
-        {currentView === 'search' ? (
+        {authLoading && currentView === 'warehouse' ? (
+          <div className="max-w-md mx-auto py-24 px-4 text-center flex flex-col items-center justify-center">
+            <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4" />
+            <h3 className="text-base font-bold text-gray-800">Sprawdzanie uprawnień administratora...</h3>
+            <p className="text-xs text-gray-500 mt-1">Łączenie z bazą sklepu 038 w czasie rzeczywistym</p>
+          </div>
+        ) : currentView === 'search' ? (
           <SearchView
             carpets={carpets}
             searchQuery={searchQuery}
