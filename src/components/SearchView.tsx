@@ -68,7 +68,7 @@ export function SearchView({
   };
 
   return (
-    <div className="max-w-xl mx-auto px-4 py-4 sm:py-6 flex flex-col gap-4">
+    <div className="max-w-4xl lg:max-w-5xl mx-auto px-3 sm:px-6 py-4 sm:py-6 flex flex-col gap-4 pb-24 md:pb-8">
       {/* Search Input Box matching Screenshots 2 & 5 */}
       <div className="relative">
         <input
@@ -77,24 +77,34 @@ export function SearchView({
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Wyszukaj po: EAN, ref lub miejsce (np. 12A)"
-          className="w-full px-4 py-3 text-base sm:text-lg border-2 border-gray-900 rounded-xl bg-white shadow-xs focus:ring-2 focus:ring-blue-600 focus:outline-hidden transition-all placeholder:text-gray-400 font-medium"
+          className="w-full pl-4 pr-24 py-3 sm:py-3.5 text-base sm:text-lg border-2 border-gray-900 rounded-2xl bg-white shadow-xs focus:ring-2 focus:ring-blue-600 focus:outline-hidden transition-all placeholder:text-gray-400 font-medium"
           autoFocus
         />
-        {searchQuery && (
-          <button
-            onClick={() => setSearchQuery('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded-md font-semibold"
-          >
-            Wyczyść
-          </button>
-        )}
+        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+          {searchQuery ? (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="text-gray-400 hover:text-gray-700 text-xs bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer"
+            >
+              Wyczyść
+            </button>
+          ) : (
+            <button
+              onClick={onOpenScanner}
+              className="text-gray-600 hover:text-blue-600 p-2 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer"
+              title="Zeskanuj kod kreskowy aparatem"
+            >
+              <Camera className="w-5 h-5" />
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Action Buttons Row matching Screenshot 2 & 5: [🔍 Szukaj] [📷 Skanuj] [📝 Generuj fiszkę] */}
-      <div className="grid grid-cols-3 gap-2">
+      {/* Action Buttons Row: [🔍 Szukaj] [📷 Skanuj] [📝 Generuj fiszkę] */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
         <button
           onClick={handleSearchButtonClick}
-          className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-semibold text-xs sm:text-sm shadow-xs active:scale-98 transition-transform cursor-pointer"
+          className="flex items-center justify-center gap-1.5 py-3 px-3 rounded-xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-xs sm:text-sm shadow-xs active:scale-98 transition-transform cursor-pointer"
         >
           <Search className="w-4 h-4" />
           <span>Szukaj</span>
@@ -102,7 +112,7 @@ export function SearchView({
 
         <button
           onClick={onOpenScanner}
-          className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg bg-[#475467] hover:bg-[#344054] text-white font-semibold text-xs sm:text-sm shadow-xs active:scale-98 transition-transform cursor-pointer"
+          className="flex items-center justify-center gap-1.5 py-3 px-3 rounded-xl bg-[#475467] hover:bg-[#344054] text-white font-bold text-xs sm:text-sm shadow-xs active:scale-98 transition-transform cursor-pointer"
         >
           <Camera className="w-4 h-4" />
           <span>Skanuj</span>
@@ -110,7 +120,7 @@ export function SearchView({
 
         <button
           onClick={handleGenerateFiszkaClick}
-          className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg bg-[#475467] hover:bg-[#344054] text-white font-semibold text-xs sm:text-sm shadow-xs active:scale-98 transition-transform cursor-pointer"
+          className="flex items-center justify-center gap-1.5 py-3 px-3 rounded-xl bg-[#475467] hover:bg-[#344054] text-white font-bold text-xs sm:text-sm shadow-xs active:scale-98 transition-transform cursor-pointer"
         >
           <FileText className="w-4 h-4" />
           <span>Generuj fiszkę</span>
@@ -119,7 +129,7 @@ export function SearchView({
 
       {/* Search Results Display */}
       {searchQuery.trim() !== '' ? (
-        <div className="flex flex-col gap-3.5 mt-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 mt-2">
           {filteredCarpets.length > 0 ? (
             filteredCarpets.map((carpet) => (
               <div
@@ -271,11 +281,11 @@ export function SearchView({
         </div>
       )}
 
-      {/* Floating / Bottom Right Help Button matching Screenshot 5 */}
-      <div className="fixed bottom-5 right-5 z-20">
+      {/* Floating / Bottom Right Help Button */}
+      <div className="fixed bottom-20 md:bottom-6 right-4 sm:right-6 z-20">
         <button
           onClick={onOpenHelp}
-          className="flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm shadow-lg hover:shadow-xl transition-all active:scale-95"
+          className="flex items-center gap-1.5 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer"
         >
           <span>Pomoc</span>
           <HelpCircle className="w-4 h-4" />

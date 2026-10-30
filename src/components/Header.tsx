@@ -2,6 +2,7 @@ import { User } from 'firebase/auth';
 import { LeroyMerlinLogo } from './LeroyMerlinLogo';
 import { STORE_NUMBER, STORE_CITY, SUPER_ADMIN_EMAIL } from '../types';
 import { LogOut, ShieldCheck, Database, Search, Users, RefreshCw } from 'lucide-react';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface HeaderProps {
   currentView: 'search' | 'warehouse';
@@ -112,6 +113,9 @@ export function Header({
             </button>
           )}
 
+          {/* Install PWA Button (auto-hides when already installed in standalone mode) */}
+          <PWAInstallButton />
+
           {/* Toggle between Search & Warehouse */}
           {currentView === 'search' ? (
             <button
@@ -123,7 +127,7 @@ export function Header({
                   setCurrentView('warehouse');
                 }
               }}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-lg bg-[#f04438] hover:bg-[#e03125] text-white transition-all shadow-xs active:scale-95"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-lg bg-[#f04438] hover:bg-[#e03125] text-white transition-all shadow-xs active:scale-95 cursor-pointer"
             >
               <Database className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               Zarządzaj magazynem
@@ -132,7 +136,7 @@ export function Header({
             <button
               key="btn-view-toggle-search"
               onClick={() => setCurrentView('search')}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs active:scale-95"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs active:scale-95 cursor-pointer"
             >
               <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               Wyszukiwarka

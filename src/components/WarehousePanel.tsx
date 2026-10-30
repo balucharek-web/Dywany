@@ -214,8 +214,8 @@ export function WarehousePanel({
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-6 flex flex-col gap-4">
-      {/* Title matching Screenshot 3 & 4 */}
+    <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 flex flex-col gap-4 pb-24 md:pb-8">
+      {/* Title */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">
@@ -258,70 +258,70 @@ export function WarehousePanel({
         )}
       </div>
 
-      {/* Top action buttons matching Screenshot 3 */}
-      <div className="flex flex-col gap-2.5 print:hidden">
-        {/* Row 1: Importuj bazę (amber/yellow) */}
+      {/* Top action buttons: Responsive grid on PC / Tablet, intuitive on mobile */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 print:hidden">
+        {/* Row 1: Importuj bazę */}
         <button
           onClick={onOpenImport}
-          className="w-full py-3 px-4 rounded-xl bg-[#eab308] hover:bg-[#ca8a04] text-gray-950 font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
+          className="py-2.5 sm:py-3 px-3 rounded-xl bg-[#eab308] hover:bg-[#ca8a04] text-gray-950 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
         >
-          <Upload className="w-4 h-4" />
-          Importuj bazę
+          <Upload className="w-4 h-4 shrink-0" />
+          <span className="truncate">Importuj bazę</span>
         </button>
 
-        {/* Row 2: Sprawdź stock expo (amber/yellow) */}
+        {/* Row 2: Sprawdź stock expo */}
         <button
           onClick={onOpenStockExpo}
-          className="w-full py-3 px-4 rounded-xl bg-[#eab308] hover:bg-[#ca8a04] text-gray-950 font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
+          className="py-2.5 sm:py-3 px-3 rounded-xl bg-[#eab308] hover:bg-[#ca8a04] text-gray-950 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
         >
-          <BarChart2 className="w-4 h-4" />
-          Sprawdź stock expo
+          <BarChart2 className="w-4 h-4 shrink-0" />
+          <span className="truncate">Stock expo</span>
         </button>
 
-        {/* Row 3: Eksportuj bazę (blue) */}
+        {/* Row 3: Eksportuj bazę JSON */}
         <button
           onClick={handleExportJSON}
-          className="w-full py-3 px-4 rounded-xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
+          className="py-2.5 sm:py-3 px-3 rounded-xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
         >
-          <Download className="w-4 h-4" />
-          Eksportuj bazę
+          <Download className="w-4 h-4 shrink-0" />
+          <span className="truncate">Kopia JSON</span>
         </button>
 
-        {/* Row 4: Eksportuj XLSX (blue) */}
+        {/* Row 4: Eksportuj XLSX */}
         <button
           onClick={handleExportXLSX}
-          className="w-full py-3 px-4 rounded-xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
+          className="py-2.5 sm:py-3 px-3 rounded-xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
         >
-          <FileText className="w-4 h-4" />
-          Eksportuj bazę do XLSX
+          <FileText className="w-4 h-4 shrink-0" />
+          <span className="truncate">Eksport XLSX</span>
         </button>
 
-        {/* Row 5: Historia zmian w bazie (Rejestr audytu: kto dodał / zmienił / zdjął dywan) */}
+        {/* Row 5: Historia zmian w bazie */}
         <button
           onClick={onOpenActivityLogs}
-          className="w-full py-3 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
+          className="col-span-2 sm:col-span-1 lg:col-span-2 py-2.5 sm:py-3 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
           title="Zobacz kto dodał, zmienił lub zdjął dywan"
         >
-          <History className="w-4 h-4" />
-          Historia zmian (Kto dodał / zmienił / zdjął dywan)
+          <History className="w-4 h-4 shrink-0" />
+          <span className="truncate">Historia zmian (audyt)</span>
         </button>
 
-        {/* Row 6: Wyloguj (red) */}
-        <button
-          onClick={onLogout}
-          className="w-full py-3 px-4 rounded-xl bg-[#ef4444] hover:bg-[#dc2626] text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
-        >
-          <LogOut className="w-4 h-4" />
-          Wyloguj
-        </button>
-
-        {/* Row 6: Pomoc (gray/white) */}
+        {/* Row 6: Pomoc */}
         <button
           onClick={onOpenHelp}
-          className="w-full py-3 px-4 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-900 font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
+          className="py-2.5 sm:py-3 px-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-900 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
         >
-          <span className="text-red-500 font-black text-base">?</span>
-          Pomoc
+          <span className="text-red-500 font-black text-sm">?</span>
+          <span>Pomoc</span>
+        </button>
+
+        {/* Row 7: Wyloguj */}
+        <button
+          onClick={onLogout}
+          className="py-2.5 sm:py-3 px-3 rounded-xl bg-[#ef4444] hover:bg-[#dc2626] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
+        >
+          <LogOut className="w-4 h-4 shrink-0" />
+          <span>Wyloguj</span>
         </button>
       </div>
 
@@ -383,8 +383,8 @@ export function WarehousePanel({
         </div>
       </div>
 
-      {/* Racks / Bays listing */}
-      <div className="flex flex-col gap-5 mt-2">
+      {/* Racks / Bays listing: 1 column on mobile, 2 columns on desktop PC */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 mt-2">
         {baysList.map((bayNum) => {
           let bayCarpets = carpetsByBay.get(bayNum) || [];
 

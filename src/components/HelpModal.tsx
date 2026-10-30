@@ -76,6 +76,20 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
               Baza jest na żywo połączona z chmurą sklepu 038. Każda zmiana wprowadzona na jednym telefonie natychmiast wyświetla się wszystkim innym użytkownikom bez potrzeby odświeżania strony.
             </div>
           </div>
+
+          <div className="flex items-start gap-3 bg-emerald-50/70 p-3 rounded-xl border border-emerald-100">
+            <Smartphone className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold text-gray-900 block">Aplikacja PWA (Telefon i PC)</span>
+              Aplikacja spełnia najnowsze standardy Progressive Web App (PWA):
+              <ul className="list-disc ml-4 mt-1 space-y-0.5 text-gray-600">
+                <li>Działa na pełnym ekranie jak natywny program ze sklepu z aplikacjami.</li>
+                <li>Działa również w strefach magazynu ze słabym zasięgiem (tryb offline).</li>
+                <li><strong>Na Android / PC / Chrome:</strong> Kliknij przycisk <em>„Zainstaluj aplikację”</em> w nagłówku.</li>
+                <li><strong>Na iPhone (iOS):</strong> W Safari kliknij <em>Udostępnij ⎋</em>, a następnie <em>„Do ekranu początkowego” ➕</em>.</li>
+              </ul>
+            </div>
+          </div>
         </div>
 
         {/* Footer */}
