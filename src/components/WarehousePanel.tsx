@@ -18,10 +18,12 @@ import {
   LogOut,
   History,
   User,
-  Clock
+  Clock,
+  SlidersHorizontal
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { formatDateTime, formatRelativeTime } from '../utils/formatters';
+import { WarehouseToolsModal } from './WarehouseToolsModal';
 
 interface WarehousePanelProps {
   carpets: Carpet[];
@@ -62,6 +64,7 @@ export function WarehousePanel({
   const [onlyEmpty, setOnlyEmpty] = useState(false);
   const [onlyNew, setOnlyNew] = useState(false);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | 'name' | 'date'>('asc');
+  const [isToolsOpen, setIsToolsOpen] = useState(false);
 
   // Quick warehouse deletion state
   const [deletingBayModal, setDeletingBayModal] = useState<{
@@ -215,173 +218,131 @@ export function WarehousePanel({
 
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 flex flex-col gap-4 pb-12 sm:pb-8">
-      {/* Title */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">
-            Panel magazynowy sklepu {STORE_NUMBER}
-          </h1>
-          <span className="text-xs text-gray-500 font-medium">
-            Aktywne magazyny: <strong className="text-gray-800">{activeBays.length}</strong> | Dywanów: <strong className="text-gray-800">{carpets.length}</strong>
-          </span>
-        </div>
-
-        {isSuperAdmin && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <button
-              onClick={() => setIsQuickAddOpen(true)}
-              className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
-              title="Szybkie dodanie nowego magazynu"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Dodaj magazyn
-            </button>
-
-            <button
-              onClick={() => onOpenSuperAdminModal('warehouses')}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-900 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-              title="Zarządzanie listą magazynów"
-            >
-              <Layers className="w-3.5 h-3.5 text-blue-700" />
-              Magazyny ({activeBays.length})
-            </button>
-
-            <button
-              onClick={() => onOpenSuperAdminModal('admins')}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-900 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-              title="Zarządzanie administratorami"
-            >
-              <Users className="w-3.5 h-3.5 text-purple-700" />
-              Super Admin
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Top action buttons: Responsive grid on PC / Tablet, intuitive on mobile */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 print:hidden">
-        {/* Row 1: Importuj bazę */}
-        <button
-          onClick={onOpenImport}
-          className="py-2.5 sm:py-3 px-3 rounded-xl bg-[#eab308] hover:bg-[#ca8a04] text-gray-950 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
-        >
-          <Upload className="w-4 h-4 shrink-0" />
-          <span className="truncate">Importuj bazę</span>
-        </button>
-
-        {/* Row 2: Sprawdź stock expo */}
-        <button
-          onClick={onOpenStockExpo}
-          className="py-2.5 sm:py-3 px-3 rounded-xl bg-[#eab308] hover:bg-[#ca8a04] text-gray-950 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
-        >
-          <BarChart2 className="w-4 h-4 shrink-0" />
-          <span className="truncate">Stock expo</span>
-        </button>
-
-        {/* Row 3: Eksportuj bazę JSON */}
-        <button
-          onClick={handleExportJSON}
-          className="py-2.5 sm:py-3 px-3 rounded-xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
-        >
-          <Download className="w-4 h-4 shrink-0" />
-          <span className="truncate">Kopia JSON</span>
-        </button>
-
-        {/* Row 4: Eksportuj XLSX */}
-        <button
-          onClick={handleExportXLSX}
-          className="py-2.5 sm:py-3 px-3 rounded-xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
-        >
-          <FileText className="w-4 h-4 shrink-0" />
-          <span className="truncate">Eksport XLSX</span>
-        </button>
-
-        {/* Row 5: Historia zmian w bazie */}
-        <button
-          onClick={onOpenActivityLogs}
-          className="col-span-2 sm:col-span-1 lg:col-span-2 py-2.5 sm:py-3 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
-          title="Zobacz kto dodał, zmienił lub zdjął dywan"
-        >
-          <History className="w-4 h-4 shrink-0" />
-          <span className="truncate">Historia zmian (audyt)</span>
-        </button>
-
-        {/* Row 6: Pomoc */}
-        <button
-          onClick={onOpenHelp}
-          className="py-2.5 sm:py-3 px-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-900 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
-        >
-          <span className="text-red-500 font-black text-sm">?</span>
-          <span>Pomoc</span>
-        </button>
-
-        {/* Row 7: Wyloguj */}
-        <button
-          onClick={onLogout}
-          className="py-2.5 sm:py-3 px-3 rounded-xl bg-[#ef4444] hover:bg-[#dc2626] text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
-        >
-          <LogOut className="w-4 h-4 shrink-0" />
-          <span>Wyloguj</span>
-        </button>
-      </div>
-
-      {/* Filter and Search Bar matching Screenshot 4 */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs mt-2 print:hidden flex flex-col gap-3">
-        {/* Search input */}
-        <div className="relative">
-          <input
-            type="text"
-            value={filterQuery}
-            onChange={(e) => setFilterQuery(e.target.value)}
-            placeholder="Szukaj magazynu / produktu..."
-            className="w-full px-3.5 py-2.5 text-sm sm:text-base border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-          />
-          {filterQuery && (
-            <button
-              onClick={() => setFilterQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 text-xs cursor-pointer"
-            >
-              Wyczyść
-            </button>
-          )}
-        </div>
-
-        {/* Checkboxes and sort dropdown matching Screenshot 4 */}
-        <div className="flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm">
-          <div className="flex items-center gap-4 flex-wrap">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={onlyEmpty}
-                onChange={(e) => setOnlyEmpty(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <span className="font-semibold text-gray-700">Tylko puste</span>
-            </label>
-
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={onlyNew}
-                onChange={(e) => setOnlyNew(e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <span className="font-semibold text-gray-700">Tylko nowe (&lt;30 dni)</span>
-            </label>
+      {/* Sleek, Modern Control Bar: Takes ~80px max on mobile, looks gorgeous on desktop */}
+      <div className="flex flex-col gap-2.5 print:hidden">
+        {/* Row 1: Title + Info badge + Quick action pills */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <h1 className="text-base sm:text-lg font-bold text-gray-900 tracking-tight">
+              Magazyn {STORE_NUMBER}
+            </h1>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 text-[11px] font-semibold border border-blue-200/60">
+              {activeBays.length} regałów • {carpets.length} {carpets.length === 1 ? 'dywan' : 'dywanów'}
+            </span>
           </div>
 
-          <div>
+          <div className="flex items-center gap-1.5">
+            {/* Quick action: Stock expo */}
+            <button
+              onClick={onOpenStockExpo}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer"
+              title="Zajętość i wolne miejsca na regałach"
+            >
+              <BarChart2 className="w-3.5 h-3.5 text-amber-700" />
+              <span className="hidden sm:inline">Stock expo</span>
+            </button>
+
+            {/* Quick action: Historia zmian (audyt) */}
+            <button
+              onClick={onOpenActivityLogs}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer"
+              title="Zobacz kto dodał, zmienił lub zdjął dywan"
+            >
+              <History className="w-3.5 h-3.5 text-purple-700" />
+              <span className="hidden sm:inline">Historia</span>
+            </button>
+
+            {/* Main Tools button: opens WarehouseToolsModal */}
+            <button
+              onClick={() => setIsToolsOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
+              title="Wszystkie opcje magazynu (import, eksport, kopia, zarządzanie)"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
+              <span>Narzędzia</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Row 2: Compact Search & Filter Strip */}
+        <div className="bg-white border border-gray-200 rounded-xl p-2 sm:p-2.5 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 text-xs">
+          {/* Search box */}
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={filterQuery}
+              onChange={(e) => setFilterQuery(e.target.value)}
+              placeholder="Szukaj magazynu, ref, EAN, nazwy..."
+              className="w-full pl-8 pr-7 py-1.5 text-xs sm:text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-hidden"
+            />
+            {filterQuery && (
+              <button
+                onClick={() => setFilterQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 text-xs font-bold p-0.5 cursor-pointer"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Filter chips & Sort dropdown */}
+          <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setOnlyEmpty(!onlyEmpty)}
+                className={`px-2 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer select-none border ${
+                  onlyEmpty
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-200'
+                }`}
+              >
+                Tylko puste
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setOnlyNew(!onlyNew)}
+                className={`px-2 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer select-none border ${
+                  onlyNew
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-200'
+                }`}
+              >
+                Nowe &lt;30d
+              </button>
+            </div>
+
             <select
               value={sortOrder}
               onChange={(e) => setSortOrder(e.target.value as any)}
-              className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs font-semibold bg-white text-gray-700 focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+              className="px-2 py-1 border border-gray-200 rounded-md text-xs font-medium bg-gray-50 text-gray-700 hover:bg-white focus:outline-hidden cursor-pointer"
             >
-              <option value="asc">Sortuj rosnąco</option>
-              <option value="desc">Sortuj malejąco</option>
+              <option value="asc">1 → {activeBays.length}</option>
+              <option value="desc">{activeBays.length} → 1</option>
             </select>
           </div>
         </div>
       </div>
+
+      {/* Warehouse Tools Modal */}
+      <WarehouseToolsModal
+        isOpen={isToolsOpen}
+        onClose={() => setIsToolsOpen(false)}
+        onOpenImport={onOpenImport}
+        onOpenStockExpo={onOpenStockExpo}
+        onExportJSON={handleExportJSON}
+        onExportXLSX={handleExportXLSX}
+        onOpenActivityLogs={onOpenActivityLogs}
+        onOpenHelp={onOpenHelp}
+        onLogout={onLogout}
+        isSuperAdmin={isSuperAdmin}
+        onOpenQuickAdd={() => setIsQuickAddOpen(true)}
+        onOpenSuperAdminModal={onOpenSuperAdminModal}
+        totalBays={activeBays.length}
+        totalCarpets={carpets.length}
+      />
 
       {/* Racks / Bays listing: 1 column on mobile, 2 columns on desktop PC */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 mt-2">

@@ -100,21 +100,18 @@ export function Header({
             </div>
           )}
 
-          {/* Super admin button */}
+          {/* Super admin button (visible on tablet/desktop, also in WarehouseToolsModal) */}
           {isSuperAdmin && currentView === 'warehouse' && (
             <button
               key="btn-superadmin-admins"
               onClick={onOpenSuperAdminModal}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-purple-600 hover:bg-purple-700 text-white transition-colors shadow-xs"
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-purple-600 hover:bg-purple-700 text-white transition-colors shadow-xs"
               title="Zarządzaj uprawnieniami administratorów"
             >
               <Users className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Admini</span>
+              <span>Admini</span>
             </button>
           )}
-
-          {/* Install PWA Button (auto-hides when already installed in standalone mode) */}
-          <PWAInstallButton />
 
           {/* Toggle between Search & Warehouse */}
           {currentView === 'search' ? (
@@ -127,19 +124,19 @@ export function Header({
                   setCurrentView('warehouse');
                 }
               }}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-lg bg-[#f04438] hover:bg-[#e03125] text-white transition-all shadow-xs active:scale-95 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg bg-[#f04438] hover:bg-[#e03125] text-white transition-all shadow-xs active:scale-95 cursor-pointer"
             >
               <Database className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              Zarządzaj magazynem
+              <span>Magazyn</span>
             </button>
           ) : (
             <button
               key="btn-view-toggle-search"
               onClick={() => setCurrentView('search')}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs active:scale-95 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs active:scale-95 cursor-pointer"
             >
               <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              Wyszukiwarka
+              <span>Szukaj</span>
             </button>
           )}
         </div>
