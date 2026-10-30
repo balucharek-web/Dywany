@@ -104,6 +104,30 @@ export function LoginModal({ isOpen, onClose, onGoogleSignIn }: LoginModalProps)
           <div className="text-[11px] text-gray-500 text-center">
             Super Administrator: <span className="font-mono font-semibold text-gray-700">{SUPER_ADMIN_EMAIL}</span>
           </div>
+
+          {/* Android Work Profile / Profil Służbowy Tip */}
+          <div className="mt-2 pt-3 border-t border-gray-200">
+            <details className="group text-left text-xs text-gray-600 bg-blue-50/60 rounded-xl p-3 border border-blue-100">
+              <summary className="font-semibold text-blue-900 cursor-pointer flex items-center justify-between list-none select-none">
+                <span className="flex items-center gap-1.5">
+                  <span className="text-base">💼</span>
+                  <span>Masz telefon z profilem służbowym?</span>
+                </span>
+                <span className="text-blue-500 text-[11px] group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <div className="mt-2 text-[11px] leading-relaxed text-blue-950 space-y-1.5 pt-1.5 border-t border-blue-200/60">
+                <p>
+                  <strong>Sposób 1 (Najwygodniejszy):</strong> Otwórz ten link w <strong>Chrome ze znaczkiem walizeczki 💼</strong> (w zakładce aplikacji <em>Służbowe / Praca</em>). Wtedy okno Google automatycznie wykryje Twoje konto firmowe.
+                </p>
+                <p>
+                  <strong>Sposób 2:</strong> W oknie logowania Google wybierz opcję <strong>„Użyj innego konta”</strong> i wpisz swój służbowy e-mail oraz hasło.
+                </p>
+                <p className="text-gray-500 italic">
+                  *Pamiętaj, aby Twój służbowy e-mail został dodany do listy Administratorów w panelu Super Admina.
+                </p>
+              </div>
+            </details>
+          </div>
         </div>
       </div>
     </div>
