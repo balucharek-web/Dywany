@@ -214,7 +214,7 @@ export function WarehousePanel({
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 flex flex-col gap-4 pb-24 md:pb-8">
+    <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 flex flex-col gap-4 pb-12 sm:pb-8">
       {/* Title */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>

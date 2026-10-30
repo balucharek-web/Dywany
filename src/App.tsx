@@ -29,7 +29,6 @@ import { EditCarpetModal } from './components/EditCarpetModal';
 import { AdminManagementModal } from './components/AdminManagementModal';
 import { HelpModal } from './components/HelpModal';
 import { ActivityLogModal } from './components/ActivityLogModal';
-import { MobileNavBar } from './components/MobileNavBar';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { ShieldAlert, LogOut, CheckCircle2 } from 'lucide-react';
 
@@ -691,21 +690,6 @@ export default function App() {
           </div>
         )}
       </main>
-
-      {/* Mobile Bottom Navigation Bar (md:hidden for 100% thumb ergonomics on phones) */}
-      <MobileNavBar
-        currentView={currentView}
-        onSelectView={(view) => {
-          if (view === 'warehouse' && (!currentUser || !isAdmin)) {
-            setIsLoginModalOpen(true);
-          } else {
-            handleSetCurrentView(view);
-          }
-        }}
-        onOpenScanner={() => setIsScannerModalOpen(true)}
-        onOpenFiszki={() => handleOpenFiszkiBatch()}
-        fiszkiCount={batchFiszkiItems.length}
-      />
 
       {/* Offline connectivity indicator */}
       <OfflineIndicator />
