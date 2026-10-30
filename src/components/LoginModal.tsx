@@ -22,12 +22,24 @@ export function LoginModal({ isOpen, onClose, onGoogleSignIn }: LoginModalProps)
       await onGoogleSignIn();
       onClose();
     } catch (err: unknown) {
+      console.error('Google Sign In Error details:', err);
       const errMsg = err instanceof Error ? err.message : String(err);
-      if (errMsg.includes('popup-closed-by-user')) {
-        // User closed the popup, no error needed
+      if (errMsg.includes('popup-closed-by-user') || errMsg.includes('cancelled-popup-request')) {
         return;
       }
-      setError('Wystąpił problem z logowaniem Google. Spróbuj ponownie.');
+      if (errMsg.includes('unauthorized-domain')) {
+        setError(
+          'Domena balucharek-web.github.io nie jest jeszcze dodana do Autoryzowanych Domen w Firebase Auth. Otwórz aplikację z autoryzowanego serwera Cloud Run (link poniżej), gdzie logowanie działa od ręki.'
+        );
+        return;
+      }
+      if (errMsg.includes('popup-blocked')) {
+        setError(
+          'Przeglądarka zablokowała wyskakujące okno logowania Google. Włącz wyskakujące okna (pop-up) w ustawieniach Chrome lub kliknij ponownie.'
+        );
+        return;
+      }
+      setError(`Problem z logowaniem: ${errMsg}`);
     } finally {
       setLoading(false);
     }
@@ -67,9 +79,19 @@ export function LoginModal({ isOpen, onClose, onGoogleSignIn }: LoginModalProps)
           </div>
 
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 shrink-0 text-red-600" />
-              <span>{error}</span>
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex flex-col gap-2">
+              <div className="flex items-start gap-2">
+                <ShieldAlert className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
+                <span>{error}</span>
+              </div>
+              {window.location.hostname.includes('github.io') && (
+                <a
+                  href="https://ais-pre-yplwi2gtghtglug5l43wte-12487892955.europe-west2.run.app"
+                  className="mt-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 text-center transition-colors"
+                >
+                  🚀 Otwórz wersję z działającym logowaniem Google
+                </a>
+              )}
             </div>
           )}
 
