@@ -111,6 +111,20 @@ export function EditCarpetModal({
             </div>
           )}
 
+          {isEditing && (carpetToEdit?.updatedBy || carpetToEdit?.updatedAt) && (
+            <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 truncate">
+                <span className="text-gray-500">Zmieniono przez:</span>
+                <strong className="font-bold truncate text-blue-950">{carpetToEdit.updatedBy || 'Brak danych'}</strong>
+              </div>
+              {carpetToEdit.updatedAt && (
+                <span className="text-[11px] text-blue-700 shrink-0 font-medium">
+                  {new Date(carpetToEdit.updatedAt).toLocaleDateString('pl-PL')} {new Date(carpetToEdit.updatedAt).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Location row: Magazyn & Podmagazyn */}
           <div className="grid grid-cols-2 gap-3 bg-amber-50/70 p-3.5 rounded-xl border border-amber-200">
             <div>

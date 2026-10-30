@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Carpet } from '../types';
 import { Search, Camera, FileText, MapPin, Tag, Barcode, Calendar, Copy, Check, Sparkles, HelpCircle } from 'lucide-react';
+import { formatRelativeTime } from '../utils/formatters';
 
 interface SearchViewProps {
   carpets: Carpet[];
@@ -216,6 +217,20 @@ export function SearchView({
                     )}
                   </div>
                 </div>
+
+                {/* Last modification info */}
+                {(carpet.updatedBy || carpet.updatedAt) && (
+                  <div className="flex items-center justify-between text-[11px] text-gray-400 px-1 pt-0.5">
+                    <span className="truncate">
+                      Zmodyfikował: <strong className="font-semibold text-gray-600">{carpet.updatedBy || 'Brak danych'}</strong>
+                    </span>
+                    {carpet.updatedAt && (
+                      <span className="shrink-0 ml-2 text-[10px]">
+                        {formatRelativeTime(carpet.updatedAt)}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             ))
           ) : (

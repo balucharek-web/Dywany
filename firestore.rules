@@ -56,5 +56,13 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isValidId(warehouseId) && isSuperAdmin();
     }
+
+    // Activity logs: Audit trail of changes in Sklep 038
+    // Anyone can read audit trail, verified admins can append entries, immutability enforced
+    match /activity_logs/{logId} {
+      allow read: if true;
+      allow create: if isValidId(logId) && isAdmin();
+      allow update, delete: if false;
+    }
   }
 }

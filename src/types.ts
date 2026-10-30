@@ -26,6 +26,29 @@ export interface Warehouse {
   createdBy?: string;
 }
 
+export type ActivityAction =
+  | 'add'
+  | 'edit'
+  | 'delete'
+  | 'import'
+  | 'add_warehouse'
+  | 'delete_warehouse'
+  | 'add_admin'
+  | 'remove_admin';
+
+export interface ActivityLog {
+  id: string;
+  timestamp: string; // ISO string
+  userEmail: string;
+  userName?: string;
+  action: ActivityAction;
+  target: string;
+  details: string;
+  miejsce?: string;
+  ref?: string;
+  ean?: string;
+}
+
 export const SUPER_ADMIN_EMAIL = 'baluch.arek@gmail.com';
 export const STORE_NUMBER = '038';
 export const STORE_CITY = 'MIKOŁÓW';

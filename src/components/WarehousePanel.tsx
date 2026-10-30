@@ -15,9 +15,13 @@ import {
   Copy,
   Check,
   AlertTriangle,
-  LogOut
+  LogOut,
+  History,
+  User,
+  Clock
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { formatDateTime, formatRelativeTime } from '../utils/formatters';
 
 interface WarehousePanelProps {
   carpets: Carpet[];
@@ -28,6 +32,7 @@ interface WarehousePanelProps {
   onOpenImport: () => void;
   onOpenStockExpo: () => void;
   onOpenHelp: () => void;
+  onOpenActivityLogs: () => void;
   onLogout: () => void;
   onGenerateFiszka: (carpet: Carpet) => void;
   isSuperAdmin: boolean;
@@ -45,6 +50,7 @@ export function WarehousePanel({
   onOpenImport,
   onOpenStockExpo,
   onOpenHelp,
+  onOpenActivityLogs,
   onLogout,
   onGenerateFiszka,
   isSuperAdmin,
@@ -290,7 +296,17 @@ export function WarehousePanel({
           Eksportuj bazę do XLSX
         </button>
 
-        {/* Row 5: Wyloguj (red) */}
+        {/* Row 5: Historia zmian w bazie (Rejestr audytu: kto co zmienił) */}
+        <button
+          onClick={onOpenActivityLogs}
+          className="w-full py-3 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
+          title="Zobacz pełny rejestr kto dodał, edytował lub usunął pozycje w bazie"
+        >
+          <History className="w-4 h-4" />
+          Historia zmian (Kto co zmienił)
+        </button>
+
+        {/* Row 6: Wyloguj (red) */}
         <button
           onClick={onLogout}
           className="w-full py-3 px-4 rounded-xl bg-[#ef4444] hover:bg-[#dc2626] text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2 shadow-xs transition-transform active:scale-98 cursor-pointer"
@@ -692,6 +708,22 @@ function SlotCard({
           </div>
           {copiedEan ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-gray-400" />}
         </div>
+      </div>
+
+      {/* Modification audit info: WHO made changes and WHEN */}
+      <div className="flex items-center justify-between text-[11px] text-gray-500 bg-gray-50/80 rounded-lg px-2.5 py-1.5 border border-gray-100">
+        <div className="flex items-center gap-1.5 truncate">
+          <User className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+          <span className="text-gray-400">Zmienił:</span>
+          <span className="font-semibold text-gray-800 truncate" title={carpet.updatedBy || 'Brak danych'}>
+            {carpet.updatedBy || 'Brak danych'}
+          </span>
+        </div>
+        {carpet.updatedAt && (
+          <span className="text-gray-400 shrink-0 ml-1.5 text-[10px]" title={formatDateTime(carpet.updatedAt)}>
+            {formatRelativeTime(carpet.updatedAt)}
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-3 gap-1.5 pt-1">

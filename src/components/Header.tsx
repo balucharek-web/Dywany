@@ -1,7 +1,7 @@
 import { User } from 'firebase/auth';
 import { LeroyMerlinLogo } from './LeroyMerlinLogo';
 import { STORE_NUMBER, STORE_CITY, SUPER_ADMIN_EMAIL } from '../types';
-import { LogOut, ShieldCheck, Database, Search, Users, RefreshCw } from 'lucide-react';
+import { LogOut, ShieldCheck, Database, Search, Users, RefreshCw, History } from 'lucide-react';
 
 interface HeaderProps {
   currentView: 'search' | 'warehouse';
@@ -13,6 +13,7 @@ interface HeaderProps {
   onLogoutClick: () => void;
   onSwitchAccount?: () => void;
   onOpenSuperAdminModal: () => void;
+  onOpenActivityLogs: () => void;
   isSyncing: boolean;
 }
 
@@ -26,6 +27,7 @@ export function Header({
   onLogoutClick,
   onSwitchAccount,
   onOpenSuperAdminModal,
+  onOpenActivityLogs,
   isSyncing
 }: HeaderProps) {
   return (
@@ -104,6 +106,16 @@ export function Header({
               <span className="hidden sm:inline">Admini</span>
             </button>
           )}
+
+          {/* Historia zmian (Audit trail) button */}
+          <button
+            onClick={onOpenActivityLogs}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 transition-colors shadow-2xs cursor-pointer"
+            title="Historia zmian: sprawdź kto, co i kiedy zmienił w bazie"
+          >
+            <History className="w-3.5 h-3.5 text-purple-600" />
+            <span className="hidden sm:inline">Historia zmian</span>
+          </button>
 
           {/* Toggle between Search & Warehouse */}
           {currentView === 'search' ? (

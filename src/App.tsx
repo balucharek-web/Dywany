@@ -14,7 +14,7 @@ import {
   User
 } from 'firebase/auth';
 import { db, auth, googleProvider, handleFirestoreError, OperationType } from './firebase';
-import { Carpet, AdminUser, Warehouse, SUPER_ADMIN_EMAIL, STORE_NUMBER, STORE_CITY } from './types';
+import { Carpet, AdminUser, Warehouse, ActivityLog, ActivityAction, SUPER_ADMIN_EMAIL, STORE_NUMBER, STORE_CITY } from './types';
 import { initialCarpets } from './data/seedData';
 import { Header } from './components/Header';
 import { SearchView } from './components/SearchView';
@@ -28,6 +28,7 @@ import { ImportModal } from './components/ImportModal';
 import { EditCarpetModal } from './components/EditCarpetModal';
 import { AdminManagementModal } from './components/AdminManagementModal';
 import { HelpModal } from './components/HelpModal';
+import { ActivityLogModal } from './components/ActivityLogModal';
 import { ShieldAlert, LogOut, CheckCircle2 } from 'lucide-react';
 
 export default function App() {
@@ -53,6 +54,8 @@ export default function App() {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isAdminManagementOpen, setIsAdminManagementOpen] = useState(false);
+  const [isActivityLogModalOpen, setIsActivityLogModalOpen] = useState(false);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
 
   // Edit carpet modal state
   const [isEditCarpetOpen, setIsEditCarpetOpen] = useState(false);
@@ -160,6 +163,41 @@ export default function App() {
     return () => unsubscribeWarehouses();
   }, []);
 
+  // Real-time synchronization of Activity Logs from Firestore (Audit Trail)
+  useEffect(() => {
+    const unsubscribeLogs = onSnapshot(
+      collection(db, 'activity_logs'),
+      (snapshot) => {
+        const loaded: ActivityLog[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          loaded.push({
+            id: docSnap.id,
+            timestamp: data.timestamp || new Date().toISOString(),
+            userEmail: data.userEmail || 'Nieznany',
+            userName: data.userName,
+            action: (data.action as ActivityAction) || 'edit',
+            target: data.target || '',
+            details: data.details || '',
+            miejsce: data.miejsce,
+            ref: data.ref,
+            ean: data.ean
+          });
+        });
+        // Sort newest first
+        loaded.sort(
+          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+        setActivityLogs(loaded);
+      },
+      (error) => {
+        console.warn('Activity logs listener notice:', error.message);
+      }
+    );
+
+    return () => unsubscribeLogs();
+  }, []);
+
   // Compute active warehouse bays (from Firestore, fallback to 1..120 default + carpets)
   const activeBays = useMemo(() => {
     if (warehouses.length > 0) {
@@ -220,6 +258,33 @@ export default function App() {
     }
   };
 
+  // Audit logger to record who made changes in Firestore
+  const logActivity = async (
+    action: ActivityAction,
+    target: string,
+    details: string,
+    extra?: { miejsce?: string; ref?: string; ean?: string }
+  ) => {
+    try {
+      const userEmail = currentUser?.email || 'admin@leroymerlin.pl';
+      const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const payload: ActivityLog = {
+        id: logId,
+        timestamp: new Date().toISOString(),
+        userEmail,
+        action,
+        target,
+        details,
+        miejsce: extra?.miejsce || '',
+        ref: extra?.ref || '',
+        ean: extra?.ean || ''
+      };
+      await setDoc(doc(db, 'activity_logs', logId), payload);
+    } catch (err) {
+      console.warn('Activity log write notice:', err);
+    }
+  };
+
   // Add / Edit Carpet
   const handleSaveCarpet = async (data: Partial<Carpet>) => {
     if (!isAdmin) {
@@ -228,6 +293,10 @@ export default function App() {
     }
 
     const docId = data.id || `mag_${data.magazyn}_${data.podmagazyn?.toUpperCase()}`;
+    const isExisting = carpets.some((c) => c.id === docId);
+    const userEmail = currentUser?.email || 'admin@leroymerlin.pl';
+    const timestamp = new Date().toISOString();
+
     const payload = {
       magazyn: Number(data.magazyn),
       podmagazyn: String(data.podmagazyn).toUpperCase(),
@@ -235,13 +304,25 @@ export default function App() {
       nazwa: data.nazwa || '',
       ref: data.ref || '',
       ean: data.ean || '',
-      dodano: data.dodano || new Date().toISOString().split('T')[0],
-      updatedAt: new Date().toISOString(),
-      updatedBy: currentUser?.email || 'admin'
+      dodano: data.dodano || timestamp.split('T')[0],
+      updatedAt: timestamp,
+      updatedBy: userEmail
     };
 
     try {
       await setDoc(doc(db, 'carpets', docId), payload, { merge: true });
+      await logActivity(
+        isExisting ? 'edit' : 'add',
+        payload.nazwa || `Dywan ${payload.miejsce}`,
+        isExisting
+          ? `Zaktualizowano dane dywanu "${payload.nazwa}" (Miejsce: ${payload.miejsce}, REF: ${payload.ref || '-'}, EAN: ${payload.ean || '-'})`
+          : `Dodano nowy dywan "${payload.nazwa}" do magazynu (Miejsce: ${payload.miejsce}, REF: ${payload.ref || '-'}, EAN: ${payload.ean || '-'})`,
+        {
+          miejsce: payload.miejsce,
+          ref: payload.ref,
+          ean: payload.ean
+        }
+      );
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `carpets/${docId}`);
     }
@@ -256,7 +337,18 @@ export default function App() {
 
     if (window.confirm(`Czy na pewno chcesz usunąć pozycję:\n"${name}"?`)) {
       try {
+        const carpetToDelete = carpets.find((c) => c.id === carpetId);
         await deleteDoc(doc(db, 'carpets', carpetId));
+        await logActivity(
+          'delete',
+          name || `Dywan ${carpetId}`,
+          `Usunięto pozycję "${name}" z miejsca ${carpetToDelete?.miejsce || carpetId} (REF: ${carpetToDelete?.ref || '-'}, EAN: ${carpetToDelete?.ean || '-'})`,
+          {
+            miejsce: carpetToDelete?.miejsce,
+            ref: carpetToDelete?.ref,
+            ean: carpetToDelete?.ean
+          }
+        );
       } catch (error) {
         handleFirestoreError(error, OperationType.DELETE, `carpets/${carpetId}`);
       }
@@ -299,6 +391,11 @@ export default function App() {
       });
 
       await batch.commit();
+      await logActivity(
+        'import',
+        `Import bazy: ${incoming.length} dywanów`,
+        `Zaimportowano ${incoming.length} pozycji w trybie: ${mode === 'replace' ? 'zastąpienie całej bazy' : 'aktualizacja/scalenie'}`
+      );
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'carpets/batch');
     }
@@ -320,6 +417,11 @@ export default function App() {
 
     try {
       await setDoc(doc(db, 'admins', docId), payload);
+      await logActivity(
+        'add_admin',
+        `Administrator: ${normalized}`,
+        `Nadano uprawnienia administratora sklepu 038 dla użytkownika ${normalized}`
+      );
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `admins/${docId}`);
     }
@@ -333,6 +435,11 @@ export default function App() {
     const docId = email.trim().toLowerCase();
     try {
       await deleteDoc(doc(db, 'admins', docId));
+      await logActivity(
+        'remove_admin',
+        `Administrator: ${email}`,
+        `Odebrano uprawnienia administratora sklepu 038 dla użytkownika ${email}`
+      );
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `admins/${docId}`);
     }
@@ -367,6 +474,11 @@ export default function App() {
       });
 
       await batch.commit();
+      await logActivity(
+        'add_warehouse',
+        `Magazyny: ${numbers.join(', ')}`,
+        `Dodano nowe magazyny do rejestru: ${numbers.join(', ')}`
+      );
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'warehouses');
     }
@@ -405,6 +517,11 @@ export default function App() {
       }
 
       await batch.commit();
+      await logActivity(
+        'delete_warehouse',
+        `Magazyn ${bayNumber}`,
+        `Usunięto magazyn ${bayNumber}${deleteCarpets ? ' wraz ze znajdującymi się w nim dywanami' : ''}`
+      );
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `warehouses/${bayNumber}`);
     }
@@ -426,6 +543,11 @@ export default function App() {
         });
       }
       await batch.commit();
+      await logActivity(
+        'add_warehouse',
+        `Inicjalizacja 1-${count}`,
+        `Zainicjalizowano domyślny zestaw magazynów 1 do ${count}`
+      );
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'warehouses/init');
     }
@@ -501,6 +623,7 @@ export default function App() {
         onLogoutClick={handleLogout}
         onSwitchAccount={handleSwitchAccount}
         onOpenSuperAdminModal={() => setIsAdminManagementOpen(true)}
+        onOpenActivityLogs={() => setIsActivityLogModalOpen(true)}
         isSyncing={isSyncing}
       />
 
@@ -552,6 +675,7 @@ export default function App() {
             onOpenImport={() => setIsImportOpen(true)}
             onOpenStockExpo={() => setIsStockExpoOpen(true)}
             onOpenHelp={() => setIsHelpOpen(true)}
+            onOpenActivityLogs={() => setIsActivityLogModalOpen(true)}
             onLogout={handleLogout}
             onGenerateFiszka={(c) => handleOpenFiszkiBatch(c)}
             isSuperAdmin={isSuperAdmin}
@@ -642,6 +766,12 @@ export default function App() {
       <HelpModal
         isOpen={isHelpOpen}
         onClose={() => setIsHelpOpen(false)}
+      />
+
+      <ActivityLogModal
+        isOpen={isActivityLogModalOpen}
+        onClose={() => setIsActivityLogModalOpen(false)}
+        logs={activityLogs}
       />
     </div>
   );

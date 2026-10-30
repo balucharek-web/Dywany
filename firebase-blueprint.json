@@ -101,6 +101,58 @@
         }
       },
       "required": ["number"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Audit trail log tracking who modified, added or removed carpets, warehouses and admins in Sklep 038",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "type": "string",
+          "description": "ISO timestamp of the modification"
+        },
+        "userEmail": {
+          "type": "string",
+          "description": "Email address of the administrator who made the change",
+          "maxLength": 150
+        },
+        "userName": {
+          "type": "string",
+          "description": "Optional display name",
+          "maxLength": 100
+        },
+        "action": {
+          "type": "string",
+          "description": "Type of database action",
+          "enum": ["add", "edit", "delete", "import", "add_warehouse", "delete_warehouse", "add_admin", "remove_admin"]
+        },
+        "target": {
+          "type": "string",
+          "description": "Brief description of the modified target",
+          "maxLength": 200
+        },
+        "details": {
+          "type": "string",
+          "description": "Human-readable details of the change",
+          "maxLength": 1000
+        },
+        "miejsce": {
+          "type": "string",
+          "description": "Warehouse rack/slot location",
+          "maxLength": 50
+        },
+        "ref": {
+          "type": "string",
+          "description": "Product ref number",
+          "maxLength": 50
+        },
+        "ean": {
+          "type": "string",
+          "description": "Product EAN barcode",
+          "maxLength": 50
+        }
+      },
+      "required": ["timestamp", "userEmail", "action", "target", "details"]
     }
   },
   "firestore": {
@@ -115,6 +167,10 @@
     "/warehouses/{warehouseId}": {
       "schema": "Warehouse",
       "description": "Configured warehouse bays in Sklep 038"
+    },
+    "/activity_logs/{logId}": {
+      "schema": "ActivityLog",
+      "description": "Audit trail entries tracking who made database changes in Sklep 038"
     }
   }
 }
