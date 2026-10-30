@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { X, ShieldAlert, LogIn, CheckCircle2 } from 'lucide-react';
+import { User } from 'firebase/auth';
+import { X, ShieldAlert, LogIn, CheckCircle2, RefreshCw, LogOut, AlertTriangle } from 'lucide-react';
 import { LeroyMerlinLogo } from './LeroyMerlinLogo';
 import { STORE_NUMBER, STORE_CITY, SUPER_ADMIN_EMAIL } from '../types';
 
@@ -7,9 +8,23 @@ interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
   onGoogleSignIn: () => Promise<void>;
+  currentUser?: User | null;
+  isAdmin?: boolean;
+  isSuperAdmin?: boolean;
+  onSwitchAccount?: () => Promise<void>;
+  onLogout?: () => Promise<void>;
 }
 
-export function LoginModal({ isOpen, onClose, onGoogleSignIn }: LoginModalProps) {
+export function LoginModal({
+  isOpen,
+  onClose,
+  onGoogleSignIn,
+  currentUser,
+  isAdmin,
+  isSuperAdmin,
+  onSwitchAccount,
+  onLogout
+}: LoginModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,6 +60,23 @@ export function LoginModal({ isOpen, onClose, onGoogleSignIn }: LoginModalProps)
     }
   };
 
+  const handleSwitch = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      if (onSwitchAccount) {
+        await onSwitchAccount();
+      } else {
+        await onGoogleSignIn();
+      }
+      onClose();
+    } catch (err: unknown) {
+      console.error('Switch account error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs">
       <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl overflow-hidden flex flex-col p-6 sm:p-8">
@@ -71,57 +103,120 @@ export function LoginModal({ isOpen, onClose, onGoogleSignIn }: LoginModalProps)
 
         {/* Content Box */}
         <div className="mt-6 bg-gray-50/80 border border-gray-200 rounded-2xl p-5 flex flex-col gap-4">
-          <div className="text-xs sm:text-sm text-gray-700 leading-relaxed text-center">
-            <span className="font-bold text-gray-900 block mb-1">
-              Logowanie administratora magazynu
-            </span>
-            Logowanie kontem Google jest wymagane wyłącznie do dodawania, edycji i usuwania pozycji w magazynie. Wyszukiwanie jest dostępne dla wszystkich bez logowania.
-          </div>
-
-          {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex flex-col gap-2">
-              <div className="flex items-start gap-2">
-                <ShieldAlert className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
-                <span>{error}</span>
+          {currentUser ? (
+            <div className="flex flex-col gap-3">
+              <div className={`p-3.5 rounded-xl border text-xs sm:text-sm ${
+                isAdmin ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-200 text-amber-900'
+              }`}>
+                <div className="font-bold flex items-center gap-1.5 mb-1">
+                  {isAdmin ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>Zalogowano pomyślnie</span>
+                    </>
+                  ) : (
+                    <>
+                      <AlertTriangle className="w-4 h-4 text-amber-600" />
+                      <span>Konto bez uprawnień administratora</span>
+                    </>
+                  )}
+                </div>
+                <div className="font-mono text-xs break-all bg-white/70 px-2 py-1 rounded border border-black/5 mb-1.5">
+                  {currentUser.email}
+                </div>
+                <div className="text-[11px] leading-relaxed">
+                  {isSuperAdmin ? (
+                    <span className="font-semibold text-purple-700">Rola: Super Administrator (pełny dostęp do sklepu i magazynów)</span>
+                  ) : isAdmin ? (
+                    <span className="font-semibold text-blue-700">Rola: Administrator Sklepu {STORE_NUMBER}</span>
+                  ) : (
+                    <span>
+                      Ten adres e-mail nie ma uprawnień do edycji magazynu. Aby uzyskać dostęp, zaloguj się jako Super Admin (<strong className="font-mono">{SUPER_ADMIN_EMAIL}</strong>) i dodaj ten adres w zakładce <strong>„Admini”</strong>.
+                    </span>
+                  )}
+                </div>
               </div>
-              {window.location.hostname.includes('github.io') && (
-                <a
-                  href="https://ais-pre-yplwi2gtghtglug5l43wte-12487892955.europe-west2.run.app"
-                  className="mt-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 text-center transition-colors"
-                >
-                  🚀 Otwórz wersję z działającym logowaniem Google
-                </a>
-              )}
-            </div>
-          )}
 
-          {/* Google Sign-in button */}
-          <button
-            onClick={handleSignIn}
-            disabled={loading}
-            className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-3 transition-all shadow-md active:scale-98 cursor-pointer"
-          >
-            {/* Google G logo */}
-            <svg className="w-5 h-5 bg-white rounded-full p-0.5" viewBox="0 0 24 24">
-              <path
-                fill="#4285F4"
-                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-              />
-              <path
-                fill="#34A853"
-                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-              />
-              <path
-                fill="#FBBC05"
-                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-              />
-              <path
-                fill="#EA4335"
-                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-              />
-            </svg>
-            <span>{loading ? 'Logowanie...' : 'Zaloguj z kontem Google'}</span>
-          </button>
+              {/* Action buttons when logged in */}
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={handleSwitch}
+                  disabled={loading}
+                  className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-sm active:scale-98 cursor-pointer"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>{loading ? 'Przełączanie...' : 'Zmień konto Google (profil służbowy / osobisty)'}</span>
+                </button>
+
+                {onLogout && (
+                  <button
+                    onClick={async () => {
+                      await onLogout();
+                      onClose();
+                    }}
+                    className="w-full py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Wyloguj</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="text-xs sm:text-sm text-gray-700 leading-relaxed text-center">
+                <span className="font-bold text-gray-900 block mb-1">
+                  Logowanie administratora magazynu
+                </span>
+                Logowanie kontem Google jest wymagane wyłącznie do dodawania, edycji i usuwania pozycji w magazynie. Wyszukiwanie jest dostępne dla wszystkich bez logowania.
+              </div>
+
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex flex-col gap-2">
+                  <div className="flex items-start gap-2">
+                    <ShieldAlert className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
+                    <span>{error}</span>
+                  </div>
+                  {window.location.hostname.includes('github.io') && (
+                    <a
+                      href="https://ais-pre-yplwi2gtghtglug5l43wte-12487892955.europe-west2.run.app"
+                      className="mt-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 text-center transition-colors"
+                    >
+                      🚀 Otwórz wersję z działającym logowaniem Google
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {/* Google Sign-in button */}
+              <button
+                onClick={handleSignIn}
+                disabled={loading}
+                className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-3 transition-all shadow-md active:scale-98 cursor-pointer"
+              >
+                {/* Google G logo */}
+                <svg className="w-5 h-5 bg-white rounded-full p-0.5" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285F4"
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                  />
+                </svg>
+                <span>{loading ? 'Logowanie...' : 'Zaloguj z kontem Google'}</span>
+              </button>
+            </>
+          )}
 
           <div className="text-[11px] text-gray-500 text-center">
             Super Administrator: <span className="font-mono font-semibold text-gray-700">{SUPER_ADMIN_EMAIL}</span>
@@ -129,23 +224,23 @@ export function LoginModal({ isOpen, onClose, onGoogleSignIn }: LoginModalProps)
 
           {/* Android Work Profile / Profil Służbowy Tip */}
           <div className="mt-2 pt-3 border-t border-gray-200">
-            <details className="group text-left text-xs text-gray-600 bg-blue-50/60 rounded-xl p-3 border border-blue-100">
+            <details className="group text-left text-xs text-gray-600 bg-blue-50/60 rounded-xl p-3 border border-blue-100" open={!isAdmin && Boolean(currentUser)}>
               <summary className="font-semibold text-blue-900 cursor-pointer flex items-center justify-between list-none select-none">
                 <span className="flex items-center gap-1.5">
                   <span className="text-base">💼</span>
-                  <span>Masz telefon z profilem służbowym?</span>
+                  <span>Jak logować się profilem służbowym i osobistym?</span>
                 </span>
                 <span className="text-blue-500 text-[11px] group-open:rotate-180 transition-transform">▼</span>
               </summary>
-              <div className="mt-2 text-[11px] leading-relaxed text-blue-950 space-y-1.5 pt-1.5 border-t border-blue-200/60">
+              <div className="mt-2 text-[11px] leading-relaxed text-blue-950 space-y-2 pt-1.5 border-t border-blue-200/60">
                 <p>
-                  <strong>Sposób 1 (Najwygodniejszy):</strong> Otwórz ten link w <strong>Chrome ze znaczkiem walizeczki 💼</strong> (w zakładce aplikacji <em>Służbowe / Praca</em>). Wtedy okno Google automatycznie wykryje Twoje konto firmowe.
+                  <strong>Krok 1 (Uprawnienia):</strong> Aby profil służbowy mógł edytować magazyn, zaloguj się jako Super Admin (<strong>{SUPER_ADMIN_EMAIL}</strong>) i w zakładce <strong>„Admini”</strong> dodaj swój adres firmowy.
                 </p>
                 <p>
-                  <strong>Sposób 2:</strong> W oknie logowania Google wybierz opcję <strong>„Użyj innego konta”</strong> i wpisz swój służbowy e-mail oraz hasło.
+                  <strong>Krok 2 (Zmień konto w 1 kliknięcie):</strong> Kliknij przycisk <strong>„Zmień konto” 🔄</strong> w nagłówku. Google pokaże okno z wyborem wszystkich kont na urządzeniu (osobistych i służbowych).
                 </p>
-                <p className="text-gray-500 italic">
-                  *Pamiętaj, aby Twój służbowy e-mail został dodany do listy Administratorów w panelu Super Admina.
+                <p>
+                  <strong>Krok 3 (Na telefonie z profilem służbowym):</strong> Możesz otworzyć aplikację w <strong>Chrome ze znaczkiem walizeczki 💼</strong> lub w normalnym Chrome kliknąć <em>„Użyj innego konta”</em>.
                 </p>
               </div>
             </details>

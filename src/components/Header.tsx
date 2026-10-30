@@ -12,6 +12,7 @@ interface HeaderProps {
   isSuperAdmin: boolean;
   onLoginClick: () => void;
   onLogoutClick: () => void;
+  onSwitchAccount?: () => void;
   onOpenSuperAdminModal: () => void;
   isSyncing: boolean;
 }
@@ -24,6 +25,7 @@ export function Header({
   isSuperAdmin,
   onLoginClick,
   onLogoutClick,
+  onSwitchAccount,
   onOpenSuperAdminModal,
   isSyncing
 }: HeaderProps) {
@@ -49,23 +51,46 @@ export function Header({
 
         {/* Action buttons right */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* User info if logged in */}
+          {/* User info & account switch if logged in */}
           {user && (
-            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 rounded-lg text-xs text-gray-700">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-100/90 border border-gray-200 rounded-xl text-xs text-gray-700">
               {isSuperAdmin ? (
-                <span className="flex items-center gap-1 font-semibold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">
-                  <ShieldCheck className="w-3.5 h-3.5" /> Super Admin
+                <span className="flex items-center gap-1 font-semibold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded text-[11px]">
+                  <ShieldCheck className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Super Admin</span><span className="sm:hidden">Super</span>
                 </span>
               ) : isAdmin ? (
-                <span className="flex items-center gap-1 font-semibold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">
-                  <ShieldCheck className="w-3.5 h-3.5" /> Admin 038
+                <span className="flex items-center gap-1 font-semibold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded text-[11px]">
+                  <ShieldCheck className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Admin 038</span><span className="sm:hidden">Admin</span>
                 </span>
               ) : (
-                <span className="text-gray-500 font-medium">Brak uprawnień</span>
+                <span className="text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded font-medium text-[11px]" title="To konto nie ma uprawnień do edycji magazynu">
+                  Brak uprawnień
+                </span>
               )}
-              <span className="truncate max-w-[140px]" title={user.email || ''}>
-                {user.email}
+
+              <span className="truncate max-w-[100px] sm:max-w-[140px] text-[11px] font-medium" title={user.email || ''}>
+                {user.email?.split('@')[0]}
               </span>
+
+              {/* Quick switch account button */}
+              {onSwitchAccount && (
+                <button
+                  onClick={onSwitchAccount}
+                  className="p-1 text-gray-500 hover:text-blue-600 hover:bg-white rounded-md transition-colors"
+                  title="Zmień konto Google (przełącz na profil służbowy / osobisty)"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              )}
+
+              {/* Logout button */}
+              <button
+                onClick={onLogoutClick}
+                className="p-1 text-gray-500 hover:text-red-600 hover:bg-white rounded-md transition-colors"
+                title="Wyloguj"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
 
@@ -106,17 +131,6 @@ export function Header({
             >
               <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               Wyszukiwarka
-            </button>
-          )}
-
-          {/* Logout if in warehouse */}
-          {user && currentView === 'warehouse' && (
-            <button
-              onClick={onLogoutClick}
-              className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-              title="Wyloguj"
-            >
-              <LogOut className="w-4 h-4" />
             </button>
           )}
         </div>

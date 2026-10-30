@@ -207,6 +207,19 @@ export default function App() {
     setCurrentView('search');
   };
 
+  // Switch account (sign out current and prompt account chooser immediately)
+  const handleSwitchAccount = async () => {
+    try {
+      await signOut(auth);
+      const result = await signInWithPopup(auth, googleProvider);
+      if (result.user) {
+        setCurrentView('warehouse');
+      }
+    } catch (err: unknown) {
+      console.log('Switch account closed or cancelled:', err);
+    }
+  };
+
   // Add / Edit Carpet
   const handleSaveCarpet = async (data: Partial<Carpet>) => {
     if (!isAdmin) {
@@ -486,6 +499,7 @@ export default function App() {
         isSuperAdmin={isSuperAdmin}
         onLoginClick={() => setIsLoginModalOpen(true)}
         onLogoutClick={handleLogout}
+        onSwitchAccount={handleSwitchAccount}
         onOpenSuperAdminModal={() => setIsAdminManagementOpen(true)}
         isSyncing={isSyncing}
       />
@@ -499,12 +513,20 @@ export default function App() {
               Zalogowano jako: <strong className="font-mono">{currentUser.email}</strong>. Twoje konto nie zostało jeszcze dodane do listy administratorów Sklepu {STORE_NUMBER}. Skontaktuj się z Super Administratorem (<span className="font-mono font-bold">{SUPER_ADMIN_EMAIL}</span>).
             </div>
           </div>
-          <button
-            onClick={handleLogout}
-            className="px-3 py-1 bg-amber-200 hover:bg-amber-300 font-bold rounded-lg text-amber-900 transition-colors"
-          >
-            Wyloguj
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSwitchAccount}
+              className="px-3 py-1 bg-amber-600 hover:bg-amber-700 font-bold rounded-lg text-white transition-colors cursor-pointer"
+            >
+              Zmień konto Google
+            </button>
+            <button
+              onClick={handleLogout}
+              className="px-3 py-1 bg-amber-200 hover:bg-amber-300 font-bold rounded-lg text-amber-900 transition-colors cursor-pointer"
+            >
+              Wyloguj
+            </button>
+          </div>
         </div>
       )}
 
@@ -548,6 +570,11 @@ export default function App() {
         isOpen={isLoginModalOpen}
         onClose={() => setIsLoginModalOpen(false)}
         onGoogleSignIn={handleGoogleSignIn}
+        currentUser={currentUser}
+        isAdmin={isAdmin}
+        isSuperAdmin={isSuperAdmin}
+        onSwitchAccount={handleSwitchAccount}
+        onLogout={handleLogout}
       />
 
       <BarcodeScannerModal
