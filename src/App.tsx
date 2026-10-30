@@ -594,9 +594,10 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f3f4f6] text-gray-900 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#f3f4f6] text-gray-900 flex flex-col font-sans notranslate" translate="no">
       {/* Top Header */}
       <Header
+        key="app-header"
         currentView={currentView}
         setCurrentView={(view) => {
           if (view === 'warehouse' && (!currentUser || !isAdmin)) {
@@ -615,75 +616,82 @@ export default function App() {
         isSyncing={isSyncing}
       />
 
-      {/* Unauthorized Warning Banner if logged in user is not admin */}
-      {currentUser && !isAdmin && (
-        <div className="bg-amber-100 border-b border-amber-300 px-4 py-3 text-xs sm:text-sm text-amber-950 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
-          <div className="flex items-center gap-2">
-            <ShieldAlert className="w-5 h-5 text-amber-700 shrink-0" />
-            <div>
-              Zalogowano jako: <strong className="font-mono">{currentUser.email}</strong>. Twoje konto nie zostało jeszcze dodane do listy administratorów Sklepu {STORE_NUMBER}. Skontaktuj się z Super Administratorem (<span className="font-mono font-bold">{SUPER_ADMIN_EMAIL}</span>).
+      {/* Unauthorized Warning Banner slot - persistent container keeps root DOM hierarchy unchanged */}
+      <div key="app-banner-slot">
+        {currentUser && !isAdmin && (
+          <div className="bg-amber-100 border-b border-amber-300 px-4 py-3 text-xs sm:text-sm text-amber-950 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-5 h-5 text-amber-700 shrink-0" />
+              <div>
+                Zalogowano jako: <strong className="font-mono">{currentUser.email}</strong>. Twoje konto nie zostało jeszcze dodane do listy administratorów Sklepu {STORE_NUMBER}. Skontaktuj się z Super Administratorem (<span className="font-mono font-bold">{SUPER_ADMIN_EMAIL}</span>).
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSwitchAccount}
+                className="px-3 py-1 bg-amber-600 hover:bg-amber-700 font-bold rounded-lg text-white transition-colors cursor-pointer"
+              >
+                Zmień konto Google
+              </button>
+              <button
+                onClick={handleLogout}
+                className="px-3 py-1 bg-amber-200 hover:bg-amber-300 font-bold rounded-lg text-amber-900 transition-colors cursor-pointer"
+              >
+                Wyloguj
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleSwitchAccount}
-              className="px-3 py-1 bg-amber-600 hover:bg-amber-700 font-bold rounded-lg text-white transition-colors cursor-pointer"
-            >
-              Zmień konto Google
-            </button>
-            <button
-              onClick={handleLogout}
-              className="px-3 py-1 bg-amber-200 hover:bg-amber-300 font-bold rounded-lg text-amber-900 transition-colors cursor-pointer"
-            >
-              Wyloguj
-            </button>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Main View Area */}
-      <main className="flex-1 pb-16">
-        {authLoading && currentView === 'warehouse' ? (
-          <div className="max-w-md mx-auto py-24 px-4 text-center flex flex-col items-center justify-center">
+      <main key="app-main" className="flex-1 pb-16">
+        {currentView === 'search' ? (
+          <div key="view-search-wrapper">
+            <SearchView
+              carpets={carpets}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              onOpenScanner={() => setIsScannerModalOpen(true)}
+              onOpenFiszkiModal={handleOpenFiszkiBatch}
+              onPrintSingleFiszka={(c) => setFiszkaCarpet(c)}
+              onOpenHelp={() => setIsHelpOpen(true)}
+            />
+          </div>
+        ) : authLoading ? (
+          <div key="view-loading-wrapper" className="max-w-md mx-auto py-24 px-4 text-center flex flex-col items-center justify-center">
             <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4" />
             <h3 className="text-base font-bold text-gray-800">Sprawdzanie uprawnień administratora...</h3>
             <p className="text-xs text-gray-500 mt-1">Łączenie z bazą sklepu 038 w czasie rzeczywistym</p>
           </div>
-        ) : currentView === 'search' ? (
-          <SearchView
-            carpets={carpets}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            onOpenScanner={() => setIsScannerModalOpen(true)}
-            onOpenFiszkiModal={handleOpenFiszkiBatch}
-            onPrintSingleFiszka={(c) => setFiszkaCarpet(c)}
-            onOpenHelp={() => setIsHelpOpen(true)}
-          />
         ) : (
-          <WarehousePanel
-            carpets={carpets}
-            activeBays={activeBays}
-            onAddProduct={(bay, subBay) => handleOpenAdd(bay, subBay)}
-            onEditProduct={handleOpenEdit}
-            onDeleteProduct={handleDeleteCarpet}
-            onOpenImport={() => setIsImportOpen(true)}
-            onOpenStockExpo={() => setIsStockExpoOpen(true)}
-            onOpenHelp={() => setIsHelpOpen(true)}
-            onOpenActivityLogs={() => setIsActivityLogModalOpen(true)}
-            onLogout={handleLogout}
-            onGenerateFiszka={(c) => handleOpenFiszkiBatch(c)}
-            isSuperAdmin={isSuperAdmin}
-            onOpenSuperAdminModal={(tab) => {
-              setSuperAdminTab(tab || 'admins');
-              setIsAdminManagementOpen(true);
-            }}
-            onDeleteWarehouse={handleDeleteWarehouse}
-            onAddWarehouses={handleAddWarehouses}
-          />
+          <div key="view-warehouse-wrapper">
+            <WarehousePanel
+              carpets={carpets}
+              activeBays={activeBays}
+              onAddProduct={(bay, subBay) => handleOpenAdd(bay, subBay)}
+              onEditProduct={handleOpenEdit}
+              onDeleteProduct={handleDeleteCarpet}
+              onOpenImport={() => setIsImportOpen(true)}
+              onOpenStockExpo={() => setIsStockExpoOpen(true)}
+              onOpenHelp={() => setIsHelpOpen(true)}
+              onOpenActivityLogs={() => setIsActivityLogModalOpen(true)}
+              onLogout={handleLogout}
+              onGenerateFiszka={(c) => handleOpenFiszkiBatch(c)}
+              isSuperAdmin={isSuperAdmin}
+              onOpenSuperAdminModal={(tab) => {
+                setSuperAdminTab(tab || 'admins');
+                setIsAdminManagementOpen(true);
+              }}
+              onDeleteWarehouse={handleDeleteWarehouse}
+              onAddWarehouses={handleAddWarehouses}
+            />
+          </div>
         )}
       </main>
 
-      {/* Modals */}
+      {/* Modals in a stable persistent container */}
+      <div key="app-modals">
       <LoginModal
         isOpen={isLoginModalOpen}
         onClose={() => setIsLoginModalOpen(false)}
@@ -767,6 +775,7 @@ export default function App() {
         onClose={() => setIsActivityLogModalOpen(false)}
         logs={activityLogs}
       />
+      </div>
     </div>
   );
 }

@@ -52,14 +52,18 @@ export function Header({
         <div className="flex items-center gap-2 flex-wrap">
           {/* User info & account switch if logged in */}
           {user && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-100/90 border border-gray-200 rounded-xl text-xs text-gray-700">
+            <div key="header-user-badge" className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-100/90 border border-gray-200 rounded-xl text-xs text-gray-700">
               {isSuperAdmin ? (
                 <span className="flex items-center gap-1 font-semibold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded text-[11px]">
-                  <ShieldCheck className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Super Admin</span><span className="sm:hidden">Super</span>
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Super Admin</span>
+                  <span className="sm:hidden">Super</span>
                 </span>
               ) : isAdmin ? (
                 <span className="flex items-center gap-1 font-semibold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded text-[11px]">
-                  <ShieldCheck className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Admin 038</span><span className="sm:hidden">Admin</span>
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Admin 038</span>
+                  <span className="sm:hidden">Admin</span>
                 </span>
               ) : (
                 <span className="text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded font-medium text-[11px]" title="To konto nie ma uprawnień do edycji magazynu">
@@ -74,6 +78,7 @@ export function Header({
               {/* Quick switch account button */}
               {onSwitchAccount && (
                 <button
+                  key="btn-switch-account"
                   onClick={onSwitchAccount}
                   className="p-1 text-gray-500 hover:text-blue-600 hover:bg-white rounded-md transition-colors"
                   title="Zmień konto Google (przełącz na profil służbowy / osobisty)"
@@ -84,6 +89,7 @@ export function Header({
 
               {/* Logout button */}
               <button
+                key="btn-header-logout"
                 onClick={onLogoutClick}
                 className="p-1 text-gray-500 hover:text-red-600 hover:bg-white rounded-md transition-colors"
                 title="Wyloguj"
@@ -96,6 +102,7 @@ export function Header({
           {/* Super admin button */}
           {isSuperAdmin && currentView === 'warehouse' && (
             <button
+              key="btn-superadmin-admins"
               onClick={onOpenSuperAdminModal}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-purple-600 hover:bg-purple-700 text-white transition-colors shadow-xs"
               title="Zarządzaj uprawnieniami administratorów"
@@ -108,6 +115,7 @@ export function Header({
           {/* Toggle between Search & Warehouse */}
           {currentView === 'search' ? (
             <button
+              key="btn-view-toggle-warehouse"
               onClick={() => {
                 if (!user || !isAdmin) {
                   onLoginClick();
@@ -122,6 +130,7 @@ export function Header({
             </button>
           ) : (
             <button
+              key="btn-view-toggle-search"
               onClick={() => setCurrentView('search')}
               className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-xs active:scale-95"
             >

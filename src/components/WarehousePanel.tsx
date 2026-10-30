@@ -477,6 +477,7 @@ export function WarehousePanel({
                 {/* Podmagazyn A */}
                 {carpetA ? (
                   <SlotCard
+                    key={`slot-${bayNum}-A-${carpetA.id}`}
                     carpet={carpetA}
                     onEdit={() => onEditProduct(carpetA)}
                     onDelete={() => onDeleteProduct(carpetA.id, carpetA.nazwa)}
@@ -484,6 +485,7 @@ export function WarehousePanel({
                   />
                 ) : (
                   <EmptySlotCard
+                    key={`empty-${bayNum}-A`}
                     bay={bayNum}
                     subBay="A"
                     onAdd={() => onAddProduct(bayNum, 'A')}
@@ -493,6 +495,7 @@ export function WarehousePanel({
                 {/* Podmagazyn B */}
                 {carpetB ? (
                   <SlotCard
+                    key={`slot-${bayNum}-B-${carpetB.id}`}
                     carpet={carpetB}
                     onEdit={() => onEditProduct(carpetB)}
                     onDelete={() => onDeleteProduct(carpetB.id, carpetB.nazwa)}
@@ -500,6 +503,7 @@ export function WarehousePanel({
                   />
                 ) : (
                   <EmptySlotCard
+                    key={`empty-${bayNum}-B`}
                     bay={bayNum}
                     subBay="B"
                     onAdd={() => onAddProduct(bayNum, 'B')}
