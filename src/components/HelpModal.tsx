@@ -53,8 +53,8 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
           <div className="flex items-start gap-3 bg-amber-50/70 p-3 rounded-xl border border-amber-100">
             <Printer className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
             <div>
-              <span className="font-bold text-gray-900 block">Drukowanie fiszki ekspozycyjnej</span>
-              Przycisk <span className="font-bold text-amber-800">📝 Generuj fiszkę</span> tworzy profesjonalną zawieszkę z dużym oznaczeniem miejsca, nazwą, kodem kreskowym i numerem LM gotową do wydruku na drukarce etykiet lub papierze A4.
+              <span className="font-bold text-gray-900 block">Generowanie fiszek cenowych (Kakemono)</span>
+              Przycisk <span className="font-bold text-amber-800">📄 Fiszki</span> pozwala szybko zebrać listę referencji (wpisując miejsce magazynowe np. 12A, skanując aparatami kody EAN lub wybierając całą datę dostawy), skopiować je automatycznie po przecinku i przenieść bezpośrednio do wewnętrznego systemu Kakemono LM.
             </div>
           </div>
 

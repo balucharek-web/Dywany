@@ -7,7 +7,8 @@ interface SearchViewProps {
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   onOpenScanner: () => void;
-  onGenerateFiszka: (carpet: Carpet) => void;
+  onOpenFiszkiModal: (carpetToAdd?: Carpet) => void;
+  onPrintSingleFiszka?: (carpet: Carpet) => void;
   onOpenHelp: () => void;
 }
 
@@ -16,7 +17,8 @@ export function SearchView({
   searchQuery,
   setSearchQuery,
   onOpenScanner,
-  onGenerateFiszka,
+  onOpenFiszkiModal,
+  onPrintSingleFiszka,
   onOpenHelp
 }: SearchViewProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -56,11 +58,11 @@ export function SearchView({
     }
   };
 
-  const handleGenerateFiszkaForTop = () => {
-    if (filteredCarpets.length > 0) {
-      onGenerateFiszka(filteredCarpets[0]);
-    } else if (carpets.length > 0) {
-      onGenerateFiszka(carpets[0]);
+  const handleGenerateFiszkaClick = () => {
+    if (filteredCarpets.length === 1) {
+      onOpenFiszkiModal(filteredCarpets[0]);
+    } else {
+      onOpenFiszkiModal();
     }
   };
 
@@ -91,7 +93,7 @@ export function SearchView({
       <div className="grid grid-cols-3 gap-2">
         <button
           onClick={handleSearchButtonClick}
-          className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-semibold text-xs sm:text-sm shadow-xs active:scale-98 transition-transform"
+          className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-semibold text-xs sm:text-sm shadow-xs active:scale-98 transition-transform cursor-pointer"
         >
           <Search className="w-4 h-4" />
           <span>Szukaj</span>
@@ -99,16 +101,15 @@ export function SearchView({
 
         <button
           onClick={onOpenScanner}
-          className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg bg-[#475467] hover:bg-[#344054] text-white font-semibold text-xs sm:text-sm shadow-xs active:scale-98 transition-transform"
+          className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg bg-[#475467] hover:bg-[#344054] text-white font-semibold text-xs sm:text-sm shadow-xs active:scale-98 transition-transform cursor-pointer"
         >
           <Camera className="w-4 h-4" />
           <span>Skanuj</span>
         </button>
 
         <button
-          onClick={handleGenerateFiszkaForTop}
-          disabled={filteredCarpets.length === 0 && carpets.length === 0}
-          className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg bg-[#475467] hover:bg-[#344054] disabled:opacity-50 text-white font-semibold text-xs sm:text-sm shadow-xs active:scale-98 transition-transform"
+          onClick={handleGenerateFiszkaClick}
+          className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg bg-[#475467] hover:bg-[#344054] text-white font-semibold text-xs sm:text-sm shadow-xs active:scale-98 transition-transform cursor-pointer"
         >
           <FileText className="w-4 h-4" />
           <span>Generuj fiszkę</span>
@@ -196,13 +197,24 @@ export function SearchView({
                       {carpet.miejsce || `${carpet.magazyn} ${carpet.podmagazyn}`}
                     </span>
                   </div>
-                  <button
-                    onClick={() => onGenerateFiszka(carpet)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition-colors"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    Drukuj fiszkę
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => onOpenFiszkiModal(carpet)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs transition-colors cursor-pointer"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      Dodaj do fiszek
+                    </button>
+                    {onPrintSingleFiszka && (
+                      <button
+                        onClick={() => onPrintSingleFiszka(carpet)}
+                        className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors cursor-pointer"
+                        title="Podgląd / Druk pojedynczej fiszki"
+                      >
+                        <Tag className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))

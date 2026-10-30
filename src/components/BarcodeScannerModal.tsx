@@ -6,6 +6,9 @@ interface BarcodeScannerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onScanSuccess: (decodedText: string) => void;
+  title?: string;
+  continuousMode?: boolean;
+  toastMessage?: string | null;
 }
 
 // Configure ZBar WebAssembly path
@@ -66,7 +69,14 @@ function extractProductCode(raw: string): string | null {
   return null;
 }
 
-export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeScannerModalProps) {
+export function BarcodeScannerModal({
+  isOpen,
+  onClose,
+  onScanSuccess,
+  title,
+  continuousMode = false,
+  toastMessage = null
+}: BarcodeScannerModalProps) {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [torchOn, setTorchOn] = useState(false);
   const [hasTorch, setHasTorch] = useState(false);
@@ -98,10 +108,18 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
       } catch (_) {}
     }
 
-    setTimeout(() => {
-      onScanSuccess(code.trim());
-      onClose();
-    }, 180);
+    onScanSuccess(code.trim());
+
+    if (!continuousMode) {
+      setTimeout(() => {
+        onClose();
+      }, 180);
+    } else {
+      setTimeout(() => {
+        isScannedRef.current = false;
+        setScannedFeedback(null);
+      }, 1000);
+    }
   };
 
   useEffect(() => {
@@ -451,6 +469,13 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
           )}
         </div>
 
+        {/* Title or mode banner */}
+        {title && (
+          <div className="bg-black/60 backdrop-blur-md px-4 py-1.5 rounded-full text-white text-xs sm:text-sm font-bold shadow-md border border-white/10 max-w-[200px] sm:max-w-xs truncate text-center">
+            {title}
+          </div>
+        )}
+
         {/* Circular Close Button (X) top right */}
         <button
           onClick={(e) => {
@@ -463,6 +488,15 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
           <X className="w-6 h-6 stroke-[2.5]" />
         </button>
       </div>
+
+      {/* Toast message overlay if active */}
+      {toastMessage && (
+        <div className="absolute top-20 inset-x-4 z-40 flex justify-center pointer-events-none">
+          <div className="bg-emerald-600 text-white font-extrabold text-xs sm:text-sm px-5 py-2.5 rounded-full shadow-2xl border border-white/20 animate-in fade-in slide-in-from-top-2">
+            {toastMessage}
+          </div>
+        </div>
+      )}
 
       {/* Central Viewfinder Box matching Screenshot */}
       <div className="relative z-10 flex-1 flex flex-col items-center justify-center pointer-events-none p-2 sm:p-4">
@@ -491,7 +525,7 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
         </div>
       </div>
 
-      {/* Bottom Area with "Skan z zdjęcia" Blue Button */}
+      {/* Bottom Area with "Skan z zdjęcia" and "Gotowe" buttons */}
       <div className="relative z-30 w-full pb-8 sm:pb-10 pt-4 flex flex-col items-center justify-center gap-3">
         {cameraError && (
           <div className="mx-4 max-w-sm px-4 py-2 bg-black/80 backdrop-blur-md border border-amber-500/50 rounded-xl text-amber-300 text-xs text-center flex items-center gap-2">
@@ -500,27 +534,42 @@ export function BarcodeScannerModal({ isOpen, onClose, onScanSuccess }: BarcodeS
           </div>
         )}
 
-        {/* Blue button: [📸 Skan z zdjęcia] */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            fileInputRef.current?.click();
-          }}
-          disabled={isScanningFile}
-          className="py-2.5 px-6 rounded-2xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-sm shadow-xl flex items-center gap-2 active:scale-95 transition-all cursor-pointer"
-        >
-          {isScanningFile ? (
-            <>
-              <RefreshCw className="w-4 h-4 animate-spin" />
-              <span>Odczytywanie...</span>
-            </>
-          ) : (
-            <>
-              <span className="text-base">📸</span>
-              <span>Skan z zdjęcia</span>
-            </>
+        <div className="flex items-center gap-2.5">
+          {/* Blue button: [📸 Skan z zdjęcia] */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              fileInputRef.current?.click();
+            }}
+            disabled={isScanningFile}
+            className="py-2.5 px-6 rounded-2xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-sm shadow-xl flex items-center gap-2 active:scale-95 transition-all cursor-pointer"
+          >
+            {isScanningFile ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>Odczytywanie...</span>
+              </>
+            ) : (
+              <>
+                <span className="text-base">📸</span>
+                <span>Skan z zdjęcia</span>
+              </>
+            )}
+          </button>
+
+          {/* If continuousMode: [Gotowe / Wróć] button */}
+          {continuousMode && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+              }}
+              className="py-2.5 px-5 rounded-2xl bg-white/90 hover:bg-white text-gray-900 font-bold text-sm shadow-xl flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+            >
+              <span>Wróć do listy</span>
+            </button>
           )}
-        </button>
+        </div>
       </div>
     </div>
   );

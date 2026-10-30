@@ -22,6 +22,7 @@ import { WarehousePanel } from './components/WarehousePanel';
 import { LoginModal } from './components/LoginModal';
 import { BarcodeScannerModal } from './components/BarcodeScannerModal';
 import { FiszkaModal } from './components/FiszkaModal';
+import { FiszkiBatchModal, FiszkaItem } from './components/FiszkiBatchModal';
 import { StockExpoModal } from './components/StockExpoModal';
 import { ImportModal } from './components/ImportModal';
 import { EditCarpetModal } from './components/EditCarpetModal';
@@ -44,6 +45,8 @@ export default function App() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isScannerModalOpen, setIsScannerModalOpen] = useState(false);
   const [fiszkaCarpet, setFiszkaCarpet] = useState<Carpet | null>(null);
+  const [isFiszkiBatchModalOpen, setIsFiszkiBatchModalOpen] = useState(false);
+  const [batchFiszkiItems, setBatchFiszkiItems] = useState<FiszkaItem[]>([]);
   const [isStockExpoOpen, setIsStockExpoOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
@@ -306,6 +309,27 @@ export default function App() {
     setIsEditCarpetOpen(true);
   };
 
+  const handleOpenFiszkiBatch = (carpetToAdd?: Carpet) => {
+    if (carpetToAdd && carpetToAdd.ref) {
+      const cleanRef = carpetToAdd.ref.trim();
+      setBatchFiszkiItems((prev) => {
+        if (prev.some((i) => i.ref === cleanRef)) return prev;
+        return [
+          ...prev,
+          {
+            id: `${cleanRef}-${Date.now()}`,
+            ref: cleanRef,
+            nazwa: carpetToAdd.nazwa,
+            miejsce: carpetToAdd.miejsce || `${carpetToAdd.magazyn}${carpetToAdd.podmagazyn}`,
+            ean: carpetToAdd.ean,
+            addedAt: Date.now()
+          }
+        ];
+      });
+    }
+    setIsFiszkiBatchModalOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-[#f3f4f6] text-gray-900 flex flex-col font-sans">
       {/* Top Header */}
@@ -353,7 +377,8 @@ export default function App() {
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
             onOpenScanner={() => setIsScannerModalOpen(true)}
-            onGenerateFiszka={(c) => setFiszkaCarpet(c)}
+            onOpenFiszkiModal={handleOpenFiszkiBatch}
+            onPrintSingleFiszka={(c) => setFiszkaCarpet(c)}
             onOpenHelp={() => setIsHelpOpen(true)}
           />
         ) : (
@@ -366,12 +391,27 @@ export default function App() {
             onOpenStockExpo={() => setIsStockExpoOpen(true)}
             onOpenHelp={() => setIsHelpOpen(true)}
             onLogout={handleLogout}
-            onGenerateFiszka={(c) => setFiszkaCarpet(c)}
+            onGenerateFiszka={(c) => handleOpenFiszkiBatch(c)}
             isSuperAdmin={isSuperAdmin}
             onOpenSuperAdminModal={() => setIsAdminManagementOpen(true)}
           />
         )}
       </main>
+
+      {/* Floating "Fiszki" button matching user's screenshot */}
+      <button
+        onClick={() => setIsFiszkiBatchModalOpen(true)}
+        className="fixed bottom-6 right-5 z-40 bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-5 py-3 rounded-full shadow-2xl flex items-center gap-2 font-black text-sm active:scale-95 transition-all border-2 border-white/20 cursor-pointer"
+        title="Otwórz generowanie fiszek"
+      >
+        <span>Fiszki</span>
+        <span className="text-base">📄</span>
+        {batchFiszkiItems.length > 0 && (
+          <span className="bg-white text-blue-700 text-xs px-2 py-0.5 rounded-full font-black ml-0.5 shadow-xs">
+            {batchFiszkiItems.length}
+          </span>
+        )}
+      </button>
 
       {/* Modals */}
       <LoginModal
@@ -384,6 +424,14 @@ export default function App() {
         isOpen={isScannerModalOpen}
         onClose={() => setIsScannerModalOpen(false)}
         onScanSuccess={handleScanSuccess}
+      />
+
+      <FiszkiBatchModal
+        isOpen={isFiszkiBatchModalOpen}
+        onClose={() => setIsFiszkiBatchModalOpen(false)}
+        carpets={carpets}
+        initialItems={batchFiszkiItems}
+        onItemsChange={setBatchFiszkiItems}
       />
 
       <FiszkaModal
@@ -426,7 +474,6 @@ export default function App() {
         onRemoveAdmin={handleRemoveAdminEmail}
         currentSuperAdminEmail={SUPER_ADMIN_EMAIL}
       />
-
 
       <HelpModal
         isOpen={isHelpOpen}
