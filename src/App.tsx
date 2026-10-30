@@ -398,21 +398,6 @@ export default function App() {
         )}
       </main>
 
-      {/* Floating "Fiszki" button matching user's screenshot */}
-      <button
-        onClick={() => setIsFiszkiBatchModalOpen(true)}
-        className="fixed bottom-6 right-5 z-40 bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-5 py-3 rounded-full shadow-2xl flex items-center gap-2 font-black text-sm active:scale-95 transition-all border-2 border-white/20 cursor-pointer"
-        title="Otwórz generowanie fiszek"
-      >
-        <span>Fiszki</span>
-        <span className="text-base">📄</span>
-        {batchFiszkiItems.length > 0 && (
-          <span className="bg-white text-blue-700 text-xs px-2 py-0.5 rounded-full font-black ml-0.5 shadow-xs">
-            {batchFiszkiItems.length}
-          </span>
-        )}
-      </button>
-
       {/* Modals */}
       <LoginModal
         isOpen={isLoginModalOpen}
