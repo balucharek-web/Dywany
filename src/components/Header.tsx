@@ -2,7 +2,6 @@ import { User } from 'firebase/auth';
 import { LeroyMerlinLogo } from './LeroyMerlinLogo';
 import { STORE_NUMBER, STORE_CITY, SUPER_ADMIN_EMAIL } from '../types';
 import { LogOut, ShieldCheck, Database, Search, Users, RefreshCw } from 'lucide-react';
-import { PWAInstallButton } from './PWAInstallButton';
 
 interface HeaderProps {
   currentView: 'search' | 'warehouse';
@@ -105,9 +104,6 @@ export function Header({
               <span className="hidden sm:inline">Admini</span>
             </button>
           )}
-
-          {/* PWA Install Button */}
-          <PWAInstallButton />
 
           {/* Toggle between Search & Warehouse */}
           {currentView === 'search' ? (
