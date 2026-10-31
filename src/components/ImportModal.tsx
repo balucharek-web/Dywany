@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react';
 import { Carpet } from '../types';
-import { X, Upload, FileText, CheckCircle2, AlertCircle, RefreshCw, FileSpreadsheet } from 'lucide-react';
-import { initialCarpets } from '../data/seedData';
+import { X, Upload, CheckCircle2, AlertCircle, FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface ImportModalProps {
@@ -94,13 +93,6 @@ export function ImportModal({ isOpen, onClose, onImport }: ImportModalProps) {
     }
   };
 
-  const handleLoadDemo = () => {
-    setFileData(initialCarpets);
-    setFileName('baza_dywany_sklep038_pelna.json');
-    setSuccess(`Załadowano kompletną bazę sklepu 038 (${initialCarpets.length} pozycji dywanów). Kliknij „Zatwierdź import”, aby zapisać do bazy.`);
-    setError(null);
-  };
-
   const handleConfirmImport = async () => {
     if (!fileData || fileData.length === 0) return;
     try {
@@ -156,21 +148,6 @@ export function ImportModal({ isOpen, onClose, onImport }: ImportModalProps) {
             </span>
             <span className="text-[11px] text-gray-400 mt-1">
               lub upuść plik tutaj
-            </span>
-          </div>
-
-          {/* Quick 1-Click Load Full Base Button */}
-          <div className="flex flex-col items-center gap-1.5 p-3 bg-amber-50/60 border border-amber-200 rounded-xl text-center">
-            <button
-              type="button"
-              onClick={handleLoadDemo}
-              className="text-xs text-amber-900 font-bold underline hover:text-amber-950 flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-amber-700" />
-              Wczytaj przygotowaną pełną bazę sklepu 038 ({initialCarpets.length} pozycji)
-            </button>
-            <span className="text-[10px] text-amber-800">
-              Gotowa baza z Twojego pliku CSV – kliknij powyższy link, aby załadować bez szukania pliku
             </span>
           </div>
 
