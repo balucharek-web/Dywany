@@ -43,7 +43,8 @@ export function EditCarpetModal({
   const [isEslScannerOpen, setIsEslScannerOpen] = useState(false);
   const [quickScanning, setQuickScanning] = useState(false);
   const [ocrSuccessNotice, setOcrSuccessNotice] = useState<string | null>(null);
-  const quickFileInputRef = useRef<HTMLInputElement | null>(null);
+  const quickGalleryInputRef = useRef<HTMLInputElement | null>(null);
+  const quickCameraInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (carpetToEdit) {
@@ -100,8 +101,11 @@ export function EditCarpetModal({
       );
     } finally {
       setQuickScanning(false);
-      if (quickFileInputRef.current) {
-        quickFileInputRef.current.value = '';
+      if (quickGalleryInputRef.current) {
+        quickGalleryInputRef.current.value = '';
+      }
+      if (quickCameraInputRef.current) {
+        quickCameraInputRef.current.value = '';
       }
     }
   };
@@ -189,39 +193,56 @@ export function EditCarpetModal({
                 </div>
               </div>
 
-              <div className="flex gap-2">
+              <div className="grid grid-cols-3 gap-1.5">
                 <button
                   type="button"
                   onClick={() => setIsEslScannerOpen(true)}
                   disabled={quickScanning || loading}
-                  className="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                  className="py-2 px-2 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-xs transition-all cursor-pointer truncate"
+                  title="Otwórz skaner na żywo z podglądem kamery"
                 >
-                  <Camera className="w-3.5 h-3.5" />
-                  <span>Otwórz aparat (Skaner)</span>
+                  <Camera className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">Skaner na żywo</span>
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => quickFileInputRef.current?.click()}
+                  onClick={() => quickGalleryInputRef.current?.click()}
                   disabled={quickScanning || loading}
-                  className="py-2 px-3 bg-white border border-emerald-300 hover:border-emerald-500 hover:bg-emerald-50/60 text-emerald-900 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                  title="Zrób lub wgraj zdjęcie etykiety"
+                  className="py-2 px-2 bg-white border border-emerald-300 hover:border-emerald-500 hover:bg-emerald-50/60 text-emerald-900 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shadow-2xs truncate"
+                  title="Wybierz zapisane zdjęcie z galerii"
                 >
                   {quickScanning ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
-                      <span>Odczytywanie...</span>
-                    </>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600 shrink-0" />
                   ) : (
-                    <>
-                      <Upload className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Wgraj zdjęcie</span>
-                    </>
+                    <Upload className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                   )}
+                  <span className="truncate">Z galerii</span>
                 </button>
 
+                <button
+                  type="button"
+                  onClick={() => quickCameraInputRef.current?.click()}
+                  disabled={quickScanning || loading}
+                  className="py-2 px-2 bg-white border border-emerald-300 hover:border-emerald-500 hover:bg-emerald-50/60 text-emerald-900 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shadow-2xs truncate"
+                  title="Zrób zdjęcie aparatem telefonu"
+                >
+                  <Camera className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span className="truncate">Zrób zdjęcie</span>
+                </button>
+
+                {/* 1. Pure gallery input (NO capture attribute = opens photo gallery / file manager) */}
                 <input
-                  ref={quickFileInputRef}
+                  ref={quickGalleryInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleQuickFileChange}
+                  className="hidden"
+                />
+
+                {/* 2. Direct camera input (with capture="environment" = opens native camera directly) */}
+                <input
+                  ref={quickCameraInputRef}
                   type="file"
                   accept="image/*"
                   capture="environment"
