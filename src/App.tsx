@@ -913,6 +913,7 @@ export default function App() {
         carpetToEdit={carpetToEdit}
         onSave={handleSaveCarpet}
         existingMagazyny={activeBays}
+        existingCarpets={carpets}
       />
 
       <AdminManagementModal

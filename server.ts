@@ -22,36 +22,70 @@ async function startServer() {
     }
   });
 
-  function formatErrorMessage(err: any): string {
-    if (!err) return 'Nieznany błąd podczas odczytu etykiety';
-    const rawMsg = err.message || (typeof err === 'string' ? err : JSON.stringify(err));
+  function parseErrorInfo(err: any): { message: string; isQuota: boolean; isOverloaded: boolean } {
+    if (!err) {
+      return { message: 'Nieznany błąd podczas odczytu etykiety', isQuota: false, isOverloaded: false };
+    }
+
+    const rawMsg = typeof err === 'string' ? err : (err.message || JSON.stringify(err));
+    let parsed: any = null;
+
     try {
       const match = rawMsg.match(/\{[\s\S]*\}/);
       if (match) {
-        const parsed = JSON.parse(match[0]);
-        if (
-          parsed.error?.code === 503 ||
-          parsed.error?.status === 'UNAVAILABLE' ||
-          parsed.error?.message?.includes('high demand')
-        ) {
-          return 'Serwery Google AI mają chwilowe przeciążenie (503). Spróbuj ponownie za chwilę.';
-        }
-        if (parsed.error?.code === 429) {
-          return 'Chwilowy limit zapytań AI (429). Odczekaj chwilę i spróbuj ponownie.';
-        }
-        if (parsed.error?.message) {
-          return parsed.error.message;
-        }
+        parsed = JSON.parse(match[0]);
       }
     } catch (_) {}
 
-    if (rawMsg.includes('503') || rawMsg.includes('high demand') || rawMsg.includes('UNAVAILABLE')) {
-      return 'Serwery Google AI mają chwilowe przeciążenie (503). Spróbuj ponownie za chwilę.';
+    const code = parsed?.error?.code || (err as any)?.status;
+    const status = parsed?.error?.status || '';
+    const desc = parsed?.error?.message || rawMsg;
+
+    // Daily quota exhaustion or rate limit (HTTP 429)
+    if (
+      code === 429 ||
+      status === 'RESOURCE_EXHAUSTED' ||
+      desc.includes('RESOURCE_EXHAUSTED') ||
+      desc.includes('Quota exceeded') ||
+      desc.includes('free_tier_requests')
+    ) {
+      return {
+        message: 'Dzienny limit bezpłatnych zapytań AI (20 zapytań/dzień na darmowym planie Google) został osiągnięty. Możesz wprowadzić dywan ręcznie, zeskanować kod EAN aparatem lub podpiąć klucz z płatnym planem (Pay-as-you-go) w panelu Google AI Studio (Settings > Secrets).',
+        isQuota: true,
+        isOverloaded: false
+      };
     }
-    return rawMsg;
+
+    // High demand / service unavailable (HTTP 503)
+    if (
+      code === 503 ||
+      status === 'UNAVAILABLE' ||
+      desc.includes('high demand') ||
+      desc.includes('UNAVAILABLE')
+    ) {
+      return {
+        message: 'Serwery Google AI mają chwilowe przeciążenie (503). Spróbuj ponownie za chwilę lub wprowadź dane ręcznie.',
+        isQuota: false,
+        isOverloaded: true
+      };
+    }
+
+    if (parsed?.error?.message) {
+      return {
+        message: parsed.error.message,
+        isQuota: false,
+        isOverloaded: false
+      };
+    }
+
+    return {
+      message: rawMsg,
+      isQuota: false,
+      isOverloaded: false
+    };
   }
 
-  // ESL scanner OCR endpoint with automatic retry & model resilience
+  // ESL scanner OCR endpoint with automatic model resilience & quota detection
   app.post('/api/scan-esl', async (req, res) => {
     try {
       const { imageBase64, mimeType = 'image/jpeg' } = req.body;
@@ -72,10 +106,7 @@ Twoim celem jest bezbłędne odczytanie:
 
 Zwróć wynik jako JSON z polami: nazwa, ref, ean, cena, zapas.`;
 
-      // Multi-model resilience pool:
-      // gemini-3.8-flash with ThinkingLevel.LOW (drastically reduces token latency and 503 chance)
-      // gemini-3.1-flash-lite (high capacity, very low latency)
-      // gemini-flash-latest (general alias fallback)
+      // Candidate models for OCR
       const candidateConfigs: Array<{ model: string; thinkingConfig?: any }> = [
         { model: 'gemini-3.8-flash', thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
         { model: 'gemini-3.1-flash-lite' },
@@ -84,8 +115,12 @@ Zwróć wynik jako JSON z polami: nazwa, ref, ean, cena, zapas.`;
 
       let lastError: any = null;
       let textResult: string | null = null;
+      let quotaExceededDetected = false;
 
       for (const config of candidateConfigs) {
+        // If daily quota was hit on one of the models, do not keep spamming requests
+        if (quotaExceededDetected) break;
+
         for (let attempt = 0; attempt < 2; attempt++) {
           try {
             const response = await ai.models.generateContent({
@@ -129,25 +164,43 @@ Zwróć wynik jako JSON z polami: nazwa, ref, ean, cena, zapas.`;
             }
           } catch (err: any) {
             lastError = err;
-            console.warn(`Attempt ${attempt + 1} with ${config.model} failed:`, err?.message || err);
-            // Wait with backoff before retry if rate limited / 503
-            await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+            const errInfo = parseErrorInfo(err);
+            console.warn(`Model ${config.model} attempt ${attempt + 1} failed:`, errInfo.message);
+
+            if (errInfo.isQuota) {
+              quotaExceededDetected = true;
+              break;
+            }
+
+            // Wait briefly before retry if 503
+            if (attempt === 0) {
+              await new Promise((r) => setTimeout(r, 600));
+            }
           }
         }
         if (textResult) break;
       }
 
       if (!textResult) {
-        const friendlyMsg = formatErrorMessage(lastError);
-        return res.status(503).json({ error: friendlyMsg });
+        const errorInfo = parseErrorInfo(lastError);
+        const statusCode = errorInfo.isQuota ? 429 : errorInfo.isOverloaded ? 503 : 500;
+        return res.status(statusCode).json({
+          error: errorInfo.message,
+          isQuotaExceeded: errorInfo.isQuota,
+          isOverloaded: errorInfo.isOverloaded
+        });
       }
 
       const parsed = JSON.parse(textResult);
       return res.json(parsed);
     } catch (err: unknown) {
       console.error('Błąd OCR ESL:', err);
-      const friendlyMsg = formatErrorMessage(err);
-      return res.status(500).json({ error: friendlyMsg });
+      const errorInfo = parseErrorInfo(err);
+      return res.status(errorInfo.isQuota ? 429 : 500).json({
+        error: errorInfo.message,
+        isQuotaExceeded: errorInfo.isQuota,
+        isOverloaded: errorInfo.isOverloaded
+      });
     }
   });
 

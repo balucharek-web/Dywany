@@ -10,10 +10,16 @@ import {
   Upload,
   CheckCircle2,
   Loader2,
-  Tag
+  Tag,
+  Barcode,
+  Keyboard,
+  Info,
+  ScanText
 } from 'lucide-react';
 import { EslScannerModal } from './EslScannerModal';
-import { EslScanResult, fileToBase64Compressed, scanEslLabel } from '../services/eslScannerService';
+import { BarcodeScannerModal } from './BarcodeScannerModal';
+import { scanEslLabelWithoutAi, LocalOcrResult } from '../services/localOcrService';
+import { initialCarpets } from '../data/seedData';
 
 interface EditCarpetModalProps {
   isOpen: boolean;
@@ -21,6 +27,7 @@ interface EditCarpetModalProps {
   carpetToEdit: Partial<Carpet> | null;
   onSave: (carpetData: Partial<Carpet>) => Promise<void>;
   existingMagazyny: number[];
+  existingCarpets?: Carpet[];
 }
 
 export function EditCarpetModal({
@@ -28,7 +35,8 @@ export function EditCarpetModal({
   onClose,
   carpetToEdit,
   onSave,
-  existingMagazyny
+  existingMagazyny,
+  existingCarpets = []
 }: EditCarpetModalProps) {
   const [magazyn, setMagazyn] = useState<number>(1);
   const [podmagazyn, setPodmagazyn] = useState<string>('A');
@@ -39,12 +47,14 @@ export function EditCarpetModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ESL OCR State
+  // ESL OCR State (100% Local non-AI)
   const [isEslScannerOpen, setIsEslScannerOpen] = useState(false);
+  const [isBarcodeScannerOpen, setIsBarcodeScannerOpen] = useState(false);
   const [quickScanning, setQuickScanning] = useState(false);
   const [ocrSuccessNotice, setOcrSuccessNotice] = useState<string | null>(null);
   const quickGalleryInputRef = useRef<HTMLInputElement | null>(null);
   const quickCameraInputRef = useRef<HTMLInputElement | null>(null);
+  const nazwaInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (carpetToEdit) {
@@ -69,20 +79,21 @@ export function EditCarpetModal({
   if (!isOpen) return null;
 
   // Apply OCR scan result from modal or direct photo
-  const handleApplyEslData = (data: EslScanResult) => {
+  const handleApplyEslData = (data: LocalOcrResult) => {
     if (data.nazwa) setNazwa(data.nazwa);
     if (data.ref) setRef(data.ref);
     if (data.ean) setEan(data.ean);
 
+    setError(null);
     setOcrSuccessNotice(
-      `Odczytano z etykiety ESL: ${data.nazwa} (REF: ${data.ref || '-'}, EAN: ${data.ean || '-'})`
+      `Odczytano z cenówki: ${data.nazwa || data.ean || ''} (REF: ${data.ref || '-'}, EAN: ${data.ean || '-'})`
     );
     setTimeout(() => {
       setOcrSuccessNotice(null);
     }, 6000);
   };
 
-  // Direct quick file/camera snapshot
+  // Direct quick file/camera snapshot using local non-AI OCR
   const handleQuickFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -90,8 +101,13 @@ export function EditCarpetModal({
     try {
       setQuickScanning(true);
       setError(null);
-      const { base64, mimeType } = await fileToBase64Compressed(file);
-      const result = await scanEslLabel(base64, mimeType);
+      const reader = new FileReader();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result = await scanEslLabelWithoutAi(dataUrl);
       handleApplyEslData(result);
     } catch (err: unknown) {
       setError(
@@ -108,6 +124,36 @@ export function EditCarpetModal({
         quickCameraInputRef.current.value = '';
       }
     }
+  };
+
+  const handleBarcodeScanned = (scannedCode: string) => {
+    const code = scannedCode.trim();
+    if (code.length === 13) {
+      setEan(code);
+    } else if (code.length === 8) {
+      setRef(code);
+    } else {
+      setEan(code);
+    }
+
+    // Auto-match if this product code exists in the store catalog (100% exact)
+    const allCarpets = [...existingCarpets, ...initialCarpets];
+    const match = allCarpets.find(
+      (c) => c.ean === code || c.ref === code || (code.length === 8 && c.ref === code)
+    );
+    if (match) {
+      if (!nazwa) setNazwa(match.nazwa);
+      if (!ref && match.ref) setRef(match.ref);
+      if (!ean && match.ean) setEan(match.ean);
+      setOcrSuccessNotice(`Rozpoznano dywan ze sklepu: ${match.nazwa} (REF: ${match.ref})`);
+      setTimeout(() => setOcrSuccessNotice(null), 5000);
+      setError(null);
+      return;
+    }
+
+    setError(null);
+    setOcrSuccessNotice(`Zeskanowano kod kreskowy: ${code}`);
+    setTimeout(() => setOcrSuccessNotice(null), 4000);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -168,26 +214,36 @@ export function EditCarpetModal({
 
           {/* Form body */}
           <form onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto flex-1 flex flex-col gap-4">
+            {/* Error Notice */}
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
-                <span>{error}</span>
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
+                  <span>{error}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setError(null)}
+                  className="text-red-500 hover:text-red-800 font-bold px-1"
+                >
+                  ✕
+                </button>
               </div>
             )}
 
-            {/* ESL Scanner Action Banner */}
+            {/* ESL Scanner Action Banner (100% Local non-AI) */}
             <div className="bg-linear-to-r from-emerald-50 via-teal-50 to-blue-50 border border-emerald-200 rounded-2xl p-3.5 flex flex-col gap-2.5 shadow-2xs">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-start gap-2">
                   <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
-                    <Sparkles className="w-4 h-4" />
+                    <ScanText className="w-4 h-4" />
                   </div>
                   <div>
                     <span className="font-extrabold text-xs text-emerald-950 block">
-                      Skanuj etykietę ESL (Cenówkę elektroniczną)
+                      Skanuj cenówkę ESL (Lokalny odczyt bez AI)
                     </span>
                     <span className="text-[11px] text-emerald-800 leading-tight block">
-                      Automatycznie odczytaj nazwę dywanu, REF LM i kod EAN ze zdjęcia etykiety.
+                      Odczytuje kod kreskowy na żywo oraz nazwę i REF LM ze zdjęcia bez limitów.
                     </span>
                   </div>
                 </div>
@@ -198,11 +254,11 @@ export function EditCarpetModal({
                   type="button"
                   onClick={() => setIsEslScannerOpen(true)}
                   disabled={quickScanning || loading}
-                  className="py-2 px-2 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-xs transition-all cursor-pointer truncate"
+                  className="py-2.5 px-2 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-xs transition-all cursor-pointer truncate"
                   title="Otwórz skaner na żywo z podglądem kamery"
                 >
                   <Camera className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">Skaner na żywo</span>
+                  <span className="truncate">Skaner aparatem</span>
                 </button>
 
                 <button
@@ -325,6 +381,7 @@ export function EditCarpetModal({
                 <span className="text-[11px] text-gray-400 font-normal">Z etykiety cenowej</span>
               </label>
               <input
+                ref={nazwaInputRef}
                 type="text"
                 value={nazwa}
                 onChange={(e) => setNazwa(e.target.value)}
@@ -351,10 +408,20 @@ export function EditCarpetModal({
               </div>
 
               <div>
-                <label className="text-xs font-bold text-gray-700 block mb-1 flex items-center justify-between">
-                  <span>Kod kreskowy EAN *</span>
-                  <span className="text-[10px] text-gray-400 font-mono">13 cyfr</span>
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-gray-700">
+                    Kod kreskowy EAN *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsBarcodeScannerOpen(true)}
+                    className="text-[11px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 cursor-pointer bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md transition-colors"
+                    title="Uruchom skaner kodów aparatem"
+                  >
+                    <Barcode className="w-3.5 h-3.5" />
+                    <span>Skanuj aparat</span>
+                  </button>
+                </div>
                 <input
                   type="text"
                   value={ean}
@@ -407,6 +474,15 @@ export function EditCarpetModal({
         isOpen={isEslScannerOpen}
         onClose={() => setIsEslScannerOpen(false)}
         onApplyData={handleApplyEslData}
+        existingCarpets={existingCarpets}
+      />
+
+      {/* Direct EAN Barcode Scanner Modal (Zero AI / Zero Quota) */}
+      <BarcodeScannerModal
+        isOpen={isBarcodeScannerOpen}
+        onClose={() => setIsBarcodeScannerOpen(false)}
+        onScanSuccess={handleBarcodeScanned}
+        title="Zeskanuj kod kreskowy EAN"
       />
     </>
   );
