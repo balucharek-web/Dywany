@@ -4,6 +4,8 @@
   body {
     background: white !important;
     color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
   header, nav, button, .print\:hidden {
     display: none !important;
@@ -13,6 +15,44 @@
     border: 2px solid #000 !important;
     box-shadow: none !important;
     page-break-inside: avoid;
+  }
+  
+  /* Modal print unwrap */
+  .stock-expo-modal-backdrop {
+    position: static !important;
+    inset: auto !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    display: block !important;
+  }
+
+  .stock-expo-modal-container {
+    max-width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: none !important;
+    box-shadow: none !important;
+    width: 100% !important;
+    border-radius: 0 !important;
+    display: block !important;
+  }
+
+  #stock-expo-report-printable {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .print-rack-group {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 10mm 8mm;
   }
 }
 
