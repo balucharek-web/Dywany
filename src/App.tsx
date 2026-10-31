@@ -382,35 +382,50 @@ export default function App() {
     }
 
     try {
-      const batch = writeBatch(db);
-
+      // If replace mode, delete existing carpets in safe batches
       if (mode === 'replace') {
-        carpets.forEach((c) => {
-          batch.delete(doc(db, 'carpets', c.id));
-        });
+        for (let i = 0; i < carpets.length; i += 300) {
+          const b = writeBatch(db);
+          const chunk = carpets.slice(i, i + 300);
+          chunk.forEach((c) => {
+            b.delete(doc(db, 'carpets', c.id));
+          });
+          await b.commit();
+        }
       }
 
-      incoming.forEach((c, idx) => {
-        const docId = c.id || `mag_${c.magazyn}_${c.podmagazyn?.toUpperCase() || 'A'}`;
-        const ref = doc(db, 'carpets', docId);
-        batch.set(
-          ref,
-          {
-            magazyn: Number(c.magazyn) || 1,
-            podmagazyn: String(c.podmagazyn || 'A').toUpperCase(),
-            miejsce: c.miejsce || `${c.magazyn} ${c.podmagazyn}`,
-            nazwa: c.nazwa || '',
-            ref: c.ref || '',
-            ean: c.ean || '',
-            dodano: c.dodano || new Date().toISOString().split('T')[0],
-            updatedAt: new Date().toISOString(),
-            updatedBy: currentUser?.email || 'import'
-          },
-          { merge: true }
-        );
-      });
+      // Write incoming carpets in safe batches
+      for (let i = 0; i < incoming.length; i += 300) {
+        const b = writeBatch(db);
+        const chunk = incoming.slice(i, i + 300);
+        chunk.forEach((c) => {
+          const docId = c.id || `mag_${c.magazyn}_${c.podmagazyn?.toUpperCase() || 'A'}`;
+          const ref = doc(db, 'carpets', docId);
+          b.set(
+            ref,
+            {
+              magazyn: Number(c.magazyn) || 1,
+              podmagazyn: String(c.podmagazyn || 'A').toUpperCase(),
+              miejsce: c.miejsce || `${c.magazyn} ${c.podmagazyn}`,
+              nazwa: c.nazwa || '',
+              ref: c.ref || '',
+              ean: c.ean || '',
+              dodano: c.dodano || new Date().toISOString().split('T')[0],
+              updatedAt: new Date().toISOString(),
+              updatedBy: currentUser?.email || 'import'
+            },
+            { merge: true }
+          );
+        });
+        await b.commit();
+      }
 
-      await batch.commit();
+      // Log import in activity audit
+      await logActivity(
+        'add',
+        `Import bazy (${incoming.length} pozycji)`,
+        `Zaimportował bazę dywanów: ${incoming.length} pozycji (Tryb: ${mode === 'replace' ? 'Zastąpienie całej bazy' : 'Scalenie z obecną bazą'})`
+      );
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'carpets/batch');
     }
