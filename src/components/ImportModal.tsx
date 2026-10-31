@@ -60,16 +60,18 @@ export function ImportModal({ isOpen, onClose, onImport }: ImportModalProps) {
           }
 
           const parsedCarpets: Carpet[] = rows.map((r, idx) => {
-            const mag = Number(r.magazyn || r.Magazyn || r.Regal || r['Regał'] || Math.floor(idx / 2) + 1);
-            const podmag = String(r.podmagazyn || r.Podmagazyn || r.Slot || (idx % 2 === 0 ? 'A' : 'B')).trim().toUpperCase();
+            const rawMag = r.magazyn ?? r.Magazyn ?? r.location ?? r.Location ?? r.loc ?? r.Regal ?? r['Regał'] ?? r['Magazyn (Regał)'];
+            const mag = Number(rawMag) || (Math.floor(idx / 2) + 1);
+            const rawPodmag = r.podmagazyn ?? r.Podmagazyn ?? r.sub ?? r.Sub ?? r.slot ?? r.Slot ?? r['Podmagazyn (Slot)'];
+            const podmag = String(rawPodmag || (idx % 2 === 0 ? 'A' : 'B')).trim().toUpperCase();
             const miejsce = r.miejsce || r.Miejsce || `${mag} ${podmag}`;
-            const nazwa = r.nazwa || r.Nazwa || r.Produkt || r['Nazwa produktu'] || `DYWAN #${idx + 1}`;
-            const ref = String(r.ref || r.Ref || r.REF || r['REF. LM'] || '');
-            const ean = String(r.ean || r.EAN || r['Kod EAN'] || '');
-            const dodano = String(r.dodano || r.Dodano || r['Data dodania'] || new Date().toISOString().split('T')[0]);
+            const nazwa = String(r.nazwa || r.Nazwa || r.Produkt || r['Nazwa produktu'] || r['Nazwa dywanu'] || `DYWAN #${idx + 1}`).trim();
+            const ref = String(r.ref || r.Ref || r.REF || r.reference || r.Reference || r['REF. LM'] || '').trim();
+            const ean = String(r.ean || r.EAN || r['Kod EAN'] || '').trim();
+            const dodano = String(r.dodano || r.Dodano || r['Data dodania'] || new Date().toISOString().split('T')[0]).trim();
 
             return {
-              id: `imported_${Date.now()}_${idx}`,
+              id: `mag_${mag}_${podmag}`,
               magazyn: mag,
               podmagazyn: podmag,
               miejsce,
@@ -81,7 +83,7 @@ export function ImportModal({ isOpen, onClose, onImport }: ImportModalProps) {
           });
 
           setFileData(parsedCarpets);
-          setSuccess(`Wczytano ${parsedCarpets.length} pozycji z arkusza kalkulacyjnego.`);
+          setSuccess(`Wczytano ${parsedCarpets.length} pozycji z pliku.`);
         } catch (err: unknown) {
           setError('Nie udało się odczytać arkusza: ' + (err instanceof Error ? err.message : String(err)));
         }
@@ -94,8 +96,8 @@ export function ImportModal({ isOpen, onClose, onImport }: ImportModalProps) {
 
   const handleLoadDemo = () => {
     setFileData(initialCarpets);
-    setFileName('baza_wzorcowa_sklep_038.json');
-    setSuccess(`Załadowano ${initialCarpets.length} pozycji referencyjnych ze zrzutów ekranu sklepu 038.`);
+    setFileName('baza_dywany_sklep038_pelna.json');
+    setSuccess(`Załadowano kompletną bazę sklepu 038 (${initialCarpets.length} pozycji dywanów). Kliknij „Zatwierdź import”, aby zapisać do bazy.`);
     setError(null);
   };
 
@@ -124,7 +126,7 @@ export function ImportModal({ isOpen, onClose, onImport }: ImportModalProps) {
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-amber-100 transition-colors"
+            className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-amber-100 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -133,7 +135,7 @@ export function ImportModal({ isOpen, onClose, onImport }: ImportModalProps) {
         {/* Content */}
         <div className="p-5 sm:p-6 overflow-y-auto flex-1 flex flex-col gap-4">
           <p className="text-xs text-gray-600">
-            Zaimportuj dane ekspozycji dywanów z pliku JSON (kopia zapasowa) lub arkusza XLSX/CSV.
+            Zaimportuj dane ekspozycji dywanów z pliku CSV, Excel (.xlsx) lub kopii zapasowej (.json).
           </p>
 
           {/* Upload Drop area */}
@@ -150,23 +152,47 @@ export function ImportModal({ isOpen, onClose, onImport }: ImportModalProps) {
             />
             <FileSpreadsheet className="w-10 h-10 text-amber-600 mb-2" />
             <span className="font-bold text-gray-800 text-xs sm:text-sm">
-              Wybierz plik (.json, .xlsx, .csv)
+              Wybierz plik (.csv, .xlsx, .json)
             </span>
             <span className="text-[11px] text-gray-400 mt-1">
               lub upuść plik tutaj
             </span>
           </div>
 
-          {/* Quick Demo Button */}
-          <div className="flex justify-center">
+          {/* Quick 1-Click Load Full Base Button */}
+          <div className="flex flex-col items-center gap-1.5 p-3 bg-amber-50/60 border border-amber-200 rounded-xl text-center">
             <button
               type="button"
               onClick={handleLoadDemo}
-              className="text-xs text-amber-800 font-bold underline hover:text-amber-900 flex items-center gap-1.5"
+              className="text-xs text-amber-900 font-bold underline hover:text-amber-950 flex items-center justify-center gap-1.5 cursor-pointer"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Wczytaj domyślną bazę zrzutów sklepu 038 (11 pozycji)
+              <RefreshCw className="w-3.5 h-3.5 text-amber-700" />
+              Wczytaj przygotowaną pełną bazę sklepu 038 ({initialCarpets.length} pozycji)
             </button>
+            <span className="text-[10px] text-amber-800">
+              Gotowa baza z Twojego pliku CSV – kliknij powyższy link, aby załadować bez szukania pliku
+            </span>
+          </div>
+
+          {/* Download links */}
+          <div className="flex items-center justify-between gap-2 p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs">
+            <span className="text-gray-700 font-medium text-[11px]">Pobierz kopię pliku:</span>
+            <div className="flex items-center gap-2">
+              <a
+                href="./baza_dywany_sklep038_pelna.csv"
+                download="baza_dywany_sklep038_pelna.csv"
+                className="px-2.5 py-1 bg-white hover:bg-blue-50 text-blue-700 font-bold rounded-md border border-gray-300 text-[11px] transition-colors"
+              >
+                Pobierz .CSV
+              </a>
+              <a
+                href="./baza_dywany_sklep038_pelna.json"
+                download="baza_dywany_sklep038_pelna.json"
+                className="px-2.5 py-1 bg-white hover:bg-blue-50 text-blue-700 font-bold rounded-md border border-gray-300 text-[11px] transition-colors"
+              >
+                Pobierz .JSON
+              </a>
+            </div>
           </div>
 
           {error && (
