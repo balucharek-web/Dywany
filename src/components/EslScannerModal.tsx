@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { scanImageData, setModuleArgs } from '@undecaf/zbar-wasm';
 import { scanEslLabelWithoutAi, LocalOcrResult } from '../services/localOcrService';
+import { scanEslLabel } from '../services/eslScannerService';
 import { Carpet } from '../types';
 import { initialCarpets } from '../data/seedData';
 
@@ -411,10 +412,23 @@ export function EslScannerModal({
         }
       }
 
-      // If not in catalog, run local non-AI OCR
-      const result = await scanEslLabelWithoutAi(canvas, vw, vh, (pct) => {
-        setOcrProgress(pct);
-      });
+      // If not in catalog, try AI OCR first for 100% precision on new labels
+      let result: LocalOcrResult | null = null;
+      try {
+        const aiRes = await scanEslLabel(dataUrl, 'image/jpeg');
+        result = {
+          nazwa: aiRes.nazwa,
+          ref: aiRes.ref,
+          ean: aiRes.ean,
+          cena: aiRes.cena
+        };
+      } catch (aiErr: any) {
+        console.warn('AI OCR fallback to local OCR:', aiErr?.message);
+        // Fallback to local non-AI OCR
+        result = await scanEslLabelWithoutAi(canvas, vw, vh, (pct) => {
+          setOcrProgress(pct);
+        });
+      }
 
       if (barcodeFound) {
         if (barcodeFound.length === 13) result.ean = barcodeFound;
@@ -502,10 +516,22 @@ export function EslScannerModal({
         }
       }
 
-      // If not in catalog, perform local OCR
-      const result = await scanEslLabelWithoutAi(dataUrl, undefined, undefined, (pct) => {
-        setOcrProgress(pct);
-      });
+      // If not in catalog, try AI OCR first for 100% precision on new labels
+      let result: LocalOcrResult | null = null;
+      try {
+        const aiRes = await scanEslLabel(dataUrl, 'image/jpeg');
+        result = {
+          nazwa: aiRes.nazwa,
+          ref: aiRes.ref,
+          ean: aiRes.ean,
+          cena: aiRes.cena
+        };
+      } catch (aiErr: any) {
+        console.warn('AI OCR fallback to local OCR:', aiErr?.message);
+        result = await scanEslLabelWithoutAi(dataUrl, undefined, undefined, (pct) => {
+          setOcrProgress(pct);
+        });
+      }
 
       if (barcodeFound) {
         if (barcodeFound.length === 13) result.ean = barcodeFound;
