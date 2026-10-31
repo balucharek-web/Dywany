@@ -9,8 +9,14 @@ service cloud.firestore {
     function isSuperAdmin() {
       return isSignedIn() &&
         request.auth.token.email != null &&
-        request.auth.token.email.lower() == 'baluch.arek@gmail.com' &&
-        request.auth.token.email_verified == true;
+        request.auth.token.email_verified == true &&
+        (
+          request.auth.token.email.lower() == 'baluch.arek@gmail.com' ||
+          (
+            exists(/databases/$(database)/documents/admins/$(request.auth.token.email.lower())) &&
+            get(/databases/$(database)/documents/admins/$(request.auth.token.email.lower())).data.role == 'superadmin'
+          )
+        );
     }
 
     function isAdmin() {

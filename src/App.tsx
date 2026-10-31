@@ -4,6 +4,7 @@ import {
   onSnapshot,
   doc,
   setDoc,
+  updateDoc,
   deleteDoc,
   writeBatch
 } from 'firebase/firestore';
@@ -138,11 +139,42 @@ export default function App() {
           const data = docSnap.data();
           loadedAdmins.push({
             email: data.email || docSnap.id,
-            role: data.role || 'admin',
+            role: (data.role as 'superadmin' | 'admin') || 'admin',
             addedBy: data.addedBy,
             createdAt: data.createdAt || ''
           });
         });
+
+        // If the database collection does not yet contain baluch.arek@gmail.com
+        // AND no other superadmin exists, provide the bootstrap entry and auto-seed it
+        const hasAnySuperAdmin = loadedAdmins.some((a) => a.role === 'superadmin');
+        const hasBootstrap = loadedAdmins.some(
+          (a) => a.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()
+        );
+
+        if (!hasBootstrap && !hasAnySuperAdmin) {
+          loadedAdmins.unshift({
+            email: SUPER_ADMIN_EMAIL,
+            role: 'superadmin',
+            createdAt: '2026-10-30',
+            addedBy: 'Inicjalizacja systemu'
+          });
+
+          // If current user is baluch.arek@gmail.com, quietly write document to Firestore
+          if (currentUser?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
+            setDoc(
+              doc(db, 'admins', SUPER_ADMIN_EMAIL.toLowerCase()),
+              {
+                email: SUPER_ADMIN_EMAIL.toLowerCase(),
+                role: 'superadmin',
+                createdAt: new Date().toISOString().split('T')[0],
+                addedBy: 'Główny Super Administrator'
+              },
+              { merge: true }
+            ).catch((err) => console.warn('Auto-seed superadmin note:', err));
+          }
+        }
+
         setAdmins(loadedAdmins);
       },
       (error) => {
@@ -234,9 +266,28 @@ export default function App() {
   }, [warehouses, carpets]);
 
   // Authorization checks
-  const isSuperAdmin = Boolean(
-    currentUser?.email && currentUser.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()
-  );
+  const isSuperAdmin = useMemo(() => {
+    if (!currentUser?.email) return false;
+    const userEmail = currentUser.email.toLowerCase();
+
+    // 1. Direct role check in loaded admins
+    const currentAdminDoc = admins.find(
+      (a) => a.email.toLowerCase() === userEmail
+    );
+    if (currentAdminDoc) {
+      return currentAdminDoc.role === 'superadmin';
+    }
+
+    // 2. Initial bootstrap fallback check (only if no other superadmin has been assigned)
+    const hasAnyOtherSuperAdmin = admins.some(
+      (a) => a.role === 'superadmin' && a.email.toLowerCase() !== SUPER_ADMIN_EMAIL.toLowerCase()
+    );
+    if (userEmail === SUPER_ADMIN_EMAIL.toLowerCase() && !hasAnyOtherSuperAdmin) {
+      return true;
+    }
+
+    return false;
+  }, [currentUser, admins]);
 
   const isAdmin = Boolean(
     isSuperAdmin ||
@@ -431,8 +482,8 @@ export default function App() {
     }
   };
 
-  // Super Admin: Add Admin Email
-  const handleAddAdminEmail = async (email: string) => {
+  // Super Admin: Add Admin Email with selected role
+  const handleAddAdminEmail = async (email: string, role: 'admin' | 'superadmin' = 'admin') => {
     if (!isSuperAdmin) {
       throw new Error('Tylko Super Admin może dodawać administratorów.');
     }
@@ -440,15 +491,47 @@ export default function App() {
     const docId = normalized;
     const payload: AdminUser = {
       email: normalized,
-      role: 'admin',
-      addedBy: currentUser?.email || SUPER_ADMIN_EMAIL,
+      role,
+      addedBy: currentUser?.email || 'Super Admin',
       createdAt: new Date().toISOString().split('T')[0]
     };
 
     try {
       await setDoc(doc(db, 'admins', docId), payload);
+      await logActivity(
+        'add',
+        `Administrator ${normalized}`,
+        `Nadano uprawnienia: ${role === 'superadmin' ? 'Super Administrator' : 'Administrator sklepu'} dla ${normalized}`
+      );
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `admins/${docId}`);
+    }
+  };
+
+  // Super Admin: Update Admin Role
+  const handleUpdateAdminRole = async (email: string, newRole: 'admin' | 'superadmin') => {
+    if (!isSuperAdmin) {
+      throw new Error('Tylko Super Admin może modyfikować uprawnienia administratorów.');
+    }
+    const normalized = email.trim().toLowerCase();
+
+    // Prevent demoting the last super admin
+    if (newRole === 'admin') {
+      const superAdmins = admins.filter((a) => a.role === 'superadmin');
+      if (superAdmins.length <= 1 && superAdmins.some((a) => a.email.toLowerCase() === normalized)) {
+        throw new Error('Nie można zdegradować jedynego Super Administratora. W systemie musi pozostać co najmniej jeden Super Admin.');
+      }
+    }
+
+    try {
+      await updateDoc(doc(db, 'admins', normalized), { role: newRole });
+      await logActivity(
+        'edit',
+        `Rola ${normalized}`,
+        `Zmieniono rolę użytkownika ${normalized} na: ${newRole === 'superadmin' ? 'Super Administrator' : 'Administrator sklepu'}`
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `admins/${normalized}`);
     }
   };
 
@@ -457,11 +540,74 @@ export default function App() {
     if (!isSuperAdmin) {
       throw new Error('Tylko Super Admin może usuwać administratorów.');
     }
-    const docId = email.trim().toLowerCase();
+    const normalized = email.trim().toLowerCase();
+
+    // Prevent deleting the last super admin
+    const targetAdmin = admins.find((a) => a.email.toLowerCase() === normalized);
+    if (targetAdmin?.role === 'superadmin') {
+      const remainingSuperAdmins = admins.filter(
+        (a) => a.role === 'superadmin' && a.email.toLowerCase() !== normalized
+      );
+      if (remainingSuperAdmins.length === 0) {
+        throw new Error('Nie można usunąć jedynego Super Administratora. W systemie musi pozostać co najmniej jeden Super Admin.');
+      }
+    }
+
     try {
-      await deleteDoc(doc(db, 'admins', docId));
+      await deleteDoc(doc(db, 'admins', normalized));
+      await logActivity(
+        'delete',
+        `Administrator ${normalized}`,
+        `Odebrano uprawnienia administratora dla ${normalized}`
+      );
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `admins/${docId}`);
+      handleFirestoreError(error, OperationType.DELETE, `admins/${normalized}`);
+    }
+  };
+
+  // Super Admin: Transfer Super Admin & optional self-removal
+  const handleTransferSuperAdmin = async (targetEmail: string, removeSelf: boolean) => {
+    if (!isSuperAdmin) {
+      throw new Error('Tylko Super Admin może przekazać zarządzanie aplikacją.');
+    }
+    const normalizedTarget = targetEmail.trim().toLowerCase();
+    const currentEmail = currentUser?.email?.toLowerCase();
+
+    if (normalizedTarget === currentEmail) {
+      throw new Error('Nie możesz przekazać uprawnień samemu sobie.');
+    }
+
+    try {
+      const batch = writeBatch(db);
+
+      // 1. Promote or add target user as superadmin
+      batch.set(
+        doc(db, 'admins', normalizedTarget),
+        {
+          email: normalizedTarget,
+          role: 'superadmin',
+          addedBy: currentEmail || 'Przekazanie Super Admina',
+          createdAt: new Date().toISOString().split('T')[0]
+        },
+        { merge: true }
+      );
+
+      // 2. If removeSelf, delete current user from admins collection
+      if (removeSelf && currentEmail) {
+        batch.delete(doc(db, 'admins', currentEmail));
+      }
+
+      await batch.commit();
+
+      await logActivity(
+        'edit',
+        'Przekazanie aplikacji',
+        `Super Admin (${currentEmail}) przekazał rolę Super Administratora dla ${normalizedTarget}${
+          removeSelf ? ' i usunął własne uprawnienia.' : '.'
+        }`
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `admins/${normalizedTarget}`);
     }
   };
 
@@ -774,8 +920,10 @@ export default function App() {
         onClose={() => setIsAdminManagementOpen(false)}
         admins={admins}
         onAddAdmin={handleAddAdminEmail}
+        onUpdateAdminRole={handleUpdateAdminRole}
         onRemoveAdmin={handleRemoveAdminEmail}
-        currentSuperAdminEmail={SUPER_ADMIN_EMAIL}
+        onTransferSuperAdmin={handleTransferSuperAdmin}
+        currentUserEmail={currentUser?.email || undefined}
         activeBays={activeBays}
         carpets={carpets}
         onAddWarehouses={handleAddWarehouses}

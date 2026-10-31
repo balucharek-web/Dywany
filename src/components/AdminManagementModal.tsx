@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AdminUser, Carpet, SUPER_ADMIN_EMAIL } from '../types';
+import { AdminUser, Carpet } from '../types';
 import {
   X,
   UserPlus,
@@ -12,16 +12,22 @@ import {
   Plus,
   Search,
   RotateCcw,
-  AlertTriangle
+  AlertTriangle,
+  Crown,
+  Shield,
+  ArrowRightLeft,
+  ChevronDown
 } from 'lucide-react';
 
 interface AdminManagementModalProps {
   isOpen: boolean;
   onClose: () => void;
   admins: AdminUser[];
-  onAddAdmin: (email: string) => Promise<void>;
+  onAddAdmin: (email: string, role: 'admin' | 'superadmin') => Promise<void>;
+  onUpdateAdminRole: (email: string, role: 'admin' | 'superadmin') => Promise<void>;
   onRemoveAdmin: (email: string) => Promise<void>;
-  currentSuperAdminEmail: string;
+  onTransferSuperAdmin: (targetEmail: string, removeSelf: boolean) => Promise<void>;
+  currentUserEmail?: string;
   activeBays: number[];
   carpets: Carpet[];
   onAddWarehouses: (numbers: number[]) => Promise<void>;
@@ -35,8 +41,10 @@ export function AdminManagementModal({
   onClose,
   admins,
   onAddAdmin,
+  onUpdateAdminRole,
   onRemoveAdmin,
-  currentSuperAdminEmail,
+  onTransferSuperAdmin,
+  currentUserEmail,
   activeBays,
   carpets,
   onAddWarehouses,
@@ -48,9 +56,15 @@ export function AdminManagementModal({
 
   // Admins state
   const [newEmail, setNewEmail] = useState('');
+  const [newRole, setNewRole] = useState<'admin' | 'superadmin'>('admin');
   const [loadingAdmin, setLoadingAdmin] = useState(false);
   const [adminError, setAdminError] = useState<string | null>(null);
   const [adminSuccess, setAdminSuccess] = useState<string | null>(null);
+
+  // Handover state
+  const [isHandoverOpen, setIsHandoverOpen] = useState(false);
+  const [handoverTarget, setHandoverTarget] = useState('');
+  const [handoverRemoveSelf, setHandoverRemoveSelf] = useState(true);
 
   // Warehouses state
   const [newBayInput, setNewBayInput] = useState('');
@@ -65,7 +79,12 @@ export function AdminManagementModal({
     carpetsInBay: Carpet[];
   } | null>(null);
 
+  // Self deletion confirmation modal
+  const [pendingSelfDelete, setPendingSelfDelete] = useState<string | null>(null);
+
   if (!isOpen) return null;
+
+  const superAdminsCount = admins.filter((a) => a.role === 'superadmin').length;
 
   // Handle Admin Add
   const handleAddAdminSubmit = async (e: React.FormEvent) => {
@@ -79,22 +98,21 @@ export function AdminManagementModal({
       return;
     }
 
-    if (email === currentSuperAdminEmail.toLowerCase()) {
-      setAdminError('Ten adres jest już głównym Super Administratorem.');
-      return;
-    }
-
     if (admins.some((a) => a.email.toLowerCase() === email)) {
-      setAdminError('Użytkownik z tym adresem jest już administratorem.');
+      setAdminError('Użytkownik z tym adresem e-mail jest już na liście administratorów.');
       return;
     }
 
     try {
       setLoadingAdmin(true);
-      await onAddAdmin(email);
+      await onAddAdmin(email, newRole);
       setNewEmail('');
-      setAdminSuccess(`Pomyślnie dodano uprawnienia dla ${email}`);
-      setTimeout(() => setAdminSuccess(null), 3000);
+      setAdminSuccess(
+        `Pomyślnie dodano użytkownika ${email} jako ${
+          newRole === 'superadmin' ? 'Super Administrator' : 'Administrator sklepu'
+        }.`
+      );
+      setTimeout(() => setAdminSuccess(null), 3500);
     } catch (err: unknown) {
       setAdminError(err instanceof Error ? err.message : 'Wystąpił błąd podczas dodawania');
     } finally {
@@ -102,8 +120,51 @@ export function AdminManagementModal({
     }
   };
 
+  // Handle changing role
+  const handleChangeRole = async (email: string, targetRole: 'admin' | 'superadmin') => {
+    setAdminError(null);
+    setAdminSuccess(null);
+
+    if (targetRole === 'admin' && superAdminsCount <= 1) {
+      const targetUser = admins.find((a) => a.email.toLowerCase() === email.toLowerCase());
+      if (targetUser?.role === 'superadmin') {
+        setAdminError('W systemie musi pozostać co najmniej jeden Super Administrator.');
+        return;
+      }
+    }
+
+    try {
+      setLoadingAdmin(true);
+      await onUpdateAdminRole(email, targetRole);
+      setAdminSuccess(
+        `Zmieniono uprawnienia dla ${email} na ${
+          targetRole === 'superadmin' ? 'Super Administrator' : 'Administrator sklepu'
+        }.`
+      );
+      setTimeout(() => setAdminSuccess(null), 3000);
+    } catch (err: unknown) {
+      setAdminError(err instanceof Error ? err.message : 'Błąd zmiany roli');
+    } finally {
+      setLoadingAdmin(false);
+    }
+  };
+
+  // Handle Remove Admin click
   const handleRemoveAdminClick = async (email: string) => {
-    if (window.confirm(`Czy na pewno chcesz odebrać uprawnienia administratora dla ${email}?`)) {
+    const isSelf = currentUserEmail && email.toLowerCase() === currentUserEmail.toLowerCase();
+    const targetUser = admins.find((a) => a.email.toLowerCase() === email.toLowerCase());
+
+    if (targetUser?.role === 'superadmin' && superAdminsCount <= 1) {
+      setAdminError('Nie można usunąć jedynego Super Administratora. Najpierw wyznacz innego Super Admina.');
+      return;
+    }
+
+    if (isSelf) {
+      setPendingSelfDelete(email);
+      return;
+    }
+
+    if (window.confirm(`Czy na pewno chcesz odebrać uprawnienia dla ${email}?`)) {
       try {
         setLoadingAdmin(true);
         await onRemoveAdmin(email);
@@ -114,6 +175,56 @@ export function AdminManagementModal({
       } finally {
         setLoadingAdmin(false);
       }
+    }
+  };
+
+  // Confirm Self Removal
+  const handleConfirmSelfDelete = async () => {
+    if (!pendingSelfDelete) return;
+    try {
+      setLoadingAdmin(true);
+      await onRemoveAdmin(pendingSelfDelete);
+      setPendingSelfDelete(null);
+      onClose();
+    } catch (err: unknown) {
+      setAdminError(err instanceof Error ? err.message : 'Błąd podczas usuwania własnego konta');
+      setPendingSelfDelete(null);
+    } finally {
+      setLoadingAdmin(false);
+    }
+  };
+
+  // Handle Handover Submit
+  const handleHandoverSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const target = handoverTarget.trim().toLowerCase();
+    setAdminError(null);
+    setAdminSuccess(null);
+
+    if (!target || !target.includes('@')) {
+      setAdminError('Wpisz poprawny adres e-mail nowego Super Administratora.');
+      return;
+    }
+
+    if (currentUserEmail && target === currentUserEmail.toLowerCase()) {
+      setAdminError('Nie możesz przekazać roli samemu sobie.');
+      return;
+    }
+
+    try {
+      setLoadingAdmin(true);
+      await onTransferSuperAdmin(target, handoverRemoveSelf);
+      setIsHandoverOpen(false);
+      setHandoverTarget('');
+      setAdminSuccess(`Pomyślnie mianowano ${target} nowym Super Administratorem!`);
+      setTimeout(() => setAdminSuccess(null), 4000);
+      if (handoverRemoveSelf) {
+        onClose();
+      }
+    } catch (err: unknown) {
+      setAdminError(err instanceof Error ? err.message : 'Błąd przekazywania uprawnień');
+    } finally {
+      setLoadingAdmin(false);
     }
   };
 
@@ -129,7 +240,7 @@ export function AdminManagementModal({
         const start = parseInt(startStr, 10);
         const end = parseInt(endStr, 10);
         if (!isNaN(start) && !isNaN(end) && start > 0 && end >= start) {
-          const limit = Math.min(end, start + 200); // cap to prevent accidental huge input
+          const limit = Math.min(end, start + 200);
           for (let i = start; i <= limit; i++) {
             if (!result.includes(i)) result.push(i);
           }
@@ -240,7 +351,7 @@ export function AdminManagementModal({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-200 bg-purple-50">
           <div className="flex items-center gap-2 font-bold text-purple-900 text-sm sm:text-base">
-            <ShieldCheck className="w-5 h-5 text-purple-600" />
+            <Crown className="w-5 h-5 text-purple-600" />
             Panel Super Admina – Sklep 038
           </div>
           <button
@@ -262,7 +373,7 @@ export function AdminManagementModal({
             }`}
           >
             <ShieldCheck className="w-4 h-4 text-purple-600" />
-            <span>Administratorzy ({admins.length + 1})</span>
+            <span>Administratorzy ({admins.length})</span>
           </button>
 
           <button
@@ -280,44 +391,164 @@ export function AdminManagementModal({
 
         {/* Tab 1: Admins */}
         {activeTab === 'admins' && (
-          <div className="p-5 sm:p-6 overflow-y-auto flex-1 flex flex-col gap-5">
-            {/* Super Admin Notice */}
-            <div className="bg-purple-50/80 border border-purple-200 rounded-xl p-3.5 flex items-start gap-3">
-              <ShieldCheck className="w-5 h-5 text-purple-700 shrink-0 mt-0.5" />
-              <div className="text-xs">
-                <span className="font-bold text-purple-900 block">Konto Super Admina:</span>
-                <span className="font-mono text-purple-800 font-semibold">{currentSuperAdminEmail}</span>
-                <p className="text-purple-700 mt-1">
-                  Jako Super Admin możesz autoryzować adresy e-mail innych pracowników sklepu 038, którzy będą mogli logować się kontem Google i edytować dane magazynowe.
-                </p>
+          <div className="p-4 sm:p-6 overflow-y-auto flex-1 flex flex-col gap-4">
+            {/* Super Admin Notice & Handover Button */}
+            <div className="bg-purple-50 border border-purple-200 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <Crown className="w-5 h-5 text-purple-600 shrink-0 mt-0.5" />
+                <div className="text-xs">
+                  <span className="font-bold text-purple-950 block">Zarządzanie rolami i uprawnieniami</span>
+                  <p className="text-purple-800 mt-0.5">
+                    Możesz mianować innych Super Adminów, zarządzać pracownikami lub w bezpieczny sposób przekazać aplikację innej osobie.
+                  </p>
+                </div>
               </div>
+
+              <button
+                type="button"
+                onClick={() => setIsHandoverOpen(true)}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer"
+              >
+                <ArrowRightLeft className="w-3.5 h-3.5" />
+                <span>Przekaż aplikację</span>
+              </button>
             </div>
 
-            {/* Add form */}
-            <div>
-              <label className="text-xs font-bold text-gray-700 block mb-1.5">
-                Dodaj nowego administratora (adres e-mail Google)
-              </label>
-              <form onSubmit={handleAddAdminSubmit} className="flex gap-2">
-                <div className="relative flex-1">
-                  <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="email"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    placeholder="np. pracownik@leroymerlin.pl lub gmail.com"
-                    className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-hidden"
-                    disabled={loadingAdmin}
-                  />
+            {/* Handover Dialog/Box if open */}
+            {isHandoverOpen && (
+              <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 flex flex-col gap-3 animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-bold text-amber-900 text-xs sm:text-sm">
+                    <ArrowRightLeft className="w-4 h-4 text-amber-700" />
+                    Przekazanie roli Super Administratora
+                  </div>
+                  <button
+                    onClick={() => setIsHandoverOpen(false)}
+                    className="text-amber-600 hover:text-amber-900 cursor-pointer text-xs font-bold"
+                  >
+                    Anuluj
+                  </button>
                 </div>
-                <button
-                  type="submit"
-                  disabled={loadingAdmin || !newEmail.trim()}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  Dodaj
-                </button>
+
+                <p className="text-xs text-amber-800">
+                  Wybierz osobę, której przekazujesz zarządzanie aplikacją. Nowy Super Admin otrzyma pełne uprawnienia do bazy sklepu 038.
+                </p>
+
+                <form onSubmit={handleHandoverSubmit} className="flex flex-col gap-2.5">
+                  <div>
+                    <label className="text-[11px] font-bold text-gray-700 block mb-1">
+                      Wybierz z listy lub wpisz nowy adres e-mail:
+                    </label>
+                    <input
+                      type="email"
+                      value={handoverTarget}
+                      onChange={(e) => setHandoverTarget(e.target.value)}
+                      placeholder="np. nowy.kierownik@leroymerlin.pl"
+                      className="w-full px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
+                      disabled={loadingAdmin}
+                      list="existing-admins-list"
+                    />
+                    <datalist id="existing-admins-list">
+                      {admins
+                        .filter((a) => !currentUserEmail || a.email.toLowerCase() !== currentUserEmail.toLowerCase())
+                        .map((a) => (
+                          <option key={a.email} value={a.email}>
+                            {a.email} ({a.role === 'superadmin' ? 'Super Admin' : 'Admin sklepu'})
+                          </option>
+                        ))}
+                    </datalist>
+                  </div>
+
+                  <label className="flex items-center gap-2 text-xs text-gray-800 cursor-pointer select-none py-1">
+                    <input
+                      type="checkbox"
+                      checked={handoverRemoveSelf}
+                      onChange={(e) => setHandoverRemoveSelf(e.target.checked)}
+                      className="w-4 h-4 text-purple-600 rounded-sm focus:ring-purple-500"
+                    />
+                    <span className="font-semibold">
+                      Usuń moje konto z listy administratorów po przekazaniu (całkowite oddanie aplikacji)
+                    </span>
+                  </label>
+
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setIsHandoverOpen(false)}
+                      className="px-3 py-1.5 text-xs text-gray-600 hover:bg-amber-100 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Anuluj
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={loadingAdmin || !handoverTarget.trim()}
+                      className="px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      Potwierdź przekazanie
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Add new administrator form */}
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3.5 flex flex-col gap-2.5">
+              <span className="text-xs font-bold text-gray-800 block">
+                Dodaj nowego administratora (konto Google)
+              </span>
+
+              <form onSubmit={handleAddAdminSubmit} className="flex flex-col gap-2.5">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="email"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      placeholder="np. pracownik@leroymerlin.pl lub gmail.com"
+                      className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-purple-500 focus:outline-hidden"
+                      disabled={loadingAdmin}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={loadingAdmin || !newEmail.trim()}
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer shrink-0"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    Dodaj
+                  </button>
+                </div>
+
+                {/* Role selector pills */}
+                <div className="flex items-center gap-2 pt-0.5">
+                  <span className="text-[11px] font-bold text-gray-500">Rola:</span>
+                  <button
+                    type="button"
+                    onClick={() => setNewRole('admin')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                      newRole === 'admin'
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Shield className="w-3.5 h-3.5" />
+                    Admin sklepu
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewRole('superadmin')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                      newRole === 'superadmin'
+                        ? 'bg-purple-600 text-white shadow-2xs'
+                        : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Crown className="w-3.5 h-3.5" />
+                    Super Administrator
+                  </button>
+                </div>
               </form>
             </div>
 
@@ -337,71 +568,126 @@ export function AdminManagementModal({
 
             {/* Active Admins List */}
             <div>
-              <span className="text-xs font-bold text-gray-700 block mb-2">
-                Lista aktywnych administratorów ({admins.length + 1})
-              </span>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-gray-700">
+                  Lista administratorów ({admins.length})
+                </span>
+                <span className="text-[11px] text-gray-400">
+                  Super Admini: {superAdminsCount}
+                </span>
+              </div>
 
               <div className="flex flex-col gap-2">
-                {/* Super Admin Row */}
-                <div className="flex items-center justify-between p-3 rounded-xl border-2 border-purple-300 bg-purple-50/50">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-xs">
-                      SA
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs sm:text-sm font-bold text-gray-900 font-mono">
-                          {currentSuperAdminEmail}
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-200 text-purple-900">
-                          SUPER ADMIN
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-gray-500">Główny właściciel sklepu 038</span>
-                    </div>
-                  </div>
-                </div>
+                {admins.map((adm) => {
+                  const isCurrent =
+                    currentUserEmail && adm.email.toLowerCase() === currentUserEmail.toLowerCase();
+                  const isSuper = adm.role === 'superadmin';
+                  const isSoleSuperAdmin = isSuper && superAdminsCount <= 1;
 
-                {/* Added Admins */}
-                {admins.map((adm) => (
-                  <div
-                    key={adm.email}
-                    className="flex items-center justify-between p-3 rounded-xl border border-gray-200 bg-white hover:border-gray-300 transition-colors"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
-                        AD
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs sm:text-sm font-bold text-gray-800 font-mono">
-                            {adm.email}
-                          </span>
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
-                            ADMIN
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-gray-400 flex items-center gap-2">
-                          {adm.createdAt && <span>Dodano: {adm.createdAt}</span>}
-                          {adm.addedBy && <span>przez: {adm.addedBy}</span>}
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => handleRemoveAdminClick(adm.email)}
-                      disabled={loadingAdmin}
-                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                      title="Odbierz uprawnienia"
+                  return (
+                    <div
+                      key={adm.email}
+                      className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl border gap-2 transition-colors ${
+                        isSuper
+                          ? 'border-purple-200 bg-purple-50/40 hover:border-purple-300'
+                          : 'border-gray-200 bg-white hover:border-gray-300'
+                      }`}
                     >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div
+                          className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                            isSuper
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-blue-100 text-blue-700'
+                          }`}
+                        >
+                          {isSuper ? <Crown className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs sm:text-sm font-bold text-gray-900 font-mono truncate">
+                              {adm.email}
+                            </span>
+                            {isCurrent && (
+                              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                                TY
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-gray-400 flex items-center gap-2">
+                            {adm.createdAt && <span>Dodano: {adm.createdAt}</span>}
+                            {adm.addedBy && <span>przez: {adm.addedBy}</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Role & actions */}
+                      <div className="flex items-center justify-between sm:justify-end gap-2 pt-1 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                        {/* Role switcher */}
+                        <div className="flex items-center gap-1">
+                          {isSuper ? (
+                            <button
+                              type="button"
+                              onClick={() => handleChangeRole(adm.email, 'admin')}
+                              disabled={loadingAdmin || isSoleSuperAdmin}
+                              title={
+                                isSoleSuperAdmin
+                                  ? 'W systemie musi pozostać co najmniej jeden Super Admin'
+                                  : 'Zmień na zwykłego Administratora'
+                              }
+                              className={`px-2 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer ${
+                                isSoleSuperAdmin
+                                  ? 'bg-purple-200 text-purple-900 cursor-not-allowed opacity-90'
+                                  : 'bg-purple-100 text-purple-800 hover:bg-purple-200'
+                              }`}
+                            >
+                              <Crown className="w-3 h-3 text-purple-700" />
+                              <span>SUPER ADMIN</span>
+                              {!isSoleSuperAdmin && <ChevronDown className="w-3 h-3 ml-0.5 opacity-60" />}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleChangeRole(adm.email, 'superadmin')}
+                              disabled={loadingAdmin}
+                              title="Awansuj na Super Administratora"
+                              className="px-2 py-1 rounded-md text-[11px] font-bold bg-blue-100 text-blue-800 hover:bg-blue-200 flex items-center gap-1 transition-colors cursor-pointer"
+                            >
+                              <Shield className="w-3 h-3 text-blue-700" />
+                              <span>ADMIN SKLEPU</span>
+                              <ChevronDown className="w-3 h-3 ml-0.5 opacity-60" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Remove admin button */}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAdminClick(adm.email)}
+                          disabled={loadingAdmin || isSoleSuperAdmin}
+                          className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                            isSoleSuperAdmin
+                              ? 'text-gray-300 cursor-not-allowed'
+                              : 'text-gray-400 hover:text-red-600 hover:bg-red-50'
+                          }`}
+                          title={
+                            isSoleSuperAdmin
+                              ? 'Nie można usunąć jedynego Super Administratora'
+                              : isCurrent
+                              ? 'Zrzeknij się i usuń swoje konto'
+                              : 'Usuń uprawnienia'
+                          }
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
 
                 {admins.length === 0 && (
                   <div className="p-4 text-center border border-dashed border-gray-200 rounded-xl text-gray-400 text-xs">
-                    Brak dodatkowych administratorów. Wpisz e-mail powyżej, aby nadać uprawnienia kolejnym pracownikom.
+                    Brak administratorów na liście.
                   </div>
                 )}
               </div>
@@ -411,9 +697,9 @@ export function AdminManagementModal({
 
         {/* Tab 2: Warehouses Management */}
         {activeTab === 'warehouses' && (
-          <div className="p-5 sm:p-6 overflow-y-auto flex-1 flex flex-col gap-4">
+          <div className="p-4 sm:p-6 overflow-y-auto flex-1 flex flex-col gap-4">
             {/* Quick explanation & stats */}
-            <div className="bg-blue-50/80 border border-blue-200 rounded-xl p-3.5 flex items-start justify-between gap-3">
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 flex items-start justify-between gap-3">
               <div className="flex items-start gap-2.5">
                 <Layers className="w-5 h-5 text-blue-700 shrink-0 mt-0.5" />
                 <div className="text-xs">
@@ -550,6 +836,44 @@ export function AdminManagementModal({
           </button>
         </div>
       </div>
+
+      {/* Confirmation Modal for Self Removal */}
+      {pendingSelfDelete && (
+        <div className="fixed inset-0 z-60 bg-black/70 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95">
+            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+
+            <div className="text-center">
+              <h3 className="text-base sm:text-lg font-black text-gray-900">
+                Usunąć własne uprawnienia?
+              </h3>
+              <p className="mt-2 text-xs text-gray-600">
+                Czy na pewno chcesz usunąć swoje konto (<strong className="font-mono">{pendingSelfDelete}</strong>) z listy administratorów? Po tej operacji utracisz dostęp do panelu edycji magazynu i zarządzania aplikacją.
+              </p>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setPendingSelfDelete(null)}
+                className="flex-1 py-2.5 px-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs sm:text-sm transition-colors cursor-pointer"
+              >
+                Anuluj
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSelfDelete}
+                disabled={loadingAdmin}
+                className="flex-1 py-2.5 px-3 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold text-xs sm:text-sm transition-colors cursor-pointer shadow-xs"
+              >
+                {loadingAdmin ? 'Usuwanie...' : 'Tak, usuń moje konto'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Confirmation Modal for Warehouse Deletion */}
       {pendingDeleteBay && (
