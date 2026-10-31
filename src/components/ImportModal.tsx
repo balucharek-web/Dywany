@@ -151,23 +151,55 @@ export function ImportModal({ isOpen, onClose, onImport }: ImportModalProps) {
             </span>
           </div>
 
-          {/* Download links */}
-          <div className="flex items-center justify-between gap-2 p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs">
-            <span className="text-gray-700 font-medium text-[11px]">Pobierz kopię pliku:</span>
-            <div className="flex items-center gap-2">
+          {/* Download copies in multiple formats */}
+          <div className="flex flex-col gap-2 p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-800 font-bold text-[11px]">
+                Pobierz kopię bazy dywanów:
+              </span>
+              <span className="text-[10px] text-gray-500">
+                Wybierz format
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+              <a
+                href="./baza_dywany_sklep038_pelna.xlsx"
+                download="baza_dywany_sklep038.xlsx"
+                className="flex items-center justify-center gap-1.5 py-2 px-2 bg-emerald-50 hover:bg-emerald-100/80 text-emerald-900 font-bold rounded-lg border border-emerald-200 text-[11px] transition-all text-center active:scale-95 shadow-2xs"
+                title="Pobierz w formacie Microsoft Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                <span>Excel (.xlsx)</span>
+              </a>
+
+              <a
+                href="./baza_dywany_sklep038_arkusze_google.xlsx"
+                download="baza_dywany_sklep038_arkusze_google.xlsx"
+                className="flex items-center justify-center gap-1.5 py-2 px-2 bg-emerald-50 hover:bg-emerald-100/80 text-emerald-900 font-bold rounded-lg border border-emerald-200 text-[11px] transition-all text-center active:scale-95 shadow-2xs"
+                title="Pobierz plik zoptymalizowany dla Arkuszy Google (Google Sheets)"
+              >
+                <span className="text-xs font-black text-emerald-700">⊞</span>
+                <span>Arkusze Google</span>
+              </a>
+
               <a
                 href="./baza_dywany_sklep038_pelna.csv"
-                download="baza_dywany_sklep038_pelna.csv"
-                className="px-2.5 py-1 bg-white hover:bg-blue-50 text-blue-700 font-bold rounded-md border border-gray-300 text-[11px] transition-colors"
+                download="baza_dywany_sklep038.csv"
+                className="flex items-center justify-center gap-1.5 py-2 px-2 bg-blue-50 hover:bg-blue-100/80 text-blue-900 font-bold rounded-lg border border-blue-200 text-[11px] transition-all text-center active:scale-95 shadow-2xs"
+                title="Pobierz w formacie CSV z polskimi znakami UTF-8"
               >
-                Pobierz .CSV
+                <span className="text-xs font-black text-blue-700">CSV</span>
+                <span>Plik .CSV</span>
               </a>
+
               <a
                 href="./baza_dywany_sklep038_pelna.json"
-                download="baza_dywany_sklep038_pelna.json"
-                className="px-2.5 py-1 bg-white hover:bg-blue-50 text-blue-700 font-bold rounded-md border border-gray-300 text-[11px] transition-colors"
+                download="baza_dywany_sklep038.json"
+                className="flex items-center justify-center gap-1.5 py-2 px-2 bg-purple-50 hover:bg-purple-100/80 text-purple-900 font-bold rounded-lg border border-purple-200 text-[11px] transition-all text-center active:scale-95 shadow-2xs"
+                title="Pobierz pełną kopię zapasową JSON"
               >
-                Pobierz .JSON
+                <span className="text-xs font-black text-purple-700">&#123;&#125;</span>
+                <span>Kopia .JSON</span>
               </a>
             </div>
           </div>
