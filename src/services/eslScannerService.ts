@@ -53,24 +53,49 @@ export async function fileToBase64Compressed(
 
 /**
  * Sends image data to server endpoint /api/scan-esl to extract Carpet Name, REF LM, and EAN.
+ * Includes automatic client-side retry for transient 503 server demand spikes.
  */
 export async function scanEslLabel(
   imageBase64: string,
   mimeType = 'image/jpeg'
 ): Promise<EslScanResult> {
-  const response = await fetch('/api/scan-esl', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ imageBase64, mimeType })
-  });
+  const maxRetries = 2;
+  let lastError: Error | null = null;
 
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.error || `Błąd serwera OCR (${response.status})`);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch('/api/scan-esl', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ imageBase64, mimeType })
+      });
+
+      if (response.ok) {
+        const data: EslScanResult = await response.json();
+        return data;
+      }
+
+      const errData = await response.json().catch(() => ({}));
+      const errMsg = errData.error || `Błąd serwera OCR (${response.status})`;
+
+      // If it's a 503/high-demand error and we have retries left, wait and retry
+      if ((response.status === 503 || errMsg.includes('503') || errMsg.includes('przeciążenie')) && attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
+        continue;
+      }
+
+      throw new Error(errMsg);
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < maxRetries && lastError.message.includes('503')) {
+        await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
+        continue;
+      }
+      break;
+    }
   }
 
-  const data: EslScanResult = await response.json();
-  return data;
+  throw lastError || new Error('Nie udało się odczytać etykiety.');
 }

@@ -1,5 +1,5 @@
 import express from 'express';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -13,7 +13,43 @@ async function startServer() {
   // JSON body parser with 25MB limit for high-res camera captures
   app.use(express.json({ limit: '25mb' }));
 
-  const ai = new GoogleGenAI({});
+  const ai = new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build'
+      }
+    }
+  });
+
+  function formatErrorMessage(err: any): string {
+    if (!err) return 'Nieznany błąd podczas odczytu etykiety';
+    const rawMsg = err.message || (typeof err === 'string' ? err : JSON.stringify(err));
+    try {
+      const match = rawMsg.match(/\{[\s\S]*\}/);
+      if (match) {
+        const parsed = JSON.parse(match[0]);
+        if (
+          parsed.error?.code === 503 ||
+          parsed.error?.status === 'UNAVAILABLE' ||
+          parsed.error?.message?.includes('high demand')
+        ) {
+          return 'Serwery Google AI mają chwilowe przeciążenie (503). Spróbuj ponownie za chwilę.';
+        }
+        if (parsed.error?.code === 429) {
+          return 'Chwilowy limit zapytań AI (429). Odczekaj chwilę i spróbuj ponownie.';
+        }
+        if (parsed.error?.message) {
+          return parsed.error.message;
+        }
+      }
+    } catch (_) {}
+
+    if (rawMsg.includes('503') || rawMsg.includes('high demand') || rawMsg.includes('UNAVAILABLE')) {
+      return 'Serwery Google AI mają chwilowe przeciążenie (503). Spróbuj ponownie za chwilę.';
+    }
+    return rawMsg;
+  }
 
   // ESL scanner OCR endpoint with automatic retry & model resilience
   app.post('/api/scan-esl', async (req, res) => {
@@ -36,15 +72,24 @@ Twoim celem jest bezbłędne odczytanie:
 
 Zwróć wynik jako JSON z polami: nazwa, ref, ean, cena, zapas.`;
 
-      const candidateModels = ['gemini-3.8-flash', 'gemini-flash-latest'];
+      // Multi-model resilience pool:
+      // gemini-3.8-flash with ThinkingLevel.LOW (drastically reduces token latency and 503 chance)
+      // gemini-3.1-flash-lite (high capacity, very low latency)
+      // gemini-flash-latest (general alias fallback)
+      const candidateConfigs: Array<{ model: string; thinkingConfig?: any }> = [
+        { model: 'gemini-3.8-flash', thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+        { model: 'gemini-3.1-flash-lite' },
+        { model: 'gemini-flash-latest' }
+      ];
+
       let lastError: any = null;
       let textResult: string | null = null;
 
-      for (const modelName of candidateModels) {
+      for (const config of candidateConfigs) {
         for (let attempt = 0; attempt < 2; attempt++) {
           try {
             const response = await ai.models.generateContent({
-              model: modelName,
+              model: config.model,
               contents: [
                 {
                   role: 'user',
@@ -63,6 +108,7 @@ Zwróć wynik jako JSON z polami: nazwa, ref, ean, cena, zapas.`;
               ],
               config: {
                 responseMimeType: 'application/json',
+                ...(config.thinkingConfig ? { thinkingConfig: config.thinkingConfig } : {}),
                 responseSchema: {
                   type: Type.OBJECT,
                   properties: {
@@ -83,24 +129,25 @@ Zwróć wynik jako JSON z polami: nazwa, ref, ean, cena, zapas.`;
             }
           } catch (err: any) {
             lastError = err;
-            console.warn(`Attempt ${attempt + 1} with ${modelName} failed:`, err?.message || err);
-            // Wait 600ms before retry if rate limited / 503
-            await new Promise((r) => setTimeout(r, 600));
+            console.warn(`Attempt ${attempt + 1} with ${config.model} failed:`, err?.message || err);
+            // Wait with backoff before retry if rate limited / 503
+            await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
           }
         }
         if (textResult) break;
       }
 
       if (!textResult) {
-        throw lastError || new Error('Nie udało się odczytać etykiety');
+        const friendlyMsg = formatErrorMessage(lastError);
+        return res.status(503).json({ error: friendlyMsg });
       }
 
       const parsed = JSON.parse(textResult);
       return res.json(parsed);
     } catch (err: unknown) {
       console.error('Błąd OCR ESL:', err);
-      const msg = err instanceof Error ? err.message : 'Błąd przetwarzania etykiety';
-      return res.status(500).json({ error: msg });
+      const friendlyMsg = formatErrorMessage(err);
+      return res.status(500).json({ error: friendlyMsg });
     }
   });
 
