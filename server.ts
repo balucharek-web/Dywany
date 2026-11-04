@@ -427,6 +427,86 @@ Zwróć wynik jako JSON z polami: nazwa, ref, ean, cena, zapas.`;
         ksztalt: 'Prostokątny'
       };
     }
+    if (n.includes('jimma')) {
+      return {
+        grubosc: '6 mm',
+        materialGlowny: 'Polipropylen',
+        sklad: '100% Polipropylen',
+        tekstura: 'Flat weave (tkany na płasko)',
+        wysokoscRuna: 'Płaskie włosie',
+        miejsceUzytkowania: 'Wewnętrzny / zewnętrzny',
+        marka: 'INSPIRE',
+        model: 'JIMMA',
+        spodAntyposlizgowy: 'Nie',
+        wlasciwosci: 'Do wnętrz i na zewnątrz (odporny na wilgoć i promienie UV), łatwy w myciu',
+        przeznaczenie: 'Taras / Balkon / Przedpokój / Kuchnia',
+        ksztalt: 'Prostokątny'
+      };
+    }
+    if (n.includes('nils')) {
+      return {
+        grubosc: '6 mm',
+        materialGlowny: 'Juta',
+        sklad: '100% Juta naturalna',
+        tekstura: 'Plecionka ręczna',
+        wysokoscRuna: 'Płaski splot',
+        miejsceUzytkowania: 'Wewnętrzny',
+        marka: 'INSPIRE',
+        model: 'NILS JUTE',
+        spodAntyposlizgowy: 'Nie',
+        wlasciwosci: 'Naturalny surowiec, biodegradowalny, ekologiczny styl boho',
+        przeznaczenie: 'Salon / Sypialnia / Jadalnia',
+        ksztalt: n.includes('owal') ? 'Owalny' : 'Prostokątny'
+      };
+    }
+    if (n.includes('kashmir')) {
+      return {
+        grubosc: '13 mm',
+        materialGlowny: 'Polipropylen',
+        sklad: '100% Polipropylen Heat-set Soft',
+        tekstura: 'Cut pile miękkie',
+        wysokoscRuna: '11 mm',
+        miejsceUzytkowania: 'Wewnętrzny',
+        marka: 'INSPIRE',
+        model: 'KASHMIR',
+        spodAntyposlizgowy: 'Nie',
+        wlasciwosci: 'Aksamitny w dotyku, efekt dwupoziomowy 3D, ogrzewanie podłogowe',
+        przeznaczenie: 'Salon / Sypialnia',
+        ksztalt: 'Prostokątny'
+      };
+    }
+    if (n.includes('kalabria') || n.includes('bora')) {
+      return {
+        grubosc: '10 mm',
+        materialGlowny: 'Polipropylen',
+        sklad: '100% Polipropylen BCF',
+        tekstura: 'Gęsty splot klasyczny',
+        wysokoscRuna: '8 mm',
+        miejsceUzytkowania: 'Wewnętrzny',
+        marka: 'INSPIRE',
+        model: 'BORA / KALABRIA',
+        spodAntyposlizgowy: 'Nie',
+        wlasciwosci: 'Klasyczny wzór medalion, wysoka trwałość kolorów, łatwe odkurzanie',
+        przeznaczenie: 'Salon / Pokój dzienny',
+        ksztalt: 'Prostokątny'
+      };
+    }
+    if (n.includes('jesper')) {
+      return {
+        grubosc: '8 mm',
+        materialGlowny: 'Bawełna / Poliester',
+        sklad: '80% Bawełna + 20% Poliester',
+        tekstura: 'Płaski splot z frędzlami',
+        wysokoscRuna: 'Płaskie włosie',
+        miejsceUzytkowania: 'Wewnętrzny',
+        marka: 'INSPIRE',
+        model: 'JESPER',
+        spodAntyposlizgowy: 'Nie',
+        wlasciwosci: 'Styl skandynawski, naturalna bawełna, frędzle',
+        przeznaczenie: 'Salon / Sypialnia / Gabinet',
+        ksztalt: 'Prostokątny'
+      };
+    }
     if (n.includes('wełn') || n.includes('wool') || n.includes('agnella')) {
       return {
         grubosc: '10 mm',
@@ -539,20 +619,82 @@ Zwróć wynik wyłącznie jako JSON.`;
         console.warn('Fast AI lookup warning:', aiErr?.message || aiErr);
       }
 
-      const finalResult = aiResult || {
-        grubosc: '8 mm',
-        materialGlowny: 'Polipropylen',
-        sklad: '100% Polipropylen',
-        tekstura: 'Standard weave',
-        wysokoscRuna: '8 mm',
-        miejsceUzytkowania: 'Wewnętrzny',
-        marka: 'INSPIRE',
-        model: 'STANDARD',
-        spodAntyposlizgowy: 'Nie',
-        wlasciwosci: 'Łatwe czyszczenie, ogrzewanie podłogowe',
-        przeznaczenie: 'Salon / Sypialnia',
-        isFallback: true
-      };
+      let fallbackObj: any = null;
+      if (!aiResult) {
+        const nameLower = (nazwa || '').toLowerCase();
+        let fGrubosc = '9 mm';
+        let fMaterial = 'Polipropylen';
+        let fSklad = '100% Polipropylen';
+        let fTekstura = 'Cut pile';
+        let fWysokosc = '8 mm';
+        let fMiejsce = 'Wewnętrzny';
+        let fSpod = 'Nie';
+        let fMarka = 'INSPIRE';
+        let fModel = (nazwa || '').split(' ')[1] || 'STANDARD';
+        let fWlasciwosci = 'Ogrzewanie podłogowe, łatwy w odkurzaniu';
+        let fPrzeznaczenie = 'Salon / Sypialnia';
+
+        if (nameLower.includes('juta') || nameLower.includes('jute')) {
+          fMaterial = 'Juta';
+          fSklad = '100% Juta naturalna';
+          fTekstura = 'Plecionka ręczna';
+          fWysokosc = 'Płaski splot';
+          fGrubosc = '6 mm';
+          fWlasciwosci = 'Naturalne włókno, ekologiczny, styl boho';
+          fPrzeznaczenie = 'Salon / Jadalnia';
+        } else if (nameLower.includes('płasko') || nameLower.includes('flat') || nameLower.includes('zewn') || nameLower.includes('taras')) {
+          fTekstura = 'Flat weave (tkany na płasko)';
+          fWysokosc = 'Płaskie włosie';
+          fGrubosc = '5.5 mm';
+          fMiejsce = 'Wewnętrzny / zewnętrzny';
+          fWlasciwosci = 'Odporny na warunki atmosferyczne i wilgoć, łatwy w myciu';
+          fPrzeznaczenie = 'Taras / Balkon / Przedpokój / Kuchnia';
+        } else if (nameLower.includes('shaggy') || nameLower.includes('włochacz')) {
+          fTekstura = 'Shaggy długowłose';
+          fWysokosc = '30 mm';
+          fGrubosc = '33 mm';
+          fWlasciwosci = 'Puszyste, miękkie runo, dobra izolacja termiczna';
+          fPrzeznaczenie = 'Salon / Sypialnia';
+        } else if (nameLower.includes('rabbit') || nameLower.includes('królik') || nameLower.includes('fur')) {
+          fMaterial = 'Poliester';
+          fSklad = '100% Poliester Rabbit Fur';
+          fTekstura = 'Ultra soft futerkowe';
+          fWysokosc = '20 mm';
+          fGrubosc = '22 mm';
+          fSpod = 'Tak';
+          fPrzeznaczenie = 'Sypialnia / Pokój dziecięcy';
+        } else if (nameLower.includes('frise') || nameLower.includes('heat-set') || nameLower.includes('heatset')) {
+          fTekstura = 'Frise sprężyste';
+          fSklad = '100% Polipropylen Heat-set';
+          fWysokosc = '9 mm';
+          fGrubosc = '11 mm';
+          fWlasciwosci = 'Gęste, odporne na udeptywanie runo';
+        } else if (nameLower.includes('wełn') || nameLower.includes('wool')) {
+          fMaterial = 'Wełna';
+          fSklad = '100% Wełna naturalna';
+          fGrubosc = '10 mm';
+          fWysokosc = '8.5 mm';
+          fMarka = 'AGNELLA';
+          fWlasciwosci = 'Trudnopalny, reguluje wilgotność, trwałość na lata';
+        }
+
+        fallbackObj = {
+          grubosc: fGrubosc,
+          materialGlowny: fMaterial,
+          sklad: fSklad,
+          tekstura: fTekstura,
+          wysokoscRuna: fWysokosc,
+          miejsceUzytkowania: fMiejsce,
+          marka: fMarka,
+          model: fModel.toUpperCase(),
+          spodAntyposlizgowy: fSpod,
+          wlasciwosci: fWlasciwosci,
+          przeznaczenie: fPrzeznaczenie,
+          isFallback: true
+        };
+      }
+
+      const finalResult = aiResult || fallbackObj;
 
       specsCache.set(cacheKey, finalResult);
       return res.json(finalResult);
