@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+@media screen {
+  #stock-expo-report-printable {
+    position: absolute !important;
+    left: -9999px !important;
+    top: -9999px !important;
+    width: 1000px !important;
+    height: 1px !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+}
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Hide app navigation, main warehouse cards, and buttons */
+  header, nav, main, button, .print\:hidden, .stock-expo-screen-only {
+    display: none !important;
+  }
+
+  #fiszka-printable {
+    margin: 0 auto !important;
+    border: 2px solid #000 !important;
+    box-shadow: none !important;
+    page-break-inside: avoid;
+  }
+  
+  /* Modal print unwrap */
+  .stock-expo-modal-backdrop {
+    position: static !important;
+    inset: auto !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+  }
+
+  .stock-expo-modal-container {
+    position: static !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: none !important;
+    box-shadow: none !important;
+    width: 100% !important;
+    border-radius: 0 !important;
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Show ONLY the printable table */
+  #stock-expo-report-printable {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    opacity: 1 !important;
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .print-rack-group {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 8mm 6mm;
+  }
+}
+
+#esl-barcode-full-scanner,
+#esl-barcode-full-scanner video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+
+#esl-barcode-full-scanner #qr-shaded-region {
+  display: none !important;
+}

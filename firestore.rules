@@ -1,0 +1,87 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() &&
+        request.auth.token.email != null &&
+        request.auth.token.email_verified == true &&
+        (
+          request.auth.token.email.lower() == 'baluch.arek@gmail.com' ||
+          (
+            exists(/databases/$(database)/documents/admins/$(request.auth.token.email.lower())) &&
+            get(/databases/$(database)/documents/admins/$(request.auth.token.email.lower())).data.role == 'superadmin'
+          )
+        );
+    }
+
+    function isAdmin() {
+      return isSuperAdmin() || (
+        isSignedIn() &&
+        request.auth.token.email != null &&
+        request.auth.token.email_verified == true &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.token.email.lower()))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Health / connection test rule
+    match /test/connection {
+      allow read: if true;
+    }
+
+    // Carpets collection:
+    // Store inventory readable for quick store search.
+    // Writes (add, edit, move, delete) strictly restricted to Store Admins and SuperAdmins.
+    match /carpets/{carpetId} {
+      allow read: if true;
+      allow write: if isValidId(carpetId) && isAdmin();
+    }
+
+    // Admins collection:
+    // Only signed-in users can read (protects employee emails from public scraping).
+    // Only SuperAdmin can add, update, or remove admin accounts.
+    match /admins/{adminEmail} {
+      allow read: if isSignedIn();
+      allow write: if isValidId(adminEmail) && isSuperAdmin();
+    }
+
+    // Warehouses collection:
+    // Rack definitions readable for layout visualization.
+    // Only SuperAdmin can add or delete warehouse bays.
+    match /warehouses/{warehouseId} {
+      allow read: if true;
+      allow write: if isValidId(warehouseId) && isSuperAdmin();
+    }
+
+    // Activity logs (Audit Trail):
+    // Readable only by signed-in store staff.
+    // Admins and SuperAdmins can append audit records.
+    // Existing logs are immutable (cannot be altered or deleted).
+    match /activity_logs/{logId} {
+      allow read: if isSignedIn();
+      allow create: if isValidId(logId) && isAdmin();
+      allow update, delete: if false;
+    }
+
+    // Product Catalog (Permanent store memory dictionary):
+    // Readable for quick barcode lookup.
+    // Only Store Admins and SuperAdmin can update catalog entries.
+    match /product_catalog/{catalogId} {
+      allow read: if true;
+      allow write: if isValidId(catalogId) && isAdmin();
+    }
+  }
+}

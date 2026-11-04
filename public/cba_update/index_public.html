@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#15803d" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="manifest" href="manifest_html.json?v=2" />
+  <link rel="icon" href="icon-192.png?v=2" type="image/png" />
+  <link rel="apple-touch-icon" href="icon-512.png?v=2" />
+  <title>Aktualizacja LM Dywany 2.0</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #f1f5f9;
+      color: #0f172a;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-card {
+      background: #ffffff;
+      width: 100%;
+      max-width: 450px;
+      border-radius: 24px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+      border: 1px solid #e2e8f0;
+      overflow: hidden;
+      animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(16px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .modal-header {
+      background: linear-gradient(135deg, #15803d 0%, #16a34a 100%);
+      padding: 24px 20px 20px;
+      text-align: center;
+      color: #ffffff;
+      position: relative;
+    }
+    .modal-header.success-header {
+      background: linear-gradient(135deg, #047857 0%, #10b981 100%);
+    }
+    .icon-wrapper {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 12px;
+      background: #ffffff;
+      border-radius: 20px;
+      padding: 6px;
+      box-shadow: 0 10px 15px -3px rgba(0,0,0,0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .icon-wrapper img {
+      width: 100%;
+      height: 100%;
+      border-radius: 14px;
+      object-fit: cover;
+    }
+    .icon-wrapper.success-icon {
+      font-size: 42px;
+      background: #ecfdf5;
+      color: #059669;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      backdrop-filter: blur(4px);
+      color: #ffffff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .badge.success-badge {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+    .modal-header h1 {
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1.2;
+      margin-bottom: 4px;
+    }
+    .modal-header p {
+      font-size: 13px;
+      color: #dcfce7;
+      font-weight: 500;
+    }
+    .modal-body {
+      padding: 20px;
+    }
+    .info-alert {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 14px;
+      padding: 12px;
+      font-size: 13px;
+      color: #1e40af;
+      line-height: 1.45;
+      margin-bottom: 18px;
+    }
+    .warning-box {
+      background: #fffbeb;
+      border: 2px solid #fde68a;
+      border-radius: 16px;
+      padding: 14px;
+      margin-bottom: 18px;
+    }
+    .warning-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #92400e;
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 8px;
+    }
+    .warning-text {
+      font-size: 13px;
+      color: #78350f;
+      line-height: 1.45;
+    }
+    .steps-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+    .step-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 12px;
+    }
+    .step-item.highlight-delete {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+    }
+    .step-num {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #16a34a;
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .step-num.delete-step {
+      background: #dc2626;
+    }
+    .step-content {
+      font-size: 13px;
+      color: #334155;
+      line-height: 1.4;
+    }
+    .step-content strong {
+      color: #0f172a;
+      display: block;
+      margin-bottom: 2px;
+      font-size: 13.5px;
+    }
+    .btn-primary {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      background: #16a34a;
+      color: #ffffff;
+      font-size: 15px;
+      font-weight: 700;
+      padding: 14px;
+      border-radius: 14px;
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(22, 163, 74, 0.35);
+      transition: all 0.2s ease;
+      text-align: center;
+    }
+    .btn-primary:hover, .btn-primary:active {
+      background: #15803d;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(22, 163, 74, 0.45);
+    }
+    .btn-danger-action {
+      background: #dc2626;
+      box-shadow: 0 4px 12px rgba(220, 38, 38, 0.35);
+    }
+    .btn-danger-action:hover, .btn-danger-action:active {
+      background: #b91c1c;
+      box-shadow: 0 6px 16px rgba(220, 38, 38, 0.45);
+    }
+    .btn-secondary {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      margin-top: 10px;
+      background: #f1f5f9;
+      color: #334155;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 12px;
+      border-radius: 12px;
+      text-align: center;
+      text-decoration: none;
+      border: 1px solid #cbd5e1;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    .btn-secondary:hover {
+      background: #e2e8f0;
+    }
+    .timer-note {
+      text-align: center;
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 14px;
+    }
+    .timer-note span {
+      font-weight: 700;
+      color: #16a34a;
+    }
+    .copied-toast {
+      display: none;
+      text-align: center;
+      font-size: 11px;
+      color: #15803d;
+      font-weight: 700;
+      margin-top: 6px;
+    }
+    .close-hint {
+      display: none;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 12px;
+      padding: 10px;
+      color: #166534;
+      font-size: 12px;
+      text-align: center;
+      margin-top: 12px;
+      line-height: 1.4;
+  </style>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('service-worker.js').then(reg => {
+        reg.update();
+      });
+    }
+
+    const TARGET_BASE = 'https://balucharek-web.github.io/Dywany/';
+
+    function getReturnUrl() {
+      const cleanUrl = window.location.href.split('?')[0];
+      return cleanUrl + '?installed=1';
+    }
+
+    function getTargetUrlWithReturn() {
+      const returnUrl = getReturnUrl();
+      return TARGET_BASE + '?from_cba=1&return_url=' + encodeURIComponent(returnUrl);
+    }
+
+    function goToNewApp() {
+      try {
+        localStorage.setItem('cba_update_initiated', Date.now().toString());
+        sessionStorage.setItem('cba_update_initiated', Date.now().toString());
+      } catch (e) {}
+      const targetUrl = getTargetUrlWithReturn();
+      window.location.href = targetUrl;
+    }
+
+    function copyLink() {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(TARGET_BASE).then(() => {
+          const toast = document.getElementById('toast');
+          if (toast) {
+            toast.style.display = 'block';
+            setTimeout(() => { toast.style.display = 'none'; }, 2500);
+          }
+        });
+      } else {
+        prompt('Skopiuj link do nowej wersji:', TARGET_BASE);
+      }
+    }
+
+    function handleClosePage() {
+      try {
+        window.close();
+      } catch (e) {}
+      const hint = document.getElementById('close-hint');
+      if (hint) {
+        hint.style.display = 'block';
+      }
+    }
+
+    function resetToInstallMode() {
+      try {
+        localStorage.removeItem('cba_update_initiated');
+        sessionStorage.removeItem('cba_update_initiated');
+      } catch (e) {}
+      window.location.href = window.location.href.split('?')[0];
+    }
+
+    function switchToSuccessMode() {
+      const installView = document.getElementById('view-install');
+      const successView = document.getElementById('view-success');
+      if (installView) installView.style.display = 'none';
+      if (successView) successView.style.display = 'block';
+    }
+
+    function checkMode() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const isInstalledParam = urlParams.get('installed') === '1' || urlParams.get('update_success') === '1';
+
+      if (isInstalledParam) {
+        try {
+          localStorage.removeItem('cba_update_initiated');
+          sessionStorage.removeItem('cba_update_initiated');
+        } catch (e) {}
+        switchToSuccessMode();
+        return;
+      }
+
+      // Sprawdź czy użytkownik kliknął aktualizację i powrócił (np. po instalacji w CCT / powrocie z nowej aplikacji)
+      try {
+        const initiatedTimeStr = localStorage.getItem('cba_update_initiated') || sessionStorage.getItem('cba_update_initiated');
+        if (initiatedTimeStr) {
+          const initiatedTime = parseInt(initiatedTimeStr, 10);
+          const elapsed = Date.now() - initiatedTime;
+          // Jeśli od kliknięcia minęło od 1.5 sekundy do 20 minut, użytkownik powrócił z instalatora:
+          if (elapsed > 1500 && elapsed < 1200000) {
+            localStorage.removeItem('cba_update_initiated');
+            sessionStorage.removeItem('cba_update_initiated');
+            switchToSuccessMode();
+            return;
+          }
+          if (elapsed >= 1200000) {
+            localStorage.removeItem('cba_update_initiated');
+            sessionStorage.removeItem('cba_update_initiated');
+          }
+        }
+      } catch (e) {}
+
+      // Domyślnie na starcie: zawsze modal z informacją o konieczności aktualizacji
+      const installView = document.getElementById('view-install');
+      const successView = document.getElementById('view-success');
+      if (installView) installView.style.display = 'block';
+      if (successView) successView.style.display = 'none';
+    }
+
+    window.addEventListener('DOMContentLoaded', checkMode);
+    window.addEventListener('pageshow', checkMode);
+    window.addEventListener('focus', checkMode);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        checkMode();
+      }
+    });
+  </script>
+</head>
+<body>
+
+  <!-- WIDOK 1: INSTALACJA WERSJI 2.0 -->
+  <div id="view-install" class="modal-card">
+    <div class="modal-header">
+      <div class="badge">Wymagana aktualizacja</div>
+      <div class="icon-wrapper">
+        <img src="icon-512.png?v=2" alt="LM Dywany 2.0" />
+      </div>
+      <h1>LM Dywany 2.0</h1>
+      <p>Sklep 038 Mikołów • Nowa wersja aplikacji</p>
+    </div>
+
+    <div class="modal-body">
+      <div class="info-alert">
+        Ta wersja aplikacji (CBA.pl) została wyłączona. Wszystkie magazyny i dane zostały przeniesione do nowej wersji <strong>LM Dywany 2.0</strong> na GitHub Pages.
+      </div>
+
+      <div class="steps-list">
+        <div class="step-item">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <strong>Kliknij przycisk poniżej</strong>
+            Otwórz nową wersję 2.0 w przeglądarce telefonu.
+          </div>
+        </div>
+
+        <div class="step-item">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <strong>Zainstaluj nową aplikację 2.0</strong>
+            Kliknij zielony przycisk <em>„Zainstaluj wersję 2.0”</em> (lub w menu Chrome <strong>⋮</strong> wybierz <em>„Dodaj do ekranu głównego”</em>).
+          </div>
+        </div>
+
+        <div class="step-item highlight-delete">
+          <div class="step-num delete-step">3</div>
+          <div class="step-content">
+            <strong>Automatyczny powrót i usunięcie starego skrótu</strong>
+            Po zakończeniu instalacji aplikacja powróci tutaj z instrukcją jak usunąć ten stary, niepotrzebny skrót.
+          </div>
+        </div>
+      </div>
+
+      <button onclick="goToNewApp()" class="btn-primary" id="btn-go">
+        🚀 Przejdź do wersji 2.0 i zainstaluj
+      </button>
+
+      <button onclick="copyLink()" class="btn-secondary" type="button">
+        📋 Kopiuj bezpośredni link do nowej wersji
+      </button>
+      <div id="toast" class="copied-toast">✓ Skopiowano link do schowka!</div>
+    </div>
+  </div>
+
+  <!-- WIDOK 2: SUKCES AKTUALIZACJI I USUNIĘCIE STAREGO SKRÓTU -->
+  <div id="view-success" class="modal-card" style="display: none;">
+    <div class="modal-header success-header">
+      <div class="badge success-badge">✓ Aktualizacja powiodła się</div>
+      <div class="icon-wrapper success-icon">
+        🎉
+      </div>
+      <h1>Aplikacja 2.0 zainstalowana!</h1>
+      <p>Nowy skrót z oznaczeniem 2.0 jest już na Twoim telefonie</p>
+    </div>
+
+    <div class="modal-body">
+      <div class="warning-box">
+        <div class="warning-header">
+          <span>⚠️ WAŻNY KROK KOŃCOWY</span>
+        </div>
+        <div class="warning-text">
+          Aby nie otwierać przez pomyłkę starej wyłączonej wersji, <strong>musisz usunąć ten stary skrót z pulpitu</strong>.
+        </div>
+      </div>
+
+      <div class="steps-list">
+        <div class="step-item">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <strong>Wyjdź teraz na pulpit telefonu</strong>
+            Zamknij to okno lub naciśnij środkowy przycisk telefonu (ekran główny).
+          </div>
+        </div>
+
+        <div class="step-item highlight-delete">
+          <div class="step-num delete-step">2</div>
+          <div class="step-content">
+            <strong>Usuń starą ikonę</strong>
+            Znajdź starą ikonę aplikacji LM Dywany (tą <u>bez</u> zielonego napisu „2.0”). Przytrzymaj ją dłużej palcem i wybierz <strong>„Usuń”</strong> lub przeciągnij do kosza.
+          </div>
+        </div>
+
+        <div class="step-item">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <strong>Korzystaj z nowej ikony 2.0!</strong>
+            Od teraz otwieraj wyłącznie nową ikonę z napisem <strong>2.0</strong> — działa na pełnym ekranie bez pasków przeglądarki!
+          </div>
+        </div>
+      </div>
+
+      <button onclick="handleClosePage()" class="btn-primary btn-danger-action" type="button">
+        🗑️ Rozumiem, usuwam stary skrót
+      </button>
+
+      <a href="https://balucharek-web.github.io/Dywany/" class="btn-secondary" style="margin-top: 10px;">
+        🚀 Otwórz aplikację LM Dywany 2.0
+      </a>
+
+      <button onclick="resetToInstallMode()" class="btn-secondary" type="button" style="margin-top: 8px; font-weight: 500; font-size: 11px; color: #64748b; background: transparent; border: none;">
+        Chcesz zainstalować ponownie? Kliknij tutaj
+      </button>
+
+      <div id="close-hint" class="close-hint">
+        ✓ Świetnie! Zamknij tę kartę w przeglądarce i wyjdź na pulpit telefonu, aby usunąć starą ikonę.
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
