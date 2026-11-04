@@ -243,42 +243,6 @@ export function SearchView({
         </button>
       </div>
 
-      {/* Szybkie filtry parametrów technicznych (Quick Specs Filters) */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5 no-scrollbar text-xs">
-        <span className="text-[11px] font-bold text-gray-500 uppercase shrink-0 mr-1 flex items-center gap-1">
-          <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Szybkie:
-        </span>
-        {[
-          { label: 'Wszystkie', value: '' },
-          { label: '🌿 Na taras / Zewnętrzny', value: 'zewnętrzny' },
-          { label: '🧵 Płaski splot', value: 'płasko' },
-          { label: '✨ Shaggy', value: 'shaggy' },
-          { label: '🛡️ Antypoślizgowy', value: 'antypoślizgowy' },
-          { label: 'Inspire Lagoon', value: 'lagoon' },
-          { label: 'Inspire Blida', value: 'blida' },
-          { label: 'Inspire Amba', value: 'amba' },
-          { label: 'Balta Sparkles', value: 'sparkles' }
-        ].map((chip) => {
-          const isActive =
-            chip.value === ''
-              ? searchQuery === ''
-              : searchQuery.toLowerCase().includes(chip.value.toLowerCase());
-          return (
-            <button
-              key={chip.label}
-              onClick={() => setSearchQuery(chip.value)}
-              className={`px-3 py-1.5 rounded-full font-bold transition-all shrink-0 cursor-pointer text-xs border ${
-                isActive
-                  ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
-                  : 'bg-white hover:bg-gray-100 text-gray-700 border-gray-300'
-              }`}
-            >
-              {chip.label}
-            </button>
-          );
-        })}
-      </div>
-
       {/* Search Results Display */}
       {searchQuery.trim() !== '' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 mt-2">
@@ -356,45 +320,6 @@ export function SearchView({
                     )}
                   </button>
                 </div>
-
-                {/* Parametry techniczne Leroy Merlin (jeśli pobrane lub dopasowane) */}
-                {(carpet.sklad || carpet.grubosc || carpet.wysokoscRuna || carpet.miejsceUzytkowania || carpet.tekstura || carpet.marka) && (
-                  <div className="bg-emerald-50/70 border border-emerald-200/90 rounded-xl p-2.5 text-xs flex flex-col gap-1.5 shadow-2xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-900 flex items-center gap-1">
-                        <Sparkles className="w-3 h-3 text-amber-600" />
-                        SPECYFIKACJA LEROY MERLIN
-                      </span>
-                      {carpet.grubosc && (
-                        <span className="font-black text-gray-950 bg-white border border-emerald-300 px-1.5 py-0.5 rounded text-[11px] shadow-2xs font-mono">
-                          Grubość: {carpet.grubosc}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5 text-gray-800 text-[11px]">
-                      {carpet.sklad && (
-                        <span className="font-bold bg-white/90 px-2 py-0.5 rounded border border-emerald-200 text-gray-900">
-                          {carpet.sklad}
-                        </span>
-                      )}
-                      {(carpet.wysokoscRuna || carpet.tekstura) && (
-                        <span className="bg-white/90 px-2 py-0.5 rounded border border-emerald-200 text-gray-700 font-medium">
-                          {carpet.wysokoscRuna || carpet.tekstura}
-                        </span>
-                      )}
-                      {carpet.miejsceUzytkowania && (
-                        <span className="font-extrabold text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded border border-emerald-300">
-                          {carpet.miejsceUzytkowania}
-                        </span>
-                      )}
-                      {carpet.marka && (
-                        <span className="text-gray-500 font-semibold text-[10px]">
-                          {carpet.marka} {carpet.model ? `• ${carpet.model}` : ''}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
 
                 {/* MIEJSCE Block (Highlight yellow / bold) */}
                 <div className="bg-amber-50/90 border-2 border-amber-300 rounded-xl px-4 py-3 flex items-center justify-between shadow-2xs">
