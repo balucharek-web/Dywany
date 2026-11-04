@@ -590,7 +590,9 @@ export default function App() {
   // Update carpet specifications (sklad, wysokoscRuna, etc.) in Firestore
   const handleUpdateCarpetSpecs = async (carpetId: string, updates: Partial<Carpet>) => {
     try {
-      await setDoc(doc(db, 'carpets', carpetId), updates, { merge: true });
+      if (isAdmin) {
+        await setDoc(doc(db, 'carpets', carpetId), updates, { merge: true });
+      }
       setCarpets((prev) =>
         prev.map((c) => (c.id === carpetId ? { ...c, ...updates } : c))
       );
