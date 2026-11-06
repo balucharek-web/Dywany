@@ -55,16 +55,20 @@ function extractProductCode(raw: string): string | null {
   if (!raw) return null;
   const clean = raw.trim().replace(/\s+/g, '');
 
-  // If it contains letters, it's an ESL hardware tag ID
-  if (/[a-zA-Z]/.test(clean)) return null;
+  // 1. Pure digits check
+  if (/^\d+$/.test(clean)) {
+    // Standard product barcodes: 7 to 14 digits (EAN-8, REF 8-digit, UPC 12-digit, EAN-13, GTIN-14)
+    // Rejects 16-24 digit ESL tag hardware serial numbers
+    if (clean.length >= 7 && clean.length <= 14) {
+      return clean;
+    }
+    return null;
+  }
 
-  // Must be pure digits
-  if (!/^\d+$/.test(clean)) return null;
-
-  // Standard product barcodes: 7 to 14 digits (EAN-8, REF 8-digit, UPC 12-digit, EAN-13, GTIN-14)
-  // Rejects 16-24 digit ESL tag hardware serial numbers
-  if (clean.length >= 7 && clean.length <= 14) {
-    return clean;
+  // 2. If it's a URL or text containing an 8-digit Ref LM or 13-digit EAN
+  const match = raw.match(/\b(59\d{11}|32\d{11}|40\d{11}|\d{8})\b/);
+  if (match) {
+    return match[1];
   }
 
   return null;
@@ -84,6 +88,7 @@ export function BarcodeScannerModal({
   const [isHardwareZoom, setIsHardwareZoom] = useState(false);
   const isHardwareZoomRef = useRef(false);
   const [zoomLevel, setZoomLevel] = useState(1.0);
+  const zoomLevelRef = useRef(1.0);
   const [hasZoom, setHasZoom] = useState(false);
   const [maxZoom, setMaxZoom] = useState(3.0);
   const [isScanningFile, setIsScanningFile] = useState(false);
@@ -139,6 +144,7 @@ export function BarcodeScannerModal({
     setIsHardwareZoom(false);
     isHardwareZoomRef.current = false;
     setZoomLevel(1.0);
+    zoomLevelRef.current = 1.0;
 
     const initScanner = async () => {
       try {
@@ -218,7 +224,7 @@ export function BarcodeScannerModal({
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
 
-          // Offscreen canvas for 1:1 unscaled Telephoto ROI crop
+          // Offscreen canvas for frame capture
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d', { willReadFrequently: true });
           canvasRef.current = canvas;
@@ -236,7 +242,7 @@ export function BarcodeScannerModal({
               if (vw > 0 && vh > 0) {
                 frameIndex++;
 
-                // 1. ENGINE 1: Native Android BarcodeDetector on the raw video stream
+                // 1. ENGINE 1: Native Android BarcodeDetector on raw video stream (ML Kit hardware)
                 if (detector && frameIndex % 2 === 0) {
                   try {
                     const rawResults = await detector.detect(videoRef.current);
@@ -252,21 +258,39 @@ export function BarcodeScannerModal({
                   } catch (_) {}
                 }
 
-                // 2. ENGINE 2: Industrial ZBar WebAssembly on full high-res frame
+                // 2. ENGINE 2: Industrial ZBar WebAssembly
                 if (!isZBarBusyRef.current && timestamp - lastZBarTime > 50) {
                   lastZBarTime = timestamp;
                   isZBarBusyRef.current = true;
 
-                  const targetW = vw > 1280 ? 1280 : vw;
-                  const targetH = Math.round((vh * targetW) / vw);
+                  const maxDim = 1280;
+                  let targetW = vw;
+                  let targetH = vh;
+                  if (vw > maxDim || vh > maxDim) {
+                    if (vw >= vh) {
+                      targetW = maxDim;
+                      targetH = Math.round((vh * maxDim) / vw);
+                    } else {
+                      targetH = maxDim;
+                      targetW = Math.round((vw * maxDim) / vh);
+                    }
+                  }
 
                   if (canvas.width !== targetW || canvas.height !== targetH) {
                     canvas.width = targetW;
                     canvas.height = targetH;
                   }
 
-                  // Draw full un-cropped frame
-                  ctx.drawImage(videoRef.current, 0, 0, targetW, targetH);
+                  const currentZoom = zoomLevelRef.current;
+                  if (!isHardwareZoomRef.current && currentZoom > 1.2) {
+                    const cropW = vw / currentZoom;
+                    const cropH = vh / currentZoom;
+                    const cropX = (vw - cropW) / 2;
+                    const cropY = (vh - cropH) / 2;
+                    ctx.drawImage(videoRef.current, cropX, cropY, cropW, cropH, 0, 0, targetW, targetH);
+                  } else {
+                    ctx.drawImage(videoRef.current, 0, 0, targetW, targetH);
+                  }
 
                   try {
                     const imgData = ctx.getImageData(0, 0, targetW, targetH);
@@ -294,6 +318,8 @@ export function BarcodeScannerModal({
             animFrameIdRef.current = requestAnimationFrame(detectLoop);
           };
 
+          // Kick off the detection loop immediately
+          animFrameIdRef.current = requestAnimationFrame(detectLoop);
         }
       } catch (err: unknown) {
         if (!isMounted) return;
@@ -349,6 +375,7 @@ export function BarcodeScannerModal({
     else if (zoomLevel < 2.5) nextZ = Math.min(3.0, maxZoom);
     else nextZ = 1.0;
 
+    zoomLevelRef.current = nextZ;
     setZoomLevel(nextZ);
 
     try {
