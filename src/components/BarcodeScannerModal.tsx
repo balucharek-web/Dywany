@@ -74,6 +74,32 @@ function extractProductCode(raw: string): string | null {
   return null;
 }
 
+/**
+ * Fast contrast normalization for ESL e-paper displays (takes ~2ms).
+ * Expands dithered gray-on-gray bars to high-contrast black-and-white.
+ */
+function enhanceESLContrast(data: Uint8ClampedArray) {
+  const len = data.length;
+  let min = 255;
+  let max = 0;
+  for (let i = 0; i < len; i += 32) {
+    const lum = (data[i] * 77 + data[i + 1] * 150 + data[i + 2] * 29) >> 8;
+    if (lum < min) min = lum;
+    if (lum > max) max = lum;
+  }
+  if (max > min && max - min < 185) {
+    const range = max - min;
+    const invRange = 255 / range;
+    for (let i = 0; i < len; i += 4) {
+      const lum = (data[i] * 77 + data[i + 1] * 150 + data[i + 2] * 29) >> 8;
+      const v = Math.min(255, Math.max(0, ((lum - min) * invRange) | 0));
+      data[i] = v;
+      data[i + 1] = v;
+      data[i + 2] = v;
+    }
+  }
+}
+
 export function BarcodeScannerModal({
   isOpen,
   onClose,
@@ -164,15 +190,25 @@ export function BarcodeScannerModal({
           }
         }
 
-        // Request clean high-resolution stream from rear camera
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1920, min: 1280 },
-            height: { ideal: 1080, min: 720 }
-          },
-          audio: false
-        });
+        // Request clean high-resolution stream from rear camera (4K/1080p if available)
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 3840, min: 1280 },
+              height: { ideal: 2160, min: 720 }
+            },
+            audio: false
+          });
+        } catch (_) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: 'environment' }
+            },
+            audio: false
+          });
+        }
 
         if (!isMounted) {
           stream.getTracks().forEach((t) => t.stop());
@@ -206,18 +242,15 @@ export function BarcodeScannerModal({
           if (capabilities.zoom) {
             setIsHardwareZoom(true);
             isHardwareZoomRef.current = true;
-            setHasZoom(true);
-            const maxZ = Math.min(capabilities.zoom.max || 4.0, 4.0);
-            setMaxZoom(maxZ);
-            setZoomLevel(1.0);
           } else {
-            // Digital 1:1 sensor zoom fallback
             setIsHardwareZoom(false);
             isHardwareZoomRef.current = false;
-            setHasZoom(true);
-            setMaxZoom(3.0);
-            setZoomLevel(1.0);
           }
+          // Zoom is always supported via sensor / telephoto crop
+          setHasZoom(true);
+          setMaxZoom(3.0);
+          setZoomLevel(1.0);
+          zoomLevelRef.current = 1.0;
         }
 
         if (videoRef.current) {
@@ -231,13 +264,15 @@ export function BarcodeScannerModal({
 
           let lastZBarTime = 0;
           let frameIndex = 0;
+          let cycleCount = 0;
 
           const detectLoop = async (timestamp: number) => {
             if (!isMounted || isScannedRef.current) return;
 
-            if (videoRef.current && videoRef.current.readyState >= 2 && ctx) {
-              const vw = videoRef.current.videoWidth;
-              const vh = videoRef.current.videoHeight;
+            const video = videoRef.current;
+            if (video && video.readyState >= 2 && ctx) {
+              const vw = video.videoWidth;
+              const vh = video.videoHeight;
 
               if (vw > 0 && vh > 0) {
                 frameIndex++;
@@ -245,7 +280,7 @@ export function BarcodeScannerModal({
                 // 1. ENGINE 1: Native Android BarcodeDetector on raw video stream (ML Kit hardware)
                 if (detector && frameIndex % 2 === 0) {
                   try {
-                    const rawResults = await detector.detect(videoRef.current);
+                    const rawResults = await detector.detect(video);
                     if (rawResults && rawResults.length > 0) {
                       for (const item of rawResults) {
                         const validProduct = extractProductCode(item.rawValue);
@@ -258,42 +293,69 @@ export function BarcodeScannerModal({
                   } catch (_) {}
                 }
 
-                // 2. ENGINE 2: Industrial ZBar WebAssembly
+                // 2. ENGINE 2: Industrial ZBar WebAssembly (runs every ~50ms)
                 if (!isZBarBusyRef.current && timestamp - lastZBarTime > 50) {
                   lastZBarTime = timestamp;
                   isZBarBusyRef.current = true;
+                  cycleCount++;
 
-                  const maxDim = 1280;
-                  let targetW = vw;
-                  let targetH = vh;
-                  if (vw > maxDim || vh > maxDim) {
+                  const currentZoom = zoomLevelRef.current || 1.0;
+                  // If zoom > 1.2, focus 100% on the magnified telephoto crop.
+                  // At 1.0x, alternate between telephoto crop (odd) and full frame (even).
+                  const isTelephotoPass = currentZoom > 1.2 || cycleCount % 2 === 1;
+
+                  let targetW: number;
+                  let targetH: number;
+
+                  if (isTelephotoPass) {
+                    // PASS A: Telephoto Viewfinder Crop (Center ROI) - High Pixel Density for 1m-2m distances
+                    // Scales inversely with zoom to zoom right into the center of the green box
+                    const z = Math.max(1.0, currentZoom);
+                    const cropFactorW = 0.65 / z;
+                    const cropFactorH = 0.40 / z;
+
+                    const cropW = Math.max(180, Math.round(vw * cropFactorW));
+                    const cropH = Math.max(120, Math.round(vh * cropFactorH));
+                    const cropX = Math.round((vw - cropW) / 2);
+                    const cropY = Math.round((vh - cropH) / 2);
+
+                    // High pixel density target up to 1280px wide
+                    targetW = Math.min(1280, Math.max(640, Math.round(cropW * (z > 1.5 ? 1.5 : 1.0))));
+                    targetH = Math.round((cropH * targetW) / cropW);
+
+                    if (canvas.width !== targetW || canvas.height !== targetH) {
+                      canvas.width = targetW;
+                      canvas.height = targetH;
+                    }
+
+                    ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, targetW, targetH);
+                  } else {
+                    // PASS B: Wide Full Frame (for close-up scans <30cm)
+                    const maxDim = 1280;
                     if (vw >= vh) {
-                      targetW = maxDim;
+                      targetW = Math.min(maxDim, vw);
                       targetH = Math.round((vh * maxDim) / vw);
                     } else {
-                      targetH = maxDim;
+                      targetH = Math.min(maxDim, vh);
                       targetW = Math.round((vw * maxDim) / vh);
                     }
-                  }
 
-                  if (canvas.width !== targetW || canvas.height !== targetH) {
-                    canvas.width = targetW;
-                    canvas.height = targetH;
-                  }
+                    if (canvas.width !== targetW || canvas.height !== targetH) {
+                      canvas.width = targetW;
+                      canvas.height = targetH;
+                    }
 
-                  const currentZoom = zoomLevelRef.current;
-                  if (!isHardwareZoomRef.current && currentZoom > 1.2) {
-                    const cropW = vw / currentZoom;
-                    const cropH = vh / currentZoom;
-                    const cropX = (vw - cropW) / 2;
-                    const cropY = (vh - cropH) / 2;
-                    ctx.drawImage(videoRef.current, cropX, cropY, cropW, cropH, 0, 0, targetW, targetH);
-                  } else {
-                    ctx.drawImage(videoRef.current, 0, 0, targetW, targetH);
+                    ctx.drawImage(video, 0, 0, targetW, targetH);
                   }
 
                   try {
                     const imgData = ctx.getImageData(0, 0, targetW, targetH);
+
+                    // Apply ESL contrast enhancement on telephoto crop
+                    if (isTelephotoPass) {
+                      enhanceESLContrast(imgData.data);
+                    }
+
                     const symbols = await scanImageData(imgData);
 
                     if (symbols && symbols.length > 0) {
@@ -371,8 +433,8 @@ export function BarcodeScannerModal({
   // Cycle Zoom (1.0x -> 2.0x -> 3.0x -> 1.0x)
   const cycleZoom = async () => {
     let nextZ = 1.0;
-    if (zoomLevel < 1.5) nextZ = Math.min(2.0, maxZoom);
-    else if (zoomLevel < 2.5) nextZ = Math.min(3.0, maxZoom);
+    if (zoomLevel < 1.5) nextZ = 2.0;
+    else if (zoomLevel < 2.5) nextZ = 3.0;
     else nextZ = 1.0;
 
     zoomLevelRef.current = nextZ;
@@ -387,12 +449,17 @@ export function BarcodeScannerModal({
           });
         }
       }
-    } catch (e) {
-      console.warn('Hardware zoom failed (using digital 1:1 ROI zoom):', e);
+    } catch (_) {
+      try {
+        const track = streamRef.current?.getVideoTracks()[0];
+        await (track as any)?.applyConstraints({
+          advanced: [{ focusMode: 'continuous' }]
+        });
+      } catch (_) {}
     }
   };
 
-  // Tap-to-focus on screen
+  // Tap-to-focus on screen with pointsOfInterest
   const handleScreenTap = async (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -401,13 +468,25 @@ export function BarcodeScannerModal({
     setTapRipple({ x, y });
     setTimeout(() => setTapRipple(null), 600);
 
+    const normX = Math.max(0, Math.min(1, x / rect.width));
+    const normY = Math.max(0, Math.min(1, y / rect.height));
+
     try {
       if (streamRef.current) {
         const track = streamRef.current.getVideoTracks()[0];
         if (track && (track as any).applyConstraints) {
-          await (track as any).applyConstraints({
-            advanced: [{ focusMode: 'continuous' }]
-          });
+          try {
+            await (track as any).applyConstraints({
+              advanced: [
+                { pointsOfInterest: [{ x: normX, y: normY }] },
+                { focusMode: 'continuous' }
+              ]
+            });
+          } catch (_) {
+            await (track as any).applyConstraints({
+              advanced: [{ focusMode: 'continuous' }]
+            });
+          }
         }
       }
     } catch (_) {}
@@ -477,7 +556,7 @@ export function BarcodeScannerModal({
           muted
           className="w-full h-full object-cover transition-transform duration-200"
           style={{
-            transform: (!isHardwareZoom && zoomLevel > 1.2) ? `scale(${zoomLevel})` : undefined
+            transform: zoomLevel > 1.05 ? `scale(${zoomLevel})` : undefined
           }}
         />
       </div>
