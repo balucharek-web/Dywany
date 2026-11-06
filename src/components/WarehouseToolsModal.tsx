@@ -12,7 +12,8 @@ import {
   Users,
   ShieldCheck,
   Package,
-  ArrowLeftRight
+  ArrowLeftRight,
+  RefreshCw
 } from 'lucide-react';
 import { STORE_NUMBER } from '../types';
 import { downloadCbaPackage } from '../utils/downloadCbaPackage';
@@ -175,6 +176,37 @@ export function WarehouseToolsModal({
                 <span>Pobierz pełną kopię zapasową bazy (JSON)</span>
               </div>
               <span className="text-[10px] text-gray-400 font-mono">backup.json</span>
+            </button>
+
+            <button
+              onClick={async () => {
+                if (typeof window !== 'undefined') {
+                  if ('serviceWorker' in navigator) {
+                    try {
+                      const registrations = await navigator.serviceWorker.getRegistrations();
+                      for (const reg of registrations) {
+                        await reg.unregister();
+                      }
+                    } catch (_) {}
+                  }
+                  if ('caches' in window) {
+                    try {
+                      const keys = await caches.keys();
+                      for (const k of keys) {
+                        await caches.delete(k);
+                      }
+                    } catch (_) {}
+                  }
+                  window.location.reload();
+                }
+              }}
+              className="w-full flex items-center justify-between p-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-900 font-bold border border-blue-200 transition-colors text-xs cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 text-blue-600" />
+                <span>Zaktualizuj aplikację (wyczyść pamięć podręczną)</span>
+              </div>
+              <span className="text-[10px] text-blue-600 font-semibold">Odśwież PWA</span>
             </button>
           </div>
 
