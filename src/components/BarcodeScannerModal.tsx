@@ -236,7 +236,7 @@ export function BarcodeScannerModal({
               if (vw > 0 && vh > 0) {
                 frameIndex++;
 
-                // 1. FAST PASS: Check the RAW full video stream with hardware BarcodeDetector
+                // 1. ENGINE 1: Native Android BarcodeDetector on the raw video stream
                 if (detector && frameIndex % 2 === 0) {
                   try {
                     const rawResults = await detector.detect(videoRef.current);
@@ -252,44 +252,24 @@ export function BarcodeScannerModal({
                   } catch (_) {}
                 }
 
-                // 2. TELEPHOTO PASS: 1:1 unscaled Center Crop (specifically for tiny ESL barcodes from 1m - 2m)
-                const sw = Math.round(vw * 0.45);
-                const sh = Math.round(vh * 0.40);
-                const sx = Math.round((vw - sw) / 2);
-                const sy = Math.round((vh - sh) / 2);
-
-                if (canvas.width !== sw || canvas.height !== sh) {
-                  canvas.width = sw;
-                  canvas.height = sh;
-                }
-
-                // Contrast enhancement for electronic paper (e-ink) displays
-                ctx.filter = 'contrast(2.0) brightness(1.1) grayscale(1)';
-                ctx.drawImage(videoRef.current, sx, sy, sw, sh, 0, 0, sw, sh);
-
-                // Detect on high-resolution 1:1 crop
-                if (detector) {
-                  try {
-                    const roiResults = await detector.detect(canvas);
-                    if (roiResults && roiResults.length > 0) {
-                      for (const item of roiResults) {
-                        const validProduct = extractProductCode(item.rawValue);
-                        if (validProduct) {
-                          triggerScanSuccess(validProduct);
-                          return;
-                        }
-                      }
-                    }
-                  } catch (_) {}
-                }
-
-                // ZBar WASM sub-pixel decoder
-                if (!isZBarBusyRef.current && timestamp - lastZBarTime > 60) {
+                // 2. ENGINE 2: Industrial ZBar WebAssembly on full high-res frame
+                if (!isZBarBusyRef.current && timestamp - lastZBarTime > 50) {
                   lastZBarTime = timestamp;
                   isZBarBusyRef.current = true;
 
+                  const targetW = vw > 1280 ? 1280 : vw;
+                  const targetH = Math.round((vh * targetW) / vw);
+
+                  if (canvas.width !== targetW || canvas.height !== targetH) {
+                    canvas.width = targetW;
+                    canvas.height = targetH;
+                  }
+
+                  // Draw full un-cropped frame
+                  ctx.drawImage(videoRef.current, 0, 0, targetW, targetH);
+
                   try {
-                    const imgData = ctx.getImageData(0, 0, sw, sh);
+                    const imgData = ctx.getImageData(0, 0, targetW, targetH);
                     const symbols = await scanImageData(imgData);
 
                     if (symbols && symbols.length > 0) {
