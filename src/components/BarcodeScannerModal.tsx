@@ -53,7 +53,7 @@ function playBeep() {
  */
 function extractProductCode(raw: string): string | null {
   if (!raw) return null;
-  const clean = raw.trim();
+  const clean = raw.trim().replace(/\s+/g, '');
 
   // If it contains letters, it's an ESL hardware tag ID
   if (/[a-zA-Z]/.test(clean)) return null;
@@ -61,8 +61,9 @@ function extractProductCode(raw: string): string | null {
   // Must be pure digits
   if (!/^\d+$/.test(clean)) return null;
 
-  // Standard product barcodes: 13 digits (EAN-13), 8 digits (REF), 12 digits (UPC)
-  if (clean.length === 13 || clean.length === 8 || clean.length === 12) {
+  // Standard product barcodes: 7 to 14 digits (EAN-8, REF 8-digit, UPC 12-digit, EAN-13, GTIN-14)
+  // Rejects 16-24 digit ESL tag hardware serial numbers
+  if (clean.length >= 7 && clean.length <= 14) {
     return clean;
   }
 
@@ -154,12 +155,14 @@ export function BarcodeScannerModal({
           }
         }
 
-        // Request high resolution camera stream
+        // Request highest resolution camera stream (up to 4K / Full HD)
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: 'environment' },
-            width: { min: 1280, ideal: 1920 },
-            height: { min: 720, ideal: 1080 }
+            width: { min: 1280, ideal: 3840, max: 4096 },
+            height: { min: 720, ideal: 2160, max: 2160 },
+            // @ts-ignore
+            focusMode: { ideal: 'continuous' }
           },
           audio: false
         });
@@ -171,25 +174,32 @@ export function BarcodeScannerModal({
 
         streamRef.current = stream;
 
-        // Check capabilities
+        // Check hardware capabilities (torch, hardware zoom, autofocus)
         const track = stream.getVideoTracks()[0];
+        let hardwareZoomSupported = false;
         if (track) {
           const capabilities = (track.getCapabilities ? track.getCapabilities() : {}) as any;
           if (capabilities.torch) {
             setHasTorch(true);
           }
           if (capabilities.zoom) {
+            hardwareZoomSupported = true;
             setHasZoom(true);
-            const maxZ = Math.min(capabilities.zoom.max || 3.0, 3.0);
-            const defaultZ = Math.min(1.8, maxZ);
+            const maxZ = Math.min(capabilities.zoom.max || 4.0, 4.0);
+            const defaultZ = Math.min(2.0, maxZ);
             setMaxZoom(maxZ);
             setZoomLevel(defaultZ);
 
             try {
               await (track as any).applyConstraints({
-                advanced: [{ zoom: defaultZ }]
+                advanced: [{ zoom: defaultZ }, { focusMode: 'continuous' }]
               });
             } catch (_) {}
+          } else {
+            // Even without hardware zoom API, enable universal digital 1:1 telephoto zoom
+            setHasZoom(true);
+            setMaxZoom(3.0);
+            setZoomLevel(2.0);
           }
         }
 
@@ -197,69 +207,96 @@ export function BarcodeScannerModal({
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
 
-          // Offscreen canvas for ZBar WASM and low-light enhancement
+          // Offscreen canvas for 1:1 unscaled Telephoto ROI crop
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d', { willReadFrequently: true });
           canvasRef.current = canvas;
 
           let lastZBarTime = 0;
+          let frameIndex = 0;
 
           const detectLoop = async (timestamp: number) => {
             if (!isMounted || isScannedRef.current) return;
 
-            if (videoRef.current && videoRef.current.readyState >= 2) {
+            if (videoRef.current && videoRef.current.readyState >= 2 && ctx) {
               const vw = videoRef.current.videoWidth;
               const vh = videoRef.current.videoHeight;
 
-              // 1. ENGINE 1: Native Android BarcodeDetector (instant hardware check on raw video)
-              if (detector) {
-                try {
-                  const nativeResults = await detector.detect(videoRef.current);
-                  if (nativeResults && nativeResults.length > 0) {
-                    for (const item of nativeResults) {
-                      const validProduct = extractProductCode(item.rawValue);
-                      if (validProduct) {
-                        triggerScanSuccess(validProduct);
-                        return;
-                      }
-                    }
-                  }
-                } catch (_) {}
-              }
+              if (vw > 0 && vh > 0) {
+                frameIndex++;
+                // Alternate passes:
+                // Frames 1, 2: Ultra-dense 1:1 pixel Telephoto ROI (Center reticle, specifically for 1.5 - 2.5m ESL labels)
+                // Frame 3: Wide Full-Frame (for large nearby packages)
+                const isTelephotoPass = (frameIndex % 3 !== 0);
 
-              // 2. ENGINE 2: Industrial ZBar WebAssembly (C library, unbeatable in low light, e-ink, and multi-angle)
-              if (!isZBarBusyRef.current && timestamp - lastZBarTime > 60 && ctx && vw > 0 && vh > 0) {
-                lastZBarTime = timestamp;
-                isZBarBusyRef.current = true;
+                let sx = 0, sy = 0, sw = vw, sh = vh;
+                if (isTelephotoPass) {
+                  // Crop the center 40% width and 35% height at 100% native sensor resolution (zero blur, uncompressed raster!)
+                  sw = Math.round(vw * 0.40);
+                  sh = Math.round(vh * 0.35);
+                  sx = Math.round((vw - sw) / 2);
+                  sy = Math.round((vh - sh) / 2);
+                } else {
+                  // Wide frame capped to 1280 for fast processing
+                  sw = Math.min(vw, 1280);
+                  sh = Math.round((vh * sw) / vw);
+                  sx = 0;
+                  sy = 0;
+                }
 
-                // Use 960x540 for optimum sub-pixel performance in 40ms
-                const targetW = Math.min(vw, 960);
-                const targetH = Math.min(vh, 540);
-                canvas.width = targetW;
-                canvas.height = targetH;
+                if (canvas.width !== sw || canvas.height !== sh) {
+                  canvas.width = sw;
+                  canvas.height = sh;
+                }
 
-                // Strong contrast curve for e-ink labels in weak light
+                // High-contrast e-ink curve: enhances low-contrast e-paper barcode bars
                 ctx.filter = 'contrast(2.2) brightness(1.15) grayscale(1)';
-                ctx.drawImage(videoRef.current, 0, 0, targetW, targetH);
+                if (isTelephotoPass) {
+                  ctx.drawImage(videoRef.current, sx, sy, sw, sh, 0, 0, sw, sh);
+                } else {
+                  ctx.drawImage(videoRef.current, 0, 0, sw, sh);
+                }
 
-                try {
-                  const imgData = ctx.getImageData(0, 0, targetW, targetH);
-                  const symbols = await scanImageData(imgData);
-
-                  if (symbols && symbols.length > 0) {
-                    for (const sym of symbols) {
-                      const decoded = sym.decode();
-                      const validProduct = extractProductCode(decoded);
-                      if (validProduct) {
-                        triggerScanSuccess(validProduct);
-                        return;
+                // ENGINE 1: Native Android BarcodeDetector on the 1:1 cropped canvas (catches distant codes instantly)
+                if (detector) {
+                  try {
+                    const nativeResults = await detector.detect(canvas);
+                    if (nativeResults && nativeResults.length > 0) {
+                      for (const item of nativeResults) {
+                        const validProduct = extractProductCode(item.rawValue);
+                        if (validProduct) {
+                          triggerScanSuccess(validProduct);
+                          return;
+                        }
                       }
                     }
+                  } catch (_) {}
+                }
+
+                // ENGINE 2: Industrial ZBar WebAssembly (C library with sub-pixel barcode decoder)
+                if (!isZBarBusyRef.current && timestamp - lastZBarTime > 50) {
+                  lastZBarTime = timestamp;
+                  isZBarBusyRef.current = true;
+
+                  try {
+                    const imgData = ctx.getImageData(0, 0, sw, sh);
+                    const symbols = await scanImageData(imgData);
+
+                    if (symbols && symbols.length > 0) {
+                      for (const sym of symbols) {
+                        const decoded = sym.decode();
+                        const validProduct = extractProductCode(decoded);
+                        if (validProduct) {
+                          triggerScanSuccess(validProduct);
+                          return;
+                        }
+                      }
+                    }
+                  } catch (_) {
+                    // silent frame error
+                  } finally {
+                    isZBarBusyRef.current = false;
                   }
-                } catch (zErr) {
-                  // silent frame parse error
-                } finally {
-                  isZBarBusyRef.current = false;
                 }
               }
             }
@@ -316,25 +353,26 @@ export function BarcodeScannerModal({
     }
   };
 
-  // Cycle Zoom (1.0x -> 1.8x -> 2.5x)
+  // Cycle Zoom (1.0x -> 2.0x -> 3.0x -> 1.0x)
   const cycleZoom = async () => {
     let nextZ = 1.0;
-    if (zoomLevel <= 1.2) nextZ = Math.min(1.8, maxZoom);
-    else if (zoomLevel <= 2.0) nextZ = Math.min(2.5, maxZoom);
+    if (zoomLevel < 1.5) nextZ = Math.min(2.0, maxZoom);
+    else if (zoomLevel < 2.5) nextZ = Math.min(3.0, maxZoom);
     else nextZ = 1.0;
+
+    setZoomLevel(nextZ);
 
     try {
       if (streamRef.current) {
         const track = streamRef.current.getVideoTracks()[0];
         if (track && (track as any).applyConstraints) {
           await (track as any).applyConstraints({
-            advanced: [{ zoom: nextZ }]
+            advanced: [{ zoom: nextZ }, { focusMode: 'continuous' }]
           });
-          setZoomLevel(nextZ);
         }
       }
     } catch (e) {
-      console.warn('Zoom change failed:', e);
+      console.warn('Hardware zoom failed (using digital 1:1 ROI zoom):', e);
     }
   };
 
@@ -421,7 +459,10 @@ export function BarcodeScannerModal({
           ref={videoRef}
           playsInline
           muted
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover transition-transform duration-200"
+          style={{
+            transform: zoomLevel > 1.2 ? `scale(${zoomLevel})` : undefined
+          }}
         />
       </div>
 
