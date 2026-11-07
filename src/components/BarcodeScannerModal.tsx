@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Flashlight, AlertCircle, RefreshCw, CheckCircle2, ScanLine, Camera, Crosshair } from 'lucide-react';
+import { X, Flashlight, AlertCircle, RefreshCw, CheckCircle2, Camera } from 'lucide-react';
 import { scanImageData, setModuleArgs } from '@undecaf/zbar-wasm';
 
 interface BarcodeScannerModalProps {
@@ -105,14 +105,10 @@ export function BarcodeScannerModal({
   isOpen,
   onClose,
   onScanSuccess,
-  title,
+  title: _title,
   continuousMode = false,
   toastMessage = null
 }: BarcodeScannerModalProps) {
-  // Scanner Mode: 'laser' (narrow horizontal beam for ESL labels at 1.5m) | 'standard' (full window for carpets/sheets)
-  const [scanMode, setScanMode] = useState<'laser' | 'standard'>('laser');
-  const scanModeRef = useRef<'laser' | 'standard'>('laser');
-
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [torchOn, setTorchOn] = useState(false);
   const [hasTorch, setHasTorch] = useState(false);
@@ -136,7 +132,7 @@ export function BarcodeScannerModal({
   const animFrameIdRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const isScannedRef = useRef(false);
-  const isZBarBusyRef = useRef(false);
+  const isBusyRef = useRef(false);
   const focusIntervalRef = useRef<any>(null);
 
   const triggerScanSuccess = (code: string) => {
@@ -166,23 +162,12 @@ export function BarcodeScannerModal({
     }
   };
 
-  // Switch between Laser Mode (ESL 1.5m) and Standard Mode
-  const toggleScanMode = () => {
-    const next = scanMode === 'laser' ? 'standard' : 'laser';
-    setScanMode(next);
-    scanModeRef.current = next;
-  };
-
-  useEffect(() => {
-    scanModeRef.current = scanMode;
-  }, [scanMode]);
-
   useEffect(() => {
     if (!isOpen) return;
 
     let isMounted = true;
     isScannedRef.current = false;
-    isZBarBusyRef.current = false;
+    isBusyRef.current = false;
     setScannedFeedback(null);
     setCameraError(null);
     setTorchOn(false);
@@ -194,7 +179,7 @@ export function BarcodeScannerModal({
 
     const initScanner = async () => {
       try {
-        // Initialize Native BarcodeDetector if available in Chrome
+        // Initialize Native BarcodeDetector (Chrome Android ML Kit hardware acceleration)
         let detector: any = null;
         if (hasNativeBarcodeDetector) {
           try {
@@ -220,8 +205,8 @@ export function BarcodeScannerModal({
               ...(selectedDeviceId
                 ? { deviceId: { exact: selectedDeviceId } }
                 : { facingMode: { ideal: 'environment' } }),
-              width: { ideal: 3840, min: 1280 },
-              height: { ideal: 2160, min: 720 }
+              width: { ideal: 3840, min: 1920 },
+              height: { ideal: 2160, min: 1080 }
             },
             audio: false
           });
@@ -241,7 +226,7 @@ export function BarcodeScannerModal({
 
         streamRef.current = stream;
 
-        // Once permission is granted, enumerate and populate ONLY rear cameras (excluding front/selfie)
+        // Populate ONLY rear cameras (strictly excluding front/selfie cameras)
         try {
           const devices = await navigator.mediaDevices.enumerateDevices();
           const videoInputs = devices.filter((d) => d.kind === 'videoinput');
@@ -289,7 +274,7 @@ export function BarcodeScannerModal({
           }
         }
 
-        // Periodic continuous autofocus pulse (every 2.5s) to prevent camera driver focus freeze
+        // Periodic continuous autofocus pulse (every 2.5s) to prevent camera driver focus lock
         focusIntervalRef.current = setInterval(async () => {
           if (!streamRef.current || isScannedRef.current) return;
           try {
@@ -306,15 +291,20 @@ export function BarcodeScannerModal({
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
 
-          // Offscreen high-density canvas for professional ROI extraction
+          // Offscreen high-density canvas for ultra-fast ROI processing
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d', { willReadFrequently: true });
           canvasRef.current = canvas;
 
-          let lastZBarTime = 0;
-          let frameIndex = 0;
+          let lastScanTime = 0;
           let cycleCount = 0;
 
+          // UNIFIED ULTRA-FAST DETECTION LOOP:
+          // Seamlessly alternates between:
+          // 1. Telephoto Center ROI (1:1 native sensor resolution for small ESL barcodes from 1.5m away)
+          // 2. Full Viewfinder Window (for close-up scans and full carpet labels)
+          // Both passes run automatically every ~30ms, feeding into Native Chrome BarcodeDetector (GPU)
+          // and ZBar WASM with contrast expansion. ZERO manual mode switching required!
           const detectLoop = async (timestamp: number) => {
             if (!isMounted || isScannedRef.current) return;
 
@@ -324,33 +314,27 @@ export function BarcodeScannerModal({
               const vh = video.videoHeight;
 
               if (vw > 0 && vh > 0) {
-                frameIndex++;
-
-                if (!isZBarBusyRef.current && timestamp - lastZBarTime > 35) {
-                  lastZBarTime = timestamp;
-                  isZBarBusyRef.current = true;
+                if (!isBusyRef.current && timestamp - lastScanTime > 30) {
+                  lastScanTime = timestamp;
+                  isBusyRef.current = true;
                   cycleCount++;
 
                   const currentZoom = zoomLevelRef.current || 1.0;
-                  const currentMode = scanModeRef.current;
+                  const isTelephotoPass = currentZoom > 1.2 || cycleCount % 2 === 1;
 
                   let targetW: number;
                   let targetH: number;
 
-                  if (currentMode === 'laser') {
-                    // PROFESSIONAL LASER MODE:
-                    // Extracts a narrow horizontal beam (like Zebra SE4750 laser scanner)
-                    // High-resolution crop right through the center where ESL shelf barcodes sit!
+                  if (isTelephotoPass) {
+                    // PASS 1: Telephoto Center ROI (for 1.0m - 1.5m shelf ESL labels)
+                    // High-resolution 1:1 pixel crop around center of sensor where barcode sits
                     const z = Math.max(1.0, currentZoom);
-                    const cropFactorW = 0.88 / z;
-                    const cropFactorH = 0.18 / z;
-
-                    const cropW = Math.max(180, Math.round(vw * cropFactorW));
-                    const cropH = Math.max(70, Math.round(vh * cropFactorH));
+                    const cropW = Math.max(220, Math.round(vw * (0.65 / z)));
+                    const cropH = Math.max(100, Math.round(vh * (0.28 / z)));
                     const cropX = Math.round((vw - cropW) / 2);
                     const cropY = Math.round((vh - cropH) / 2);
 
-                    targetW = Math.min(1280, Math.max(720, Math.round(cropW * (z > 1.2 ? 1.4 : 1.0))));
+                    targetW = Math.min(1280, Math.max(640, cropW));
                     targetH = Math.round((cropH * targetW) / cropW);
 
                     if (canvas.width !== targetW || canvas.height !== targetH) {
@@ -360,46 +344,25 @@ export function BarcodeScannerModal({
 
                     ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, targetW, targetH);
                   } else {
-                    // STANDARD MODE (Alternating Telephoto & Wide Window)
-                    const isTelephotoPass = currentZoom > 1.2 || cycleCount % 2 === 1;
+                    // PASS 2: Full Viewfinder Window (for close-up labels & large carpet tags)
+                    const cropW = Math.round(vw * 0.85);
+                    const cropH = Math.round(vh * 0.70);
+                    const cropX = Math.round((vw - cropW) / 2);
+                    const cropY = Math.round((vh - cropH) / 2);
 
-                    if (isTelephotoPass) {
-                      const z = Math.max(1.0, currentZoom);
-                      const cropW = Math.max(200, Math.round(vw * (0.65 / z)));
-                      const cropH = Math.max(140, Math.round(vh * (0.40 / z)));
-                      const cropX = Math.round((vw - cropW) / 2);
-                      const cropY = Math.round((vh - cropH) / 2);
+                    targetW = Math.min(1280, Math.max(720, cropW));
+                    targetH = Math.round((cropH * targetW) / cropW);
 
-                      targetW = Math.min(1280, Math.max(640, cropW));
-                      targetH = Math.round((cropH * targetW) / cropW);
-
-                      if (canvas.width !== targetW || canvas.height !== targetH) {
-                        canvas.width = targetW;
-                        canvas.height = targetH;
-                      }
-
-                      ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, targetW, targetH);
-                    } else {
-                      const maxDim = 1280;
-                      if (vw >= vh) {
-                        targetW = Math.min(maxDim, vw);
-                        targetH = Math.round((vh * maxDim) / vw);
-                      } else {
-                        targetH = Math.min(maxDim, vh);
-                        targetW = Math.round((vw * maxDim) / vh);
-                      }
-
-                      if (canvas.width !== targetW || canvas.height !== targetH) {
-                        canvas.width = targetW;
-                        canvas.height = targetH;
-                      }
-
-                      ctx.drawImage(video, 0, 0, targetW, targetH);
+                    if (canvas.width !== targetW || canvas.height !== targetH) {
+                      canvas.width = targetW;
+                      canvas.height = targetH;
                     }
+
+                    ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, targetW, targetH);
                   }
 
                   try {
-                    // 1. ENGINE 1: Native Android BarcodeDetector (Chrome ML Kit) on the magnified canvas!
+                    // Engine 1: Native Android BarcodeDetector (Chrome ML Kit GPU vision)
                     if (detector) {
                       try {
                         const nativeResults = await detector.detect(canvas);
@@ -415,7 +378,7 @@ export function BarcodeScannerModal({
                       } catch (_) {}
                     }
 
-                    // 2. ENGINE 2: Industrial ZBar WebAssembly with ESL contrast enhancement
+                    // Engine 2: Industrial ZBar WebAssembly with ESL contrast enhancement
                     const imgData = ctx.getImageData(0, 0, targetW, targetH);
                     enhanceESLContrast(imgData.data);
 
@@ -434,7 +397,7 @@ export function BarcodeScannerModal({
                   } catch (_) {
                     // silent frame error
                   } finally {
-                    isZBarBusyRef.current = false;
+                    isBusyRef.current = false;
                   }
                 }
               }
@@ -443,7 +406,7 @@ export function BarcodeScannerModal({
             animFrameIdRef.current = requestAnimationFrame(detectLoop);
           };
 
-          // Kick off the detection loop immediately
+          // Kick off detection loop
           animFrameIdRef.current = requestAnimationFrame(detectLoop);
         }
       } catch (err: unknown) {
@@ -525,7 +488,7 @@ export function BarcodeScannerModal({
     }
   };
 
-  // Switch physical rear camera lens (e.g. Telephoto optical sensor)
+  // Switch physical rear camera lens if multiple sensors present
   const cycleCameraLens = () => {
     if (rearCameras.length <= 1) return;
     const nextIndex = (currentCameraIndex + 1) % rearCameras.length;
@@ -677,24 +640,7 @@ export function BarcodeScannerModal({
             {zoomLevel.toFixed(1)}×
           </button>
 
-          {/* Mode Switcher: Laser ESL vs Standard */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleScanMode();
-            }}
-            className={`h-11 px-3.5 rounded-full flex items-center gap-1.5 text-xs font-black backdrop-blur-md shadow-lg border transition-all ${
-              scanMode === 'laser'
-                ? 'bg-rose-600/90 hover:bg-rose-600 text-white border-rose-400/40 shadow-rose-600/30'
-                : 'bg-black/60 hover:bg-black/80 text-white border-white/10'
-            }`}
-            title="Przełącz tryb skanowania"
-          >
-            <ScanLine className="w-4 h-4" />
-            <span>{scanMode === 'laser' ? 'Laser ESL 1.5m' : 'Standard'}</span>
-          </button>
-
-          {/* Physical camera switcher if multiple rear cameras detected */}
+          {/* Physical camera lens switcher if multiple rear cameras detected */}
           {rearCameras.length > 1 && (
             <button
               onClick={(e) => {
@@ -731,77 +677,30 @@ export function BarcodeScannerModal({
         </div>
       )}
 
-      {/* Central Viewfinder matching chosen mode */}
+      {/* Standard Rounded Green Reticle Viewfinder */}
       <div className="relative z-10 flex-1 flex flex-col items-center justify-center pointer-events-none p-3">
-        {scanMode === 'laser' ? (
-          /* PROFESSIONAL ZEBRA / SCANDIT STYLE LASER RETICLE */
-          <div
-            className={`relative w-[92vw] max-w-[460px] h-[130px] rounded-2xl border-2 transition-all flex items-center justify-center ${
-              scannedFeedback
-                ? 'border-emerald-400 bg-emerald-500/25 scale-[1.02]'
-                : 'border-rose-500/90 shadow-[0_0_25px_rgba(244,63,94,0.4)]'
-            }`}
-            style={{
-              boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.45)'
-            }}
-          >
-            {/* Corner Target Brackets */}
-            <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-rose-400 rounded-tl-lg" />
-            <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-rose-400 rounded-tr-lg" />
-            <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-rose-400 rounded-bl-lg" />
-            <div className="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-rose-400 rounded-br-lg" />
+        <div
+          className={`relative w-[92vw] max-w-[420px] h-[340px] sm:h-[380px] rounded-[36px] border-[3.5px] transition-all flex items-center justify-center ${
+            scannedFeedback
+              ? 'border-emerald-400 bg-emerald-500/25 scale-[1.02]'
+              : 'border-[#22c55e]'
+          }`}
+          style={{
+            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.40)'
+          }}
+        >
+          {/* Subtle animated scan glow accents */}
+          <div className="absolute inset-x-8 top-0 h-1.5 bg-gradient-to-r from-transparent via-[#22c55e] to-transparent animate-pulse rounded-full" />
+          <div className="absolute inset-x-8 bottom-0 h-1.5 bg-gradient-to-r from-transparent via-[#22c55e] to-transparent animate-pulse rounded-full" />
 
-            {/* Glowing Laser Beam Line */}
-            <div
-              className={`absolute inset-x-2 h-1 rounded-full transition-colors ${
-                scannedFeedback
-                  ? 'bg-emerald-400 shadow-[0_0_15px_#34d399]'
-                  : 'bg-rose-500 shadow-[0_0_12px_#f43f5e] animate-pulse'
-              }`}
-            />
-
-            {/* Center crosshair dot */}
-            <div className="w-2 h-2 rounded-full bg-rose-400 shadow-md" />
-
-            {/* Sub-label hint */}
-            <div className="absolute -bottom-7 bg-black/75 px-3 py-1 rounded-full text-[11px] font-bold text-rose-300 border border-rose-500/30 flex items-center gap-1.5 shadow-lg">
-              <Crosshair className="w-3.5 h-3.5 text-rose-400" />
-              <span>Skieruj laser na kod kreskowy pod ceną</span>
+          {/* Scan success indicator */}
+          {scannedFeedback && (
+            <div className="bg-black/90 text-emerald-400 px-5 py-2.5 rounded-full flex items-center gap-2 font-black text-sm sm:text-base shadow-2xl border border-emerald-400/40 animate-in fade-in zoom-in-95">
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+              <span>Odczytano: {scannedFeedback}</span>
             </div>
-
-            {/* Scan success indicator */}
-            {scannedFeedback && (
-              <div className="absolute z-20 bg-black/90 text-emerald-400 px-5 py-2.5 rounded-full flex items-center gap-2 font-black text-sm shadow-2xl border border-emerald-400/40">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                <span>Odczytano: {scannedFeedback}</span>
-              </div>
-            )}
-          </div>
-        ) : (
-          /* STANDARD FULL RETICLE */
-          <div
-            className={`relative w-[92vw] max-w-[420px] h-[320px] rounded-[36px] border-[3.5px] transition-all flex items-center justify-center ${
-              scannedFeedback
-                ? 'border-emerald-400 bg-emerald-500/25 scale-[1.02]'
-                : 'border-emerald-500'
-            }`}
-            style={{
-              boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.45)'
-            }}
-          >
-            {/* Scan glow */}
-            <div className="absolute inset-x-6 top-0 h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-pulse rounded-full" />
-            <div className="absolute inset-x-6 bottom-0 h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-pulse rounded-full" />
-
-            {/* Scan success indicator */}
-            {scannedFeedback && (
-              <div className="bg-black/90 text-emerald-400 px-5 py-2.5 rounded-full flex items-center gap-2 font-black text-sm shadow-2xl border border-emerald-400/40">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                <span>Odczytano: {scannedFeedback}</span>
-              </div>
-            )}
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Bottom Area with controls */}
@@ -836,7 +735,7 @@ export function BarcodeScannerModal({
             )}
           </button>
 
-          {/* If continuousMode: [Gotowe / Wróć] button */}
+          {/* If continuousMode: [Gotowe / Wróć do listy] button */}
           {continuousMode && (
             <button
               onClick={(e) => {
