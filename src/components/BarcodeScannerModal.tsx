@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, Flashlight, AlertCircle, RefreshCw, CheckCircle2, Camera } from 'lucide-react';
 import { scanImageData, setModuleArgs } from '@undecaf/zbar-wasm';
+import { decodeScanditWaveform } from '../services/scanditWaveformEngine';
 
 interface BarcodeScannerModalProps {
   isOpen: boolean;
@@ -489,7 +490,16 @@ export function BarcodeScannerModal({
                       } catch (_) {}
                     }
 
-                    // Engine 2: Industrial ZBar WASM with Glare-Busting & Partial Slice Fallback
+                    // Engine 2: Scandit-Grade 1D Sub-Pixel Continuous Waveform Engine
+                    // Directly decodes small, blurry barcodes from 1.5m away using 2nd derivative zero-crossings
+                    // and T-distance (similar-edge) blur cancellation in < 4ms
+                    const scanditCode = decodeScanditWaveform(ctx, targetW, targetH);
+                    if (scanditCode) {
+                      triggerScanSuccess(scanditCode);
+                      return;
+                    }
+
+                    // Engine 3: Industrial ZBar WASM with Glare-Busting & Partial Slice Fallback
                     const validProduct = await scanWithPartialFallback(ctx, targetW, targetH);
                     if (validProduct) {
                       triggerScanSuccess(validProduct);

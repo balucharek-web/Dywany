@@ -15,6 +15,7 @@ import {
   Edit3
 } from 'lucide-react';
 import { scanImageData, setModuleArgs } from '@undecaf/zbar-wasm';
+import { decodeScanditWaveform } from '../services/scanditWaveformEngine';
 import { scanEslLabelWithoutAi, LocalOcrResult } from '../services/localOcrService';
 import { scanEslLabel } from '../services/eslScannerService';
 import { Carpet } from '../types';
@@ -224,7 +225,14 @@ export function EslScannerModal({
                     } catch (_) {}
                   }
 
-                  // 2. High-contrast ZBar WASM fallback
+                  // 2. Scandit-Grade 1D Waveform Engine (1.5m sub-pixel zero crossings)
+                  const scanditCode = decodeScanditWaveform(ctx, targetW, targetH);
+                  if (scanditCode) {
+                    handleLiveBarcodeFound(scanditCode);
+                    return;
+                  }
+
+                  // 3. High-contrast ZBar WASM fallback
                   if (!isZBarBusyRef.current && timestamp - lastZBarTime > 80) {
                     lastZBarTime = timestamp;
                     isZBarBusyRef.current = true;
