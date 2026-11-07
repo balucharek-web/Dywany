@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Flashlight, AlertCircle, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { X, Flashlight, AlertCircle, RefreshCw, CheckCircle2, ScanLine, Camera, Crosshair } from 'lucide-react';
 import { scanImageData, setModuleArgs } from '@undecaf/zbar-wasm';
 
 interface BarcodeScannerModalProps {
@@ -35,8 +35,8 @@ function playBeep() {
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(1760, audioCtx.currentTime); // 1760Hz high retail chime
-    gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
+    osc.frequency.setValueAtTime(1760, audioCtx.currentTime); // 1760Hz crisp warehouse chime
+    gain.gain.setValueAtTime(0.20, audioCtx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
     osc.connect(gain);
     gain.connect(audioCtx.destination);
@@ -46,9 +46,9 @@ function playBeep() {
 }
 
 /**
- * Validates and extracts true product barcode from ESL label:
- * Accepts 13-digit EAN, 8-digit REF / EAN-8, 12-digit UPC (Code 128 or EAN-13 format).
- * Automatically discards 16-24 digit electronic tag serials (e.g. 952401350807681623)
+ * Validates and extracts true product barcode from ESL shelf labels and carpets:
+ * Accepts 13-digit EAN, 8-digit REF LM, 12-digit UPC (Code 128 or EAN-13 format).
+ * Automatically discards 16-24 digit electronic tag hardware serials (e.g. 147450750897439390)
  * and alphanumeric IDs.
  */
 function extractProductCode(raw: string): string | null {
@@ -57,7 +57,7 @@ function extractProductCode(raw: string): string | null {
 
   // 1. Pure digits check
   if (/^\d+$/.test(clean)) {
-    // Standard product barcodes: 7 to 14 digits (EAN-8, REF 8-digit, UPC 12-digit, EAN-13, GTIN-14)
+    // Standard product barcodes: 7 to 14 digits (REF 8-digit, EAN-13, GTIN-14)
     // Rejects 16-24 digit ESL tag hardware serial numbers
     if (clean.length >= 7 && clean.length <= 14) {
       return clean;
@@ -75,13 +75,14 @@ function extractProductCode(raw: string): string | null {
 }
 
 /**
- * Fast contrast normalization for ESL e-paper displays (takes ~2ms).
- * Expands dithered gray-on-gray bars to high-contrast black-and-white.
+ * Fast contrast normalization for ESL e-paper displays (takes ~1-2ms).
+ * Expands dithered gray-on-gray bars into high-contrast black-and-white.
  */
 function enhanceESLContrast(data: Uint8ClampedArray) {
   const len = data.length;
   let min = 255;
   let max = 0;
+  // Sample every 32nd byte (every 8th pixel) for blazing speed
   for (let i = 0; i < len; i += 32) {
     const lum = (data[i] * 77 + data[i + 1] * 150 + data[i + 2] * 29) >> 8;
     if (lum < min) min = lum;
@@ -108,6 +109,10 @@ export function BarcodeScannerModal({
   continuousMode = false,
   toastMessage = null
 }: BarcodeScannerModalProps) {
+  // Scanner Mode: 'laser' (narrow horizontal beam for ESL labels at 1.5m) | 'standard' (full window for carpets/sheets)
+  const [scanMode, setScanMode] = useState<'laser' | 'standard'>('laser');
+  const scanModeRef = useRef<'laser' | 'standard'>('laser');
+
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [torchOn, setTorchOn] = useState(false);
   const [hasTorch, setHasTorch] = useState(false);
@@ -115,11 +120,14 @@ export function BarcodeScannerModal({
   const isHardwareZoomRef = useRef(false);
   const [zoomLevel, setZoomLevel] = useState(1.0);
   const zoomLevelRef = useRef(1.0);
-  const [hasZoom, setHasZoom] = useState(false);
   const [maxZoom, setMaxZoom] = useState(3.0);
   const [isScanningFile, setIsScanningFile] = useState(false);
   const [scannedFeedback, setScannedFeedback] = useState<string | null>(null);
   const [tapRipple, setTapRipple] = useState<{ x: number; y: number } | null>(null);
+
+  // Multi-camera selection (e.g. Telephoto physical cameras)
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const [currentCameraIndex, setCurrentCameraIndex] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -128,6 +136,7 @@ export function BarcodeScannerModal({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const isScannedRef = useRef(false);
   const isZBarBusyRef = useRef(false);
+  const focusIntervalRef = useRef<any>(null);
 
   const triggerScanSuccess = (code: string) => {
     if (isScannedRef.current) return;
@@ -156,6 +165,17 @@ export function BarcodeScannerModal({
     }
   };
 
+  // Switch between Laser Mode (ESL 1.5m) and Standard Mode
+  const toggleScanMode = () => {
+    const next = scanMode === 'laser' ? 'standard' : 'laser';
+    setScanMode(next);
+    scanModeRef.current = next;
+  };
+
+  useEffect(() => {
+    scanModeRef.current = scanMode;
+  }, [scanMode]);
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -166,7 +186,6 @@ export function BarcodeScannerModal({
     setCameraError(null);
     setTorchOn(false);
     setHasTorch(false);
-    setHasZoom(false);
     setIsHardwareZoom(false);
     isHardwareZoomRef.current = false;
     setZoomLevel(1.0);
@@ -174,7 +193,16 @@ export function BarcodeScannerModal({
 
     const initScanner = async () => {
       try {
-        // Initialize detector if available
+        // Enumerate video devices to detect multi-camera setups (e.g. Telephoto)
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoInputs = devices.filter((d) => d.kind === 'videoinput');
+          if (videoInputs.length > 0) {
+            setAvailableCameras(videoInputs);
+          }
+        } catch (_) {}
+
+        // Initialize Native BarcodeDetector if available in Chrome
         let detector: any = null;
         if (hasNativeBarcodeDetector) {
           try {
@@ -190,12 +218,16 @@ export function BarcodeScannerModal({
           }
         }
 
-        // Request clean high-resolution stream from rear camera (4K/1080p if available)
+        // Request clean high-resolution stream from rear camera (4K / 1080p for distance scanning)
         let stream: MediaStream;
+        const selectedDeviceId = availableCameras[currentCameraIndex]?.deviceId;
+
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             video: {
-              facingMode: { ideal: 'environment' },
+              ...(selectedDeviceId
+                ? { deviceId: { exact: selectedDeviceId } }
+                : { facingMode: { ideal: 'environment' } }),
               width: { ideal: 3840, min: 1280 },
               height: { ideal: 2160, min: 720 }
             },
@@ -225,7 +257,7 @@ export function BarcodeScannerModal({
             setHasTorch(true);
           }
 
-          // Apply hardware continuous autofocus and exposure
+          // Apply continuous autofocus and auto-exposure
           const advancedConstraints: any = {};
           if (capabilities.focusMode?.includes('continuous')) {
             advancedConstraints.focusMode = 'continuous';
@@ -242,22 +274,33 @@ export function BarcodeScannerModal({
           if (capabilities.zoom) {
             setIsHardwareZoom(true);
             isHardwareZoomRef.current = true;
+            const maxZ = Math.min(capabilities.zoom.max || 4.0, 4.0);
+            setMaxZoom(maxZ);
           } else {
             setIsHardwareZoom(false);
             isHardwareZoomRef.current = false;
+            setMaxZoom(3.0);
           }
-          // Zoom is always supported via sensor / telephoto crop
-          setHasZoom(true);
-          setMaxZoom(3.0);
-          setZoomLevel(1.0);
-          zoomLevelRef.current = 1.0;
         }
+
+        // Periodic continuous autofocus pulse (every 2.5s) to prevent camera driver focus freeze
+        focusIntervalRef.current = setInterval(async () => {
+          if (!streamRef.current || isScannedRef.current) return;
+          try {
+            const tr = streamRef.current.getVideoTracks()[0];
+            if (tr && (tr as any).applyConstraints) {
+              await (tr as any).applyConstraints({
+                advanced: [{ focusMode: 'continuous', pointsOfInterest: [{ x: 0.5, y: 0.5 }] }]
+              });
+            }
+          } catch (_) {}
+        }, 2500);
 
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
 
-          // Offscreen canvas for frame capture
+          // Offscreen high-density canvas for professional ROI extraction
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d', { willReadFrequently: true });
           canvasRef.current = canvas;
@@ -277,7 +320,7 @@ export function BarcodeScannerModal({
               if (vw > 0 && vh > 0) {
                 frameIndex++;
 
-                // 1. ENGINE 1: Native Android BarcodeDetector on raw video stream (ML Kit hardware)
+                // 1. ENGINE 1: Native Android BarcodeDetector on GPU
                 if (detector && frameIndex % 2 === 0) {
                   try {
                     const rawResults = await detector.detect(video);
@@ -293,34 +336,32 @@ export function BarcodeScannerModal({
                   } catch (_) {}
                 }
 
-                // 2. ENGINE 2: Industrial ZBar WebAssembly (runs every ~50ms)
-                if (!isZBarBusyRef.current && timestamp - lastZBarTime > 50) {
+                // 2. ENGINE 2: Industrial ZBar WebAssembly (runs every ~45ms)
+                if (!isZBarBusyRef.current && timestamp - lastZBarTime > 45) {
                   lastZBarTime = timestamp;
                   isZBarBusyRef.current = true;
                   cycleCount++;
 
                   const currentZoom = zoomLevelRef.current || 1.0;
-                  // If zoom > 1.2, focus 100% on the magnified telephoto crop.
-                  // At 1.0x, alternate between telephoto crop (odd) and full frame (even).
-                  const isTelephotoPass = currentZoom > 1.2 || cycleCount % 2 === 1;
+                  const currentMode = scanModeRef.current;
 
                   let targetW: number;
                   let targetH: number;
 
-                  if (isTelephotoPass) {
-                    // PASS A: Telephoto Viewfinder Crop (Center ROI) - High Pixel Density for 1m-2m distances
-                    // Scales inversely with zoom to zoom right into the center of the green box
+                  if (currentMode === 'laser') {
+                    // PROFESSIONAL LASER MODE:
+                    // Extracts a narrow horizontal beam (like Zebra SE4750 laser scanner)
+                    // High-resolution crop right through the center where ESL shelf barcodes sit!
                     const z = Math.max(1.0, currentZoom);
-                    const cropFactorW = 0.65 / z;
-                    const cropFactorH = 0.40 / z;
+                    const cropFactorW = 0.88 / z;
+                    const cropFactorH = 0.18 / z;
 
                     const cropW = Math.max(180, Math.round(vw * cropFactorW));
-                    const cropH = Math.max(120, Math.round(vh * cropFactorH));
+                    const cropH = Math.max(70, Math.round(vh * cropFactorH));
                     const cropX = Math.round((vw - cropW) / 2);
                     const cropY = Math.round((vh - cropH) / 2);
 
-                    // High pixel density target up to 1280px wide
-                    targetW = Math.min(1280, Math.max(640, Math.round(cropW * (z > 1.5 ? 1.5 : 1.0))));
+                    targetW = Math.min(1280, Math.max(720, Math.round(cropW * (z > 1.2 ? 1.4 : 1.0))));
                     targetH = Math.round((cropH * targetW) / cropW);
 
                     if (canvas.width !== targetW || canvas.height !== targetH) {
@@ -330,31 +371,49 @@ export function BarcodeScannerModal({
 
                     ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, targetW, targetH);
                   } else {
-                    // PASS B: Wide Full Frame (for close-up scans <30cm)
-                    const maxDim = 1280;
-                    if (vw >= vh) {
-                      targetW = Math.min(maxDim, vw);
-                      targetH = Math.round((vh * maxDim) / vw);
+                    // STANDARD MODE (Alternating Telephoto & Wide Window)
+                    const isTelephotoPass = currentZoom > 1.2 || cycleCount % 2 === 1;
+
+                    if (isTelephotoPass) {
+                      const z = Math.max(1.0, currentZoom);
+                      const cropW = Math.max(200, Math.round(vw * (0.65 / z)));
+                      const cropH = Math.max(140, Math.round(vh * (0.40 / z)));
+                      const cropX = Math.round((vw - cropW) / 2);
+                      const cropY = Math.round((vh - cropH) / 2);
+
+                      targetW = Math.min(1280, Math.max(640, cropW));
+                      targetH = Math.round((cropH * targetW) / cropW);
+
+                      if (canvas.width !== targetW || canvas.height !== targetH) {
+                        canvas.width = targetW;
+                        canvas.height = targetH;
+                      }
+
+                      ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, targetW, targetH);
                     } else {
-                      targetH = Math.min(maxDim, vh);
-                      targetW = Math.round((vw * maxDim) / vh);
-                    }
+                      const maxDim = 1280;
+                      if (vw >= vh) {
+                        targetW = Math.min(maxDim, vw);
+                        targetH = Math.round((vh * maxDim) / vw);
+                      } else {
+                        targetH = Math.min(maxDim, vh);
+                        targetW = Math.round((vw * maxDim) / vh);
+                      }
 
-                    if (canvas.width !== targetW || canvas.height !== targetH) {
-                      canvas.width = targetW;
-                      canvas.height = targetH;
-                    }
+                      if (canvas.width !== targetW || canvas.height !== targetH) {
+                        canvas.width = targetW;
+                        canvas.height = targetH;
+                      }
 
-                    ctx.drawImage(video, 0, 0, targetW, targetH);
+                      ctx.drawImage(video, 0, 0, targetW, targetH);
+                    }
                   }
 
                   try {
                     const imgData = ctx.getImageData(0, 0, targetW, targetH);
 
-                    // Apply ESL contrast enhancement on telephoto crop
-                    if (isTelephotoPass) {
-                      enhanceESLContrast(imgData.data);
-                    }
+                    // Dynamic contrast expansion for e-paper displays
+                    enhanceESLContrast(imgData.data);
 
                     const symbols = await scanImageData(imgData);
 
@@ -400,6 +459,9 @@ export function BarcodeScannerModal({
     return () => {
       isMounted = false;
       clearTimeout(timer);
+      if (focusIntervalRef.current) {
+        clearInterval(focusIntervalRef.current);
+      }
       if (animFrameIdRef.current) {
         cancelAnimationFrame(animFrameIdRef.current);
       }
@@ -408,7 +470,7 @@ export function BarcodeScannerModal({
         streamRef.current = null;
       }
     };
-  }, [isOpen]);
+  }, [isOpen, currentCameraIndex]);
 
   if (!isOpen) return null;
 
@@ -457,6 +519,13 @@ export function BarcodeScannerModal({
         });
       } catch (_) {}
     }
+  };
+
+  // Switch physical camera lens (e.g. Telephoto optical sensor)
+  const cycleCameraLens = () => {
+    if (availableCameras.length <= 1) return;
+    const nextIndex = (currentCameraIndex + 1) % availableCameras.length;
+    setCurrentCameraIndex(nextIndex);
   };
 
   // Tap-to-focus on screen with pointsOfInterest
@@ -509,6 +578,7 @@ export function BarcodeScannerModal({
       if (ctx) {
         ctx.drawImage(bitmap, 0, 0);
         const imgData = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+        enhanceESLContrast(imgData.data);
         const symbols = await scanImageData(imgData);
 
         if (symbols && symbols.length > 0) {
@@ -569,7 +639,7 @@ export function BarcodeScannerModal({
         />
       )}
 
-      {/* Top Bar with circular Close (X) and Torch / Zoom buttons */}
+      {/* Top Bar with Controls */}
       <div className="relative z-30 flex items-center justify-between p-4 pt-6 sm:p-6 w-full">
         <div className="flex items-center gap-2">
           {/* Flashlight button */}
@@ -579,10 +649,10 @@ export function BarcodeScannerModal({
                 e.stopPropagation();
                 toggleTorch();
               }}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
+              className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${
                 torchOn
                   ? 'bg-amber-400 text-gray-950 shadow-xl shadow-amber-400/50 scale-105'
-                  : 'bg-black/60 text-white hover:bg-black/80 backdrop-blur-xs'
+                  : 'bg-black/60 text-white hover:bg-black/80 backdrop-blur-md'
               }`}
               title="Latarka"
             >
@@ -590,27 +660,49 @@ export function BarcodeScannerModal({
             </button>
           )}
 
-          {/* Zoom toggle button (1x / 1.8x / 2.5x) */}
-          {hasZoom && (
+          {/* Zoom toggle button (1.0x -> 2.0x -> 3.0x) */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              cycleZoom();
+            }}
+            className="w-11 h-11 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-md text-xs font-black shadow-lg border border-white/10"
+            title="Przełącz zoom"
+          >
+            {zoomLevel.toFixed(1)}×
+          </button>
+
+          {/* Mode Switcher: Laser ESL vs Standard */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleScanMode();
+            }}
+            className={`h-11 px-3.5 rounded-full flex items-center gap-1.5 text-xs font-black backdrop-blur-md shadow-lg border transition-all ${
+              scanMode === 'laser'
+                ? 'bg-rose-600/90 hover:bg-rose-600 text-white border-rose-400/40 shadow-rose-600/30'
+                : 'bg-black/60 hover:bg-black/80 text-white border-white/10'
+            }`}
+            title="Przełącz tryb skanowania"
+          >
+            <ScanLine className="w-4 h-4" />
+            <span>{scanMode === 'laser' ? 'Laser ESL 1.5m' : 'Standard'}</span>
+          </button>
+
+          {/* Physical camera switcher if multiple cameras detected */}
+          {availableCameras.length > 1 && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                cycleZoom();
+                cycleCameraLens();
               }}
-              className="w-12 h-12 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs text-xs font-black shadow-lg"
-              title="Przełącz zoom"
+              className="w-11 h-11 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-md text-xs font-black shadow-lg border border-white/10"
+              title="Przełącz obiektyw aparatu"
             >
-              {zoomLevel.toFixed(1)}×
+              <Camera className="w-4 h-4" />
             </button>
           )}
         </div>
-
-        {/* Title or mode banner */}
-        {title && (
-          <div className="bg-black/60 backdrop-blur-md px-4 py-1.5 rounded-full text-white text-xs sm:text-sm font-bold shadow-md border border-white/10 max-w-[200px] sm:max-w-xs truncate text-center">
-            {title}
-          </div>
-        )}
 
         {/* Circular Close Button (X) top right */}
         <button
@@ -618,10 +710,10 @@ export function BarcodeScannerModal({
             e.stopPropagation();
             onClose();
           }}
-          className="w-12 h-12 rounded-full bg-black/70 hover:bg-black text-white flex items-center justify-center shadow-lg backdrop-blur-xs transition-transform active:scale-95 cursor-pointer"
+          className="w-11 h-11 rounded-full bg-black/70 hover:bg-black text-white flex items-center justify-center shadow-lg backdrop-blur-md transition-transform active:scale-95 cursor-pointer border border-white/10"
           title="Zamknij skaner"
         >
-          <X className="w-6 h-6 stroke-[2.5]" />
+          <X className="w-5 h-5 stroke-[2.5]" />
         </button>
       </div>
 
@@ -634,35 +726,81 @@ export function BarcodeScannerModal({
         </div>
       )}
 
-      {/* Central Viewfinder Box matching Screenshot */}
-      <div className="relative z-10 flex-1 flex flex-col items-center justify-center pointer-events-none p-2 sm:p-4">
-        {/* Generous rounded frame */}
-        <div
-          className={`relative w-[92vw] max-w-[420px] h-[340px] sm:h-[380px] rounded-[36px] border-[3.5px] transition-all flex items-center justify-center ${
-            scannedFeedback
-              ? 'border-emerald-400 bg-emerald-500/25 scale-[1.02]'
-              : 'border-[#22c55e]'
-          }`}
-          style={{
-            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.40)'
-          }}
-        >
-          {/* Subtle animated scan glow at top and bottom */}
-          <div className="absolute inset-x-6 top-0 h-1.5 bg-gradient-to-r from-transparent via-[#22c55e] to-transparent animate-pulse rounded-full" />
-          <div className="absolute inset-x-6 bottom-0 h-1.5 bg-gradient-to-r from-transparent via-[#22c55e] to-transparent animate-pulse rounded-full" />
+      {/* Central Viewfinder matching chosen mode */}
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center pointer-events-none p-3">
+        {scanMode === 'laser' ? (
+          /* PROFESSIONAL ZEBRA / SCANDIT STYLE LASER RETICLE */
+          <div
+            className={`relative w-[92vw] max-w-[460px] h-[130px] rounded-2xl border-2 transition-all flex items-center justify-center ${
+              scannedFeedback
+                ? 'border-emerald-400 bg-emerald-500/25 scale-[1.02]'
+                : 'border-rose-500/90 shadow-[0_0_25px_rgba(244,63,94,0.4)]'
+            }`}
+            style={{
+              boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.45)'
+            }}
+          >
+            {/* Corner Target Brackets */}
+            <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-rose-400 rounded-tl-lg" />
+            <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-rose-400 rounded-tr-lg" />
+            <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-rose-400 rounded-bl-lg" />
+            <div className="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-rose-400 rounded-br-lg" />
 
-          {/* Scan success indicator */}
-          {scannedFeedback && (
-            <div className="bg-black/90 text-emerald-400 px-5 py-2.5 rounded-full flex items-center gap-2 font-black text-sm sm:text-base shadow-2xl border border-emerald-400/40">
-              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-              <span>Odczytano: {scannedFeedback}</span>
+            {/* Glowing Laser Beam Line */}
+            <div
+              className={`absolute inset-x-2 h-1 rounded-full transition-colors ${
+                scannedFeedback
+                  ? 'bg-emerald-400 shadow-[0_0_15px_#34d399]'
+                  : 'bg-rose-500 shadow-[0_0_12px_#f43f5e] animate-pulse'
+              }`}
+            />
+
+            {/* Center crosshair dot */}
+            <div className="w-2 h-2 rounded-full bg-rose-400 shadow-md" />
+
+            {/* Sub-label hint */}
+            <div className="absolute -bottom-7 bg-black/75 px-3 py-1 rounded-full text-[11px] font-bold text-rose-300 border border-rose-500/30 flex items-center gap-1.5 shadow-lg">
+              <Crosshair className="w-3.5 h-3.5 text-rose-400" />
+              <span>Skieruj laser na kod kreskowy pod ceną</span>
             </div>
-          )}
-        </div>
+
+            {/* Scan success indicator */}
+            {scannedFeedback && (
+              <div className="absolute z-20 bg-black/90 text-emerald-400 px-5 py-2.5 rounded-full flex items-center gap-2 font-black text-sm shadow-2xl border border-emerald-400/40">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                <span>Odczytano: {scannedFeedback}</span>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* STANDARD FULL RETICLE */
+          <div
+            className={`relative w-[92vw] max-w-[420px] h-[320px] rounded-[36px] border-[3.5px] transition-all flex items-center justify-center ${
+              scannedFeedback
+                ? 'border-emerald-400 bg-emerald-500/25 scale-[1.02]'
+                : 'border-emerald-500'
+            }`}
+            style={{
+              boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.45)'
+            }}
+          >
+            {/* Scan glow */}
+            <div className="absolute inset-x-6 top-0 h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-pulse rounded-full" />
+            <div className="absolute inset-x-6 bottom-0 h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-pulse rounded-full" />
+
+            {/* Scan success indicator */}
+            {scannedFeedback && (
+              <div className="bg-black/90 text-emerald-400 px-5 py-2.5 rounded-full flex items-center gap-2 font-black text-sm shadow-2xl border border-emerald-400/40">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                <span>Odczytano: {scannedFeedback}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Bottom Area with "Skan z zdjęcia" and "Gotowe" buttons */}
-      <div className="relative z-30 w-full pb-8 sm:pb-10 pt-4 flex flex-col items-center justify-center gap-3">
+      {/* Bottom Area with controls */}
+      <div className="relative z-30 w-full pb-8 sm:pb-10 pt-3 flex flex-col items-center justify-center gap-3">
         {cameraError && (
           <div className="mx-4 max-w-sm px-4 py-2 bg-black/80 backdrop-blur-md border border-amber-500/50 rounded-xl text-amber-300 text-xs text-center flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
