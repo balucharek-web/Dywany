@@ -215,6 +215,8 @@ export function BarcodeScannerModal({
   const isScannedRef = useRef(false);
   const isBusyRef = useRef(false);
   const focusIntervalRef = useRef<any>(null);
+  const touchStartDistRef = useRef<number | null>(null);
+  const touchStartZoomRef = useRef<number>(1.0);
 
   const triggerScanSuccess = (code: string) => {
     if (isScannedRef.current) return;
@@ -566,9 +568,6 @@ export function BarcodeScannerModal({
   };
 
   // Pinch-to-zoom gesture tracking
-  const touchStartDistRef = useRef<number | null>(null);
-  const touchStartZoomRef = useRef<number>(1.0);
-
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     if (e.touches.length === 2) {
       const dist = Math.hypot(
