@@ -191,55 +191,65 @@ export function EslScannerModal({
           const detectLoop = async (timestamp: number) => {
             if (!isMounted) return;
 
-            if (videoRef.current && videoRef.current.readyState >= 2 && !scanResult) {
-              const vw = videoRef.current.videoWidth;
-              const vh = videoRef.current.videoHeight;
+            try {
+              const video = videoRef.current;
+              if (video && video.readyState >= 2 && !scanResult && ctx) {
+                const vw = video.videoWidth;
+                const vh = video.videoHeight;
 
-              // 1. Hardware BarcodeDetector
-              if (detector) {
-                try {
-                  const nativeResults = await detector.detect(videoRef.current);
-                  if (nativeResults && nativeResults.length > 0) {
-                    for (const item of nativeResults) {
-                      const valid = extractProductCode(item.rawValue);
-                      if (valid) {
-                        handleLiveBarcodeFound(valid);
-                        break;
+                if (vw > 0 && vh > 0) {
+                  const targetW = Math.min(vw, 1280);
+                  const targetH = Math.min(vh, 720);
+
+                  if (canvas.width !== targetW || canvas.height !== targetH) {
+                    canvas.width = targetW;
+                    canvas.height = targetH;
+                  }
+
+                  ctx.drawImage(video, 0, 0, targetW, targetH);
+
+                  // 1. Hardware BarcodeDetector on HTMLCanvasElement (100% safe ImageBitmapSource)
+                  if (detector) {
+                    try {
+                      const nativeResults = await detector.detect(canvas);
+                      if (nativeResults && nativeResults.length > 0) {
+                        for (const item of nativeResults) {
+                          const valid = extractProductCode(item.rawValue);
+                          if (valid) {
+                            handleLiveBarcodeFound(valid);
+                            return;
+                          }
+                        }
                       }
+                    } catch (_) {}
+                  }
+
+                  // 2. High-contrast ZBar WASM fallback
+                  if (!isZBarBusyRef.current && timestamp - lastZBarTime > 80) {
+                    lastZBarTime = timestamp;
+                    isZBarBusyRef.current = true;
+
+                    try {
+                      const imgData = ctx.getImageData(0, 0, targetW, targetH);
+                      const symbols = await scanImageData(imgData);
+                      if (symbols && symbols.length > 0) {
+                        for (const sym of symbols) {
+                          const valid = extractProductCode(sym.decode());
+                          if (valid) {
+                            handleLiveBarcodeFound(valid);
+                            return;
+                          }
+                        }
+                      }
+                    } catch (_) {
+                    } finally {
+                      isZBarBusyRef.current = false;
                     }
                   }
-                } catch (_) {}
-              }
-
-              // 2. High-contrast ZBar WASM
-              if (!isZBarBusyRef.current && timestamp - lastZBarTime > 80 && ctx && vw > 0 && vh > 0) {
-                lastZBarTime = timestamp;
-                isZBarBusyRef.current = true;
-
-                const targetW = Math.min(vw, 960);
-                const targetH = Math.min(vh, 540);
-                canvas.width = targetW;
-                canvas.height = targetH;
-                ctx.filter = 'contrast(2.2) brightness(1.15) grayscale(1)';
-                ctx.drawImage(videoRef.current, 0, 0, targetW, targetH);
-
-                try {
-                  const imgData = ctx.getImageData(0, 0, targetW, targetH);
-                  const symbols = await scanImageData(imgData);
-                  if (symbols && symbols.length > 0) {
-                    for (const sym of symbols) {
-                      const valid = extractProductCode(sym.decode());
-                      if (valid) {
-                        handleLiveBarcodeFound(valid);
-                        break;
-                      }
-                    }
-                  }
-                } catch (_) {
-                } finally {
-                  isZBarBusyRef.current = false;
                 }
               }
+            } catch (_) {
+              // Ignore transient frame errors
             }
 
             animFrameIdRef.current = requestAnimationFrame(detectLoop);

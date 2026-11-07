@@ -520,12 +520,14 @@ export function EditCarpetModal({
       </div>
 
       {/* ESL Scanner Modal */}
-      <EslScannerModal
-        isOpen={isEslScannerOpen}
-        onClose={() => setIsEslScannerOpen(false)}
-        onApplyData={handleApplyEslData}
-        existingCarpets={existingCarpets}
-      />
+      {isEslScannerOpen && (
+        <EslScannerModal
+          isOpen={isEslScannerOpen}
+          onClose={() => setIsEslScannerOpen(false)}
+          onApplyData={handleApplyEslData}
+          existingCarpets={existingCarpets}
+        />
+      )}
 
       {/* Direct EAN Barcode Scanner Modal (Zero AI / Zero Quota) */}
       {isBarcodeScannerOpen && (
