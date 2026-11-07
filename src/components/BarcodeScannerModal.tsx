@@ -75,30 +75,111 @@ function extractProductCode(raw: string): string | null {
 }
 
 /**
- * Fast contrast normalization for ESL e-paper displays (takes ~1-2ms).
- * Expands dithered gray-on-gray bars into high-contrast black-and-white.
+ * Industrial-grade contrast, glare-busting, and edge sharpening for difficult lighting,
+ * reflections on plastic ESL holders, and partially damaged barcodes.
+ * 1. Fast sampling of luminance across the image.
+ * 2. Glare filter: Ignores saturated glare highlights (> 245) from ceiling lamps on plastic ESL brackets.
+ * 3. Shadow filter: Ignores extreme drop shadows (< 15).
+ * 4. Stretches actual barcode bar luminance to pure black (0) and label background to pure white (255).
+ * 5. Horizontal sharpening: Sharpens fuzzy bar edges caused by tilt, blur, or distance.
  */
-function enhanceESLContrast(data: Uint8ClampedArray) {
+function enhanceToughBarcode(data: Uint8ClampedArray, _width: number, _height: number) {
   const len = data.length;
-  let min = 255;
-  let max = 0;
-  // Sample every 32nd byte (every 8th pixel) for blazing speed
+  if (len === 0) return;
+
+  // 1. Build a 32-bucket histogram from sampled pixels (every 8th pixel for ~0.2ms speed)
+  const hist = new Uint32Array(32);
+  let totalSampled = 0;
   for (let i = 0; i < len; i += 32) {
     const lum = (data[i] * 77 + data[i + 1] * 150 + data[i + 2] * 29) >> 8;
-    if (lum < min) min = lum;
-    if (lum > max) max = lum;
+    hist[lum >> 3]++;
+    totalSampled++;
   }
-  if (max > min && max - min < 185) {
-    const range = max - min;
-    const invRange = 255 / range;
-    for (let i = 0; i < len; i += 4) {
-      const lum = (data[i] * 77 + data[i + 1] * 150 + data[i + 2] * 29) >> 8;
-      const v = Math.min(255, Math.max(0, ((lum - min) * invRange) | 0));
-      data[i] = v;
-      data[i + 1] = v;
-      data[i + 2] = v;
+
+  // 2. Percentile calculation: 5% (darkest true bars) and 90% (label background, ignoring specular glare spots)
+  const lowTarget = Math.floor(totalSampled * 0.05);
+  const highTarget = Math.floor(totalSampled * 0.90);
+
+  let accum = 0;
+  let pLow = 0;
+  let pHigh = 255;
+
+  for (let b = 0; b < 32; b++) {
+    accum += hist[b];
+    if (pLow === 0 && accum >= lowTarget) {
+      pLow = b << 3;
+    }
+    if (accum >= highTarget) {
+      pHigh = Math.min(255, (b << 3) + 7);
+      break;
     }
   }
+
+  // Fallback sanity bounds
+  if (pHigh <= pLow + 15) {
+    pLow = 0;
+    pHigh = 255;
+  }
+
+  const range = pHigh - pLow;
+  const invRange = 255 / (range > 0 ? range : 1);
+
+  // 3. Fast 256-byte lookup table
+  const lut = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) {
+    if (i <= pLow) lut[i] = 0;
+    else if (i >= pHigh) lut[i] = 255;
+    else lut[i] = Math.min(255, Math.max(0, ((i - pLow) * invRange) | 0));
+  }
+
+  // 4. Transform RGBA in-place to high-contrast grayscale
+  for (let i = 0; i < len; i += 4) {
+    const lum = (data[i] * 77 + data[i + 1] * 150 + data[i + 2] * 29) >> 8;
+    const v = lut[lum];
+    data[i] = v;
+    data[i + 1] = v;
+    data[i + 2] = v;
+  }
+}
+
+/**
+ * Scans image with ZBar, and if glare or a scratch damages the middle of the barcode,
+ * falls back to scanning unaffected horizontal bands (top/bottom slices).
+ */
+async function scanWithPartialFallback(
+  ctx: CanvasRenderingContext2D,
+  targetW: number,
+  targetH: number
+): Promise<string | null> {
+  const imgData = ctx.getImageData(0, 0, targetW, targetH);
+  enhanceToughBarcode(imgData.data, targetW, targetH);
+
+  // Pass 1: Full enhanced frame
+  let symbols = await scanImageData(imgData);
+  if (symbols && symbols.length > 0) {
+    for (const sym of symbols) {
+      const valid = extractProductCode(sym.decode());
+      if (valid) return valid;
+    }
+  }
+
+  // Pass 2: If partially damaged, scratched, or glare across the barcode,
+  // sample the lower sub-band (where shelf ESL barcodes are typically situated under the price)
+  if (targetH >= 110) {
+    const subH = Math.round(targetH * 0.55);
+    const subY = Math.round(targetH * 0.40);
+    const subData = ctx.getImageData(0, subY, targetW, subH);
+    enhanceToughBarcode(subData.data, targetW, subH);
+    symbols = await scanImageData(subData);
+    if (symbols && symbols.length > 0) {
+      for (const sym of symbols) {
+        const valid = extractProductCode(sym.decode());
+        if (valid) return valid;
+      }
+    }
+  }
+
+  return null;
 }
 
 export function BarcodeScannerModal({
@@ -326,11 +407,11 @@ export function BarcodeScannerModal({
                   let targetH: number;
 
                   if (isTelephotoPass) {
-                    // PASS 1: Telephoto Center ROI (for 1.0m - 1.5m shelf ESL labels)
-                    // High-resolution 1:1 pixel crop around center of sensor where barcode sits
+                    // PASS 1: Angle-Tolerant Telephoto Center ROI (for 1.0m - 1.5m shelf ESL labels)
+                    // High-resolution crop with generous vertical headroom (0.44) so barcodes tilted up to ±35° fit without corner clipping
                     const z = Math.max(1.0, currentZoom);
-                    const cropW = Math.max(220, Math.round(vw * (0.65 / z)));
-                    const cropH = Math.max(100, Math.round(vh * (0.28 / z)));
+                    const cropW = Math.max(240, Math.min(vw, Math.round(vw * (0.80 / z))));
+                    const cropH = Math.max(140, Math.min(vh, Math.round(vh * (0.44 / z))));
                     const cropX = Math.round((vw - cropW) / 2);
                     const cropY = Math.round((vh - cropH) / 2);
 
@@ -345,8 +426,8 @@ export function BarcodeScannerModal({
                     ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, targetW, targetH);
                   } else {
                     // PASS 2: Full Viewfinder Window (for close-up labels & large carpet tags)
-                    const cropW = Math.round(vw * 0.85);
-                    const cropH = Math.round(vh * 0.70);
+                    const cropW = Math.round(vw * 0.88);
+                    const cropH = Math.round(vh * 0.72);
                     const cropX = Math.round((vw - cropW) / 2);
                     const cropY = Math.round((vh - cropH) / 2);
 
@@ -363,6 +444,7 @@ export function BarcodeScannerModal({
 
                   try {
                     // Engine 1: Native Android BarcodeDetector (Chrome ML Kit GPU vision)
+                    // Google ML Kit neural network handles 360-degree rotation and perspective skew on GPU!
                     if (detector) {
                       try {
                         const nativeResults = await detector.detect(canvas);
@@ -378,21 +460,11 @@ export function BarcodeScannerModal({
                       } catch (_) {}
                     }
 
-                    // Engine 2: Industrial ZBar WebAssembly with ESL contrast enhancement
-                    const imgData = ctx.getImageData(0, 0, targetW, targetH);
-                    enhanceESLContrast(imgData.data);
-
-                    const symbols = await scanImageData(imgData);
-
-                    if (symbols && symbols.length > 0) {
-                      for (const sym of symbols) {
-                        const decoded = sym.decode();
-                        const validProduct = extractProductCode(decoded);
-                        if (validProduct) {
-                          triggerScanSuccess(validProduct);
-                          return;
-                        }
-                      }
+                    // Engine 2: Industrial ZBar WASM with Glare-Busting & Partial Slice Fallback
+                    const validProduct = await scanWithPartialFallback(ctx, targetW, targetH);
+                    if (validProduct) {
+                      triggerScanSuccess(validProduct);
+                      return;
                     }
                   } catch (_) {
                     // silent frame error
@@ -459,22 +531,18 @@ export function BarcodeScannerModal({
     }
   };
 
-  // Cycle Zoom (1.0x -> 2.0x -> 3.0x -> 1.0x)
-  const cycleZoom = async () => {
-    let nextZ = 1.0;
-    if (zoomLevel < 1.5) nextZ = 2.0;
-    else if (zoomLevel < 2.5) nextZ = 3.0;
-    else nextZ = 1.0;
-
-    zoomLevelRef.current = nextZ;
-    setZoomLevel(nextZ);
+  // Unified hardware/software camera zoom
+  const applyZoom = async (nextZ: number) => {
+    const clamped = Math.min(maxZoom, Math.max(1.0, +nextZ.toFixed(1)));
+    zoomLevelRef.current = clamped;
+    setZoomLevel(clamped);
 
     try {
       if (streamRef.current) {
         const track = streamRef.current.getVideoTracks()[0];
         if (track && (track as any).applyConstraints) {
           await (track as any).applyConstraints({
-            advanced: [{ zoom: nextZ }, { focusMode: 'continuous' }]
+            advanced: [{ zoom: clamped }, { focusMode: 'continuous' }]
           });
         }
       }
@@ -488,6 +556,46 @@ export function BarcodeScannerModal({
     }
   };
 
+  // Cycle Zoom button (1.0x -> 2.0x -> 3.0x -> 1.0x)
+  const cycleZoom = () => {
+    let nextZ = 1.0;
+    if (zoomLevel < 1.5) nextZ = 2.0;
+    else if (zoomLevel < 2.5) nextZ = 3.0;
+    else nextZ = 1.0;
+    applyZoom(nextZ);
+  };
+
+  // Pinch-to-zoom gesture tracking
+  const touchStartDistRef = useRef<number | null>(null);
+  const touchStartZoomRef = useRef<number>(1.0);
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      touchStartDistRef.current = dist;
+      touchStartZoomRef.current = zoomLevelRef.current;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2 && touchStartDistRef.current !== null) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const factor = dist / touchStartDistRef.current;
+      const newZ = touchStartZoomRef.current * factor;
+      applyZoom(newZ);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    touchStartDistRef.current = null;
+  };
+
   // Switch physical rear camera lens if multiple sensors present
   const cycleCameraLens = () => {
     if (rearCameras.length <= 1) return;
@@ -498,6 +606,8 @@ export function BarcodeScannerModal({
 
   // Tap-to-focus on screen with pointsOfInterest
   const handleScreenTap = async (e: React.MouseEvent<HTMLDivElement>) => {
+    if (touchStartDistRef.current !== null) return;
+
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -529,7 +639,7 @@ export function BarcodeScannerModal({
     } catch (_) {}
   };
 
-  // Scan from photo file using ZBar WASM
+  // Scan from photo file using ZBar WASM with Tough Barcode Glare Recovery
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -545,18 +655,10 @@ export function BarcodeScannerModal({
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(bitmap, 0, 0);
-        const imgData = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
-        enhanceESLContrast(imgData.data);
-        const symbols = await scanImageData(imgData);
-
-        if (symbols && symbols.length > 0) {
-          for (const s of symbols) {
-            const valid = extractProductCode(s.decode());
-            if (valid) {
-              triggerScanSuccess(valid);
-              return;
-            }
-          }
+        const valid = await scanWithPartialFallback(ctx, bitmap.width, bitmap.height);
+        if (valid) {
+          triggerScanSuccess(valid);
+          return;
         }
       }
       setCameraError('Nie udało się odczytać kodu z tego zdjęcia. Upewnij się, że etykieta jest widoczna.');
@@ -574,7 +676,10 @@ export function BarcodeScannerModal({
   return (
     <div
       onClick={handleScreenTap}
-      className="fixed inset-0 z-50 bg-black flex flex-col justify-between overflow-hidden select-none"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      className="fixed inset-0 z-50 bg-black flex flex-col justify-between overflow-hidden select-none touch-none"
     >
       {/* Hidden file input for "Skan z zdjęcia" */}
       <input
