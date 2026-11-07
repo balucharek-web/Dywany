@@ -125,9 +125,10 @@ export function BarcodeScannerModal({
   const [scannedFeedback, setScannedFeedback] = useState<string | null>(null);
   const [tapRipple, setTapRipple] = useState<{ x: number; y: number } | null>(null);
 
-  // Multi-camera selection (e.g. Telephoto physical cameras)
-  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  // Multi-camera selection (rear cameras only)
+  const [rearCameras, setRearCameras] = useState<MediaDeviceInfo[]>([]);
   const [currentCameraIndex, setCurrentCameraIndex] = useState(0);
+  const selectedCameraIdRef = useRef<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -193,15 +194,6 @@ export function BarcodeScannerModal({
 
     const initScanner = async () => {
       try {
-        // Enumerate video devices to detect multi-camera setups (e.g. Telephoto)
-        try {
-          const devices = await navigator.mediaDevices.enumerateDevices();
-          const videoInputs = devices.filter((d) => d.kind === 'videoinput');
-          if (videoInputs.length > 0) {
-            setAvailableCameras(videoInputs);
-          }
-        } catch (_) {}
-
         // Initialize Native BarcodeDetector if available in Chrome
         let detector: any = null;
         if (hasNativeBarcodeDetector) {
@@ -218,9 +210,9 @@ export function BarcodeScannerModal({
           }
         }
 
-        // Request clean high-resolution stream from rear camera (4K / 1080p for distance scanning)
+        // Request clean high-resolution stream from REAR camera (ALWAYS facingMode: environment)
         let stream: MediaStream;
-        const selectedDeviceId = availableCameras[currentCameraIndex]?.deviceId;
+        const selectedDeviceId = selectedCameraIdRef.current;
 
         try {
           stream = await navigator.mediaDevices.getUserMedia({
@@ -248,6 +240,20 @@ export function BarcodeScannerModal({
         }
 
         streamRef.current = stream;
+
+        // Once permission is granted, enumerate and populate ONLY rear cameras (excluding front/selfie)
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoInputs = devices.filter((d) => d.kind === 'videoinput');
+          const backCameras = videoInputs.filter((d) => {
+            const lbl = (d.label || '').toLowerCase();
+            const isFront = lbl.includes('front') || lbl.includes('user') || lbl.includes('selfie') || lbl.includes('przód');
+            return !isFront;
+          });
+          if (backCameras.length > 1) {
+            setRearCameras(backCameras);
+          }
+        } catch (_) {}
 
         // Check hardware capabilities (torch, hardware zoom, autofocus)
         const track = stream.getVideoTracks()[0];
@@ -519,11 +525,12 @@ export function BarcodeScannerModal({
     }
   };
 
-  // Switch physical camera lens (e.g. Telephoto optical sensor)
+  // Switch physical rear camera lens (e.g. Telephoto optical sensor)
   const cycleCameraLens = () => {
-    if (availableCameras.length <= 1) return;
-    const nextIndex = (currentCameraIndex + 1) % availableCameras.length;
+    if (rearCameras.length <= 1) return;
+    const nextIndex = (currentCameraIndex + 1) % rearCameras.length;
     setCurrentCameraIndex(nextIndex);
+    selectedCameraIdRef.current = rearCameras[nextIndex].deviceId;
   };
 
   // Tap-to-focus on screen with pointsOfInterest
@@ -687,15 +694,15 @@ export function BarcodeScannerModal({
             <span>{scanMode === 'laser' ? 'Laser ESL 1.5m' : 'Standard'}</span>
           </button>
 
-          {/* Physical camera switcher if multiple cameras detected */}
-          {availableCameras.length > 1 && (
+          {/* Physical camera switcher if multiple rear cameras detected */}
+          {rearCameras.length > 1 && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 cycleCameraLens();
               }}
               className="w-11 h-11 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-md text-xs font-black shadow-lg border border-white/10"
-              title="Przełącz obiektyw aparatu"
+              title="Przełącz obiektyw tylny"
             >
               <Camera className="w-4 h-4" />
             </button>
