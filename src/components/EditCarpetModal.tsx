@@ -528,12 +528,14 @@ export function EditCarpetModal({
       />
 
       {/* Direct EAN Barcode Scanner Modal (Zero AI / Zero Quota) */}
-      <BarcodeScannerModal
-        isOpen={isBarcodeScannerOpen}
-        onClose={() => setIsBarcodeScannerOpen(false)}
-        onScanSuccess={handleBarcodeScanned}
-        title="Zeskanuj kod kreskowy EAN"
-      />
+      {isBarcodeScannerOpen && (
+        <BarcodeScannerModal
+          isOpen={isBarcodeScannerOpen}
+          onClose={() => setIsBarcodeScannerOpen(false)}
+          onScanSuccess={handleBarcodeScanned}
+          title="Zeskanuj kod kreskowy EAN"
+        />
+      )}
     </>
   );
 }
