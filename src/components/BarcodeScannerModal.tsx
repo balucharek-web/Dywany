@@ -320,24 +320,7 @@ export function BarcodeScannerModal({
               if (vw > 0 && vh > 0) {
                 frameIndex++;
 
-                // 1. ENGINE 1: Native Android BarcodeDetector on GPU
-                if (detector && frameIndex % 2 === 0) {
-                  try {
-                    const rawResults = await detector.detect(video);
-                    if (rawResults && rawResults.length > 0) {
-                      for (const item of rawResults) {
-                        const validProduct = extractProductCode(item.rawValue);
-                        if (validProduct) {
-                          triggerScanSuccess(validProduct);
-                          return;
-                        }
-                      }
-                    }
-                  } catch (_) {}
-                }
-
-                // 2. ENGINE 2: Industrial ZBar WebAssembly (runs every ~45ms)
-                if (!isZBarBusyRef.current && timestamp - lastZBarTime > 45) {
+                if (!isZBarBusyRef.current && timestamp - lastZBarTime > 35) {
                   lastZBarTime = timestamp;
                   isZBarBusyRef.current = true;
                   cycleCount++;
@@ -410,9 +393,24 @@ export function BarcodeScannerModal({
                   }
 
                   try {
-                    const imgData = ctx.getImageData(0, 0, targetW, targetH);
+                    // 1. ENGINE 1: Native Android BarcodeDetector (Chrome ML Kit) on the magnified canvas!
+                    if (detector) {
+                      try {
+                        const nativeResults = await detector.detect(canvas);
+                        if (nativeResults && nativeResults.length > 0) {
+                          for (const item of nativeResults) {
+                            const validProduct = extractProductCode(item.rawValue);
+                            if (validProduct) {
+                              triggerScanSuccess(validProduct);
+                              return;
+                            }
+                          }
+                        }
+                      } catch (_) {}
+                    }
 
-                    // Dynamic contrast expansion for e-paper displays
+                    // 2. ENGINE 2: Industrial ZBar WebAssembly with ESL contrast enhancement
+                    const imgData = ctx.getImageData(0, 0, targetW, targetH);
                     enhanceESLContrast(imgData.data);
 
                     const symbols = await scanImageData(imgData);
