@@ -263,32 +263,66 @@ function decodeEanDigit(
 
 /**
  * Attempts to decode EAN-13 from a sequence of sub-pixel element widths
+ * Enforces strict physical GS1 geometry (Quiet Zones, Start/End Guards, 95-module span, tight digit tolerances)
  */
 function decodeEan13Sequence(widths: number[]): string | null {
   // EAN-13 requires: 3 start + 24 left + 5 center + 24 right + 3 end = 59 elements
   if (widths.length < 59) return null;
 
-  for (let start = 0; start <= widths.length - 59; start++) {
+  // start must be an EVEN index because element 0 is a black bar, 1 is white space, etc.
+  for (let start = 0; start <= widths.length - 59; start += 2) {
     // 1. Test Start Guard: bar, space, bar (roughly 1:1:1 module)
     const g1 = widths[start];
     const g2 = widths[start + 1];
     const g3 = widths[start + 2];
     const guardModule = (g1 + g2 + g3) / 3;
-    if (guardModule < 0.5) continue;
+    if (guardModule < 0.6) continue;
 
     // Check guard uniformity
     const guardDev = Math.max(Math.abs(g1 - guardModule), Math.abs(g2 - guardModule), Math.abs(g3 - guardModule)) / guardModule;
-    if (guardDev > 0.85) continue;
+    if (guardDev > 0.65) continue;
 
-    // 2. Test Center Guard at offset start + 3 + 24 = start + 27 (space, bar, space, bar, space)
+    // 2. Quiet Zone before Start Guard (white space must precede the first bar)
+    if (start > 0) {
+      const leadingQuietZone = widths[start - 1];
+      if (leadingQuietZone < guardModule * 2.2) continue;
+    }
+
+    // 3. Test End Guard at offset start + 56 (bar, space, bar)
+    const e1 = widths[start + 56];
+    const e2 = widths[start + 57];
+    const e3 = widths[start + 58];
+    const endModule = (e1 + e2 + e3) / 3;
+    if (Math.abs(endModule - guardModule) / guardModule > 0.40) continue;
+    const endDev = Math.max(Math.abs(e1 - endModule), Math.abs(e2 - endModule), Math.abs(e3 - endModule)) / endModule;
+    if (endDev > 0.65) continue;
+
+    // 4. Quiet Zone after End Guard (white space must follow the last bar)
+    if (start + 59 < widths.length) {
+      const trailingQuietZone = widths[start + 59];
+      if (trailingQuietZone < guardModule * 2.2) continue;
+    }
+
+    // 5. Total Barcode Module Width Check (EAN-13 has EXACTLY 95 modules)
+    let totalBarcodeWidth = 0;
+    for (let k = start; k < start + 59; k++) {
+      totalBarcodeWidth += widths[k];
+    }
+    const expectedTotalWidth = 95 * guardModule;
+    if (Math.abs(totalBarcodeWidth - expectedTotalWidth) / expectedTotalWidth > 0.16) {
+      continue;
+    }
+
+    // 6. Test Center Guard at offset start + 27 (space, bar, space, bar, space)
     const cIdx = start + 27;
     const centerModule = (widths[cIdx] + widths[cIdx + 1] + widths[cIdx + 2] + widths[cIdx + 3] + widths[cIdx + 4]) / 5;
-    if (Math.abs(centerModule - guardModule) / guardModule > 0.6) continue;
+    if (Math.abs(centerModule - guardModule) / guardModule > 0.45) continue;
 
-    // 3. Decode Left 6 Digits (can be L-code or G-code)
+    // 7. Decode Left 6 Digits (can be L-code or G-code)
     const leftDigits: number[] = [];
     const parities: number[] = []; // 0 for L, 1 for G
     let leftValid = true;
+    let totalDigitError = 0;
 
     for (let i = 0; i < 6; i++) {
       const idx = start + 3 + i * 4;
@@ -299,17 +333,25 @@ function decodeEan13Sequence(widths: number[]): string | null {
       if (resL.error < resG.error) {
         leftDigits.push(resL.digit);
         parities.push(0);
-        if (resL.error > 2.2) leftValid = false;
+        totalDigitError += resL.error;
+        if (resL.error > 1.30) {
+          leftValid = false;
+          break;
+        }
       } else {
         leftDigits.push(resG.digit);
         parities.push(1);
-        if (resG.error > 2.2) leftValid = false;
+        totalDigitError += resG.error;
+        if (resG.error > 1.30) {
+          leftValid = false;
+          break;
+        }
       }
     }
 
     if (!leftValid) continue;
 
-    // 4. Decode Right 6 Digits (always R-code = L-patterns in reverse polarity)
+    // 8. Decode Right 6 Digits (always R-code = L-patterns in reverse polarity)
     const rightDigits: number[] = [];
     let rightValid = true;
 
@@ -318,12 +360,20 @@ function decodeEan13Sequence(widths: number[]): string | null {
       const e = [widths[idx], widths[idx + 1], widths[idx + 2], widths[idx + 3]];
       const resR = decodeEanDigit(e, L_PATTERNS);
       rightDigits.push(resR.digit);
-      if (resR.error > 2.2) rightValid = false;
+      totalDigitError += resR.error;
+      if (resR.error > 1.30) {
+        rightValid = false;
+        break;
+      }
     }
 
     if (!rightValid) continue;
 
-    // 5. Determine First Digit from Parity Pattern
+    // Average digit error across all 12 digits must be sharp and tight
+    const avgDigitError = totalDigitError / 12;
+    if (avgDigitError > 0.85) continue;
+
+    // 9. Determine First Digit from Parity Pattern
     let firstDigit = -1;
     for (let d = 0; d < 10; d++) {
       const pat = FIRST_DIGIT_PARITY[d];
@@ -342,7 +392,7 @@ function decodeEan13Sequence(widths: number[]): string | null {
 
     if (firstDigit === -1) continue;
 
-    // 6. Verify Modulo-10 Checksum
+    // 10. Verify Modulo-10 Checksum
     const fullDigits = [firstDigit, ...leftDigits, ...rightDigits];
     if (verifyEanChecksum(fullDigits)) {
       return fullDigits.join('');
@@ -352,19 +402,21 @@ function decodeEan13Sequence(widths: number[]): string | null {
   return null;
 }
 
-
 /**
- * Decodes Code 128 (Sets A, B, and C) with strict Modulo-103 checksum
+ * Decodes Code 128 (Sets A, B, and C) with strict Modulo-103 checksum and quiet zone checks
  */
 function decodeCode128Sequence(widths: number[]): string | null {
   // Code 128 requires at least: Start (6) + Check (6) + Stop (7) = 19 elements
   if (widths.length < 19) return null;
 
-  // Search for Start C (pattern 105: [2, 1, 1, 2, 3, 2]), Start B (104), Start A (103)
-  for (let start = 0; start <= widths.length - 19; start++) {
+  // Start must begin with a black bar (even index)
+  for (let start = 0; start <= widths.length - 19; start += 2) {
     const startCharWidth = widths[start] + widths[start + 1] + widths[start + 2] + widths[start + 3] + widths[start + 4] + widths[start + 5];
     const m = startCharWidth / 11;
-    if (m < 0.5) continue;
+    if (m < 0.6) continue;
+
+    // Quiet zone before start
+    if (start > 0 && widths[start - 1] < m * 2.2) continue;
 
     // Check against Start C, Start B, Start A
     let codeType: 'A' | 'B' | 'C' | null = null;
@@ -376,7 +428,7 @@ function decodeCode128Sequence(widths: number[]): string | null {
       for (let k = 0; k < 6; k++) {
         diff += Math.abs(widths[start + k] - pat[k] * m);
       }
-      if (diff / startCharWidth < 0.28) {
+      if (diff / startCharWidth < 0.25) {
         codeType = type;
         startVal = val;
         break;
@@ -400,9 +452,14 @@ function decodeCode128Sequence(widths: number[]): string | null {
         for (let k = 0; k < 7; k++) {
           stopDiff += Math.abs(widths[currIdx + k] - stopPat[k] * stopM);
         }
-        if (stopDiff / stopTotal < 0.32) {
-          foundStop = true;
-          break;
+        if (stopDiff / stopTotal < 0.28) {
+          // Quiet zone after stop
+          if (currIdx + 7 < widths.length && widths[currIdx + 7] < stopM * 2.0) {
+            // insufficient quiet zone
+          } else {
+            foundStop = true;
+            break;
+          }
         }
       }
 
@@ -424,7 +481,7 @@ function decodeCode128Sequence(widths: number[]): string | null {
         }
       }
 
-      if (bestVal !== -1 && minDiff / charTotal < 0.35) {
+      if (bestVal !== -1 && minDiff / charTotal < 0.28) {
         decodedValues.push(bestVal);
         currIdx += 6;
       } else {

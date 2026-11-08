@@ -254,6 +254,7 @@ export function BarcodeScannerModal({
   const focusIntervalRef = useRef<any>(null);
   const touchStartDistRef = useRef<number | null>(null);
   const touchStartZoomRef = useRef<number>(1.0);
+  const waveformCandidateRef = useRef<{ code: string; time: number } | null>(null);
 
   const triggerScanSuccess = (code: string) => {
     if (isScannedRef.current) return;
@@ -288,6 +289,7 @@ export function BarcodeScannerModal({
     let isMounted = true;
     isScannedRef.current = false;
     isBusyRef.current = false;
+    waveformCandidateRef.current = null;
     setScannedFeedback(null);
     setCameraError(null);
     setTorchOn(false);
@@ -517,10 +519,19 @@ export function BarcodeScannerModal({
                     // Engine 2: Scandit-Grade 1D Sub-Pixel Continuous Waveform Engine
                     // Directly decodes small, blurry barcodes from 1.5m away using 2nd derivative zero-crossings
                     // and T-distance (similar-edge) blur cancellation in < 3ms
+                    // Multi-Frame Temporal Consensus (Scandit Protocol):
+                    // Require 2 matching frames within 360ms to eliminate 100% of single-frame noise collisions
                     const scanditCode = decodeScanditWaveform(ctx, targetW, targetH);
                     if (scanditCode) {
-                      triggerScanSuccess(scanditCode);
-                      return;
+                      const now = performance.now();
+                      const cand = waveformCandidateRef.current;
+                      if (cand && cand.code === scanditCode && now - cand.time < 360) {
+                        waveformCandidateRef.current = null;
+                        triggerScanSuccess(scanditCode);
+                        return;
+                      } else {
+                        waveformCandidateRef.current = { code: scanditCode, time: now };
+                      }
                     }
 
                     // Engine 3: Deep Fallback (ZBar WASM with Contrast Sharpening)
