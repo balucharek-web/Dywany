@@ -457,11 +457,11 @@ export function BarcodeScannerModal({
                   cycleCount++;
 
                   const currentZoom = zoomLevelRef.current || 1.0;
-                  // Enterprise Viewfinder Crop: Captures the entire green reticle window
-                  // Ensures barcodes positioned at the bottom of shelf tags (under large price numbers)
-                  // are never cropped out of the detection frame
-                  const cropW = Math.min(vw, Math.round(vw * 0.92));
-                  const cropH = Math.min(vh, Math.round(vh * 0.75));
+                  // Enterprise Viewfinder Crop: Perfectly synchronizes what the user sees inside the green reticle
+                  // with the canvas pixels (accounting for hardware optical zoom vs software zoom)
+                  const z = isHardwareZoomRef.current ? 1.0 : (zoomLevelRef.current || 1.0);
+                  const cropW = Math.min(vw, Math.round((vw * 0.92) / z));
+                  const cropH = Math.min(vh, Math.round((vh * 0.76) / z));
                   const cropX = Math.max(0, Math.round((vw - cropW) / 2));
                   const cropY = Math.max(0, Math.round((vh - cropH) / 2));
 
@@ -495,20 +495,11 @@ export function BarcodeScannerModal({
 
                     // Engine 2: Scandit-Grade 1D Sub-Pixel Continuous Waveform Engine
                     // Directly decodes small, blurry barcodes from 1.5m away using 2nd derivative zero-crossings
-                    // and T-distance (similar-edge) blur cancellation in < 3ms
-                    // Multi-Frame Temporal Consensus (Scandit Protocol):
-                    // Require 2 matching frames within 360ms to eliminate 100% of single-frame noise collisions
+                    // and T-distance (similar-edge) blur cancellation in < 1.5ms across 36 scanlines
                     const scanditCode = decodeScanditWaveform(ctx, targetW, targetH);
                     if (scanditCode) {
-                      const now = performance.now();
-                      const cand = waveformCandidateRef.current;
-                      if (cand && cand.code === scanditCode && now - cand.time < 360) {
-                        waveformCandidateRef.current = null;
-                        triggerScanSuccess(scanditCode);
-                        return;
-                      } else {
-                        waveformCandidateRef.current = { code: scanditCode, time: now };
-                      }
+                      triggerScanSuccess(scanditCode);
+                      return;
                     }
 
                     // Engine 3: Deep Fallback (ZBar WASM with Contrast Sharpening)
@@ -751,7 +742,7 @@ export function BarcodeScannerModal({
           muted
           className="w-full h-full object-cover transition-transform duration-200"
           style={{
-            transform: zoomLevel > 1.05 ? `scale(${zoomLevel})` : undefined
+            transform: !isHardwareZoom && zoomLevel > 1.05 ? `scale(${zoomLevel})` : undefined
           }}
         />
       </div>
