@@ -265,13 +265,14 @@ function decodeEanDigit(
 
 /**
  * Attempts to decode EAN-13 from a sequence of sub-pixel element widths
- * Enforces strict physical GS1 geometry (Quiet Zones, Start/End Guards, 95-module span, tight digit tolerances)
+ * Enforces GS1 geometry with adaptive tolerance for electronic shelf tags
  */
 function decodeEan13Sequence(widths: number[]): string | null {
   // EAN-13 requires: 3 start + 24 left + 5 center + 24 right + 3 end = 59 elements
   if (widths.length < 59) return null;
 
-  for (let start = 0; start <= widths.length - 59; start++) {
+  // Step by 2: start guard must begin on a black bar (widths[0], widths[2], etc.)
+  for (let start = 0; start <= widths.length - 59; start += 2) {
     // 1. Test Start Guard: bar, space, bar (roughly 1:1:1 module)
     const g1 = widths[start];
     const g2 = widths[start + 1];
@@ -279,47 +280,34 @@ function decodeEan13Sequence(widths: number[]): string | null {
     const guardModule = (g1 + g2 + g3) / 3;
     if (guardModule < 0.45) continue;
 
-    // Check guard uniformity
+    // Guard uniformity
     const guardDev = Math.max(Math.abs(g1 - guardModule), Math.abs(g2 - guardModule), Math.abs(g3 - guardModule)) / guardModule;
-    if (guardDev > 0.78) continue;
+    if (guardDev > 0.82) continue;
 
-    // 2. Quiet Zone before Start Guard (white space must precede the first bar)
-    if (start > 0) {
-      const leadingQuietZone = widths[start - 1];
-      if (leadingQuietZone < guardModule * 1.3) continue;
+    // 2. Global Average Module (EAN-13 has EXACTLY 95 modules across 59 elements)
+    let totalBarcodeWidth = 0;
+    for (let k = start; k < start + 59; k++) {
+      totalBarcodeWidth += widths[k];
     }
+    const avgModule = totalBarcodeWidth / 95;
+    if (avgModule < 0.45 || avgModule > 32) continue;
+
+    // Guard module must be consistent with global average module
+    if (Math.abs(guardModule - avgModule) / avgModule > 0.48) continue;
 
     // 3. Test End Guard at offset start + 56 (bar, space, bar)
     const e1 = widths[start + 56];
     const e2 = widths[start + 57];
     const e3 = widths[start + 58];
     const endModule = (e1 + e2 + e3) / 3;
-    if (Math.abs(endModule - guardModule) / guardModule > 0.52) continue;
-    const endDev = Math.max(Math.abs(e1 - endModule), Math.abs(e2 - endModule), Math.abs(e3 - endModule)) / endModule;
-    if (endDev > 0.78) continue;
+    if (Math.abs(endModule - avgModule) / avgModule > 0.58) continue;
 
-    // 4. Quiet Zone after End Guard (white space must follow the last bar)
-    if (start + 59 < widths.length) {
-      const trailingQuietZone = widths[start + 59];
-      if (trailingQuietZone < guardModule * 1.3) continue;
-    }
-
-    // 5. Total Barcode Module Width Check (EAN-13 has EXACTLY 95 modules)
-    let totalBarcodeWidth = 0;
-    for (let k = start; k < start + 59; k++) {
-      totalBarcodeWidth += widths[k];
-    }
-    const expectedTotalWidth = 95 * guardModule;
-    if (Math.abs(totalBarcodeWidth - expectedTotalWidth) / expectedTotalWidth > 0.22) {
-      continue;
-    }
-
-    // 6. Test Center Guard at offset start + 27 (space, bar, space, bar, space)
+    // 4. Test Center Guard at offset start + 27 (space, bar, space, bar, space)
     const cIdx = start + 27;
     const centerModule = (widths[cIdx] + widths[cIdx + 1] + widths[cIdx + 2] + widths[cIdx + 3] + widths[cIdx + 4]) / 5;
-    if (Math.abs(centerModule - guardModule) / guardModule > 0.52) continue;
+    if (Math.abs(centerModule - avgModule) / avgModule > 0.58) continue;
 
-    // 7. Decode Left 6 Digits (can be L-code or G-code)
+    // 5. Decode Left 6 Digits (can be L-code or G-code)
     const leftDigits: number[] = [];
     const parities: number[] = []; // 0 for L, 1 for G
     let leftValid = true;
@@ -335,7 +323,7 @@ function decodeEan13Sequence(widths: number[]): string | null {
         leftDigits.push(resL.digit);
         parities.push(0);
         totalDigitError += resL.error;
-        if (resL.error > 1.75) {
+        if (resL.error > 1.85) {
           leftValid = false;
           break;
         }
@@ -343,7 +331,7 @@ function decodeEan13Sequence(widths: number[]): string | null {
         leftDigits.push(resG.digit);
         parities.push(1);
         totalDigitError += resG.error;
-        if (resG.error > 1.75) {
+        if (resG.error > 1.85) {
           leftValid = false;
           break;
         }
@@ -352,7 +340,7 @@ function decodeEan13Sequence(widths: number[]): string | null {
 
     if (!leftValid) continue;
 
-    // 8. Decode Right 6 Digits (always R-code = L-patterns in reverse polarity)
+    // 6. Decode Right 6 Digits (always R-code = L-patterns in reverse polarity)
     const rightDigits: number[] = [];
     let rightValid = true;
 
@@ -362,7 +350,7 @@ function decodeEan13Sequence(widths: number[]): string | null {
       const resR = decodeEanDigit(e, L_PATTERNS);
       rightDigits.push(resR.digit);
       totalDigitError += resR.error;
-      if (resR.error > 1.75) {
+      if (resR.error > 1.85) {
         rightValid = false;
         break;
       }
@@ -370,11 +358,11 @@ function decodeEan13Sequence(widths: number[]): string | null {
 
     if (!rightValid) continue;
 
-    // Average digit error across all 12 digits must be sharp and tight
+    // Average digit error across all 12 digits
     const avgDigitError = totalDigitError / 12;
-    if (avgDigitError > 1.08) continue;
+    if (avgDigitError > 1.18) continue;
 
-    // 9. Determine First Digit from Parity Pattern
+    // 7. Determine First Digit from Parity Pattern
     let firstDigit = -1;
     for (let d = 0; d < 10; d++) {
       const pat = FIRST_DIGIT_PARITY[d];
@@ -393,7 +381,7 @@ function decodeEan13Sequence(widths: number[]): string | null {
 
     if (firstDigit === -1) continue;
 
-    // 10. Verify Modulo-10 Checksum
+    // 8. Verify Modulo-10 Checksum
     const fullDigits = [firstDigit, ...leftDigits, ...rightDigits];
     if (verifyEanChecksum(fullDigits)) {
       return fullDigits.join('');
@@ -550,11 +538,11 @@ export function decodeScanditWaveform(
 
   const pixels = imgData.data;
 
-  // 1. Comprehensive 36-line horizontal scanline grid covering full vertical range (8% to 94%)
-  // Ensures any barcode (at top, center, or bottom of shelf tag) is directly intersected!
-  const stepY = Math.max(4, Math.round(height / 36));
+  // 1. High-Density 64-line horizontal scanline grid covering full vertical range (5% to 95%)
+  // Spaced only 4-8 pixels apart to guarantee multiple direct intersections of thin 30px ESL barcodes!
+  const stepY = Math.max(3, Math.round(height / 64));
   const scanRows: number[] = [];
-  for (let y = Math.round(height * 0.08); y <= Math.round(height * 0.94); y += stepY) {
+  for (let y = Math.round(height * 0.05); y <= Math.round(height * 0.95); y += stepY) {
     scanRows.push(y);
   }
 
@@ -590,14 +578,16 @@ export function decodeScanditWaveform(
     }
   }
 
-  // 2. Multi-Angle scanlines (±6° to ±22°) across 4 vertical anchors for tilted/skewed barcodes
+  // 2. Multi-Angle scanlines (±5° to ±18°) across 6 vertical anchors for tilted/skewed barcodes
   const anchorYList = [
     Math.round(height * 0.50),
-    Math.round(height * 0.72),
-    Math.round(height * 0.85),
-    Math.round(height * 0.32)
+    Math.round(height * 0.65),
+    Math.round(height * 0.78),
+    Math.round(height * 0.88),
+    Math.round(height * 0.35),
+    Math.round(height * 0.22)
   ];
-  const angles = [-0.10, 0.10, -0.20, 0.20, -0.05, 0.05];
+  const angles = [-0.10, 0.10, -0.18, 0.18, -0.05, 0.05];
 
   for (const anchorY of anchorYList) {
     for (const angle of angles) {

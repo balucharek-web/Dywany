@@ -180,8 +180,9 @@ function enhanceToughBarcode(data: Uint8ClampedArray, width: number, height: num
 }
 
 /**
- * Scans image with ZBar, and if glare or a scratch damages the middle of the barcode,
- * falls back to scanning unaffected horizontal bands (top/bottom slices).
+ * Scans image with ZBar WASM:
+ * Pass 1: Tests clean raw camera image directly (best for ZBar's internal C adaptive binarizer).
+ * Pass 2: Falls back to contrast-normalized lower band (shelf ESL tags) if Pass 1 fails.
  */
 async function scanWithPartialFallback(
   ctx: CanvasRenderingContext2D,
@@ -189,9 +190,8 @@ async function scanWithPartialFallback(
   targetH: number
 ): Promise<string | null> {
   const imgData = ctx.getImageData(0, 0, targetW, targetH);
-  enhanceToughBarcode(imgData.data, targetW, targetH);
 
-  // Pass 1: Full enhanced frame
+  // Pass 1: Clean raw unaltered frame (ZBar WASM native C adaptive binarizer is optimized for raw pixels)
   let symbols = await scanImageData(imgData);
   if (symbols && symbols.length > 0) {
     for (const sym of symbols) {
@@ -200,11 +200,10 @@ async function scanWithPartialFallback(
     }
   }
 
-  // Pass 2: If partially damaged, scratched, or glare across the barcode,
-  // sample the lower sub-band (where shelf ESL barcodes are typically situated under the price)
-  if (targetH >= 110) {
+  // Pass 2: Lower shelf sub-band where barcodes on ESL price tags reside
+  if (targetH >= 90) {
     const subH = Math.round(targetH * 0.55);
-    const subY = Math.round(targetH * 0.40);
+    const subY = Math.round(targetH * 0.38);
     const subData = ctx.getImageData(0, subY, targetW, subH);
     enhanceToughBarcode(subData.data, targetW, subH);
     symbols = await scanImageData(subData);
@@ -442,33 +441,48 @@ export function BarcodeScannerModal({
               const vh = video.videoHeight;
 
               if (vw > 0 && vh > 0) {
-                if (!isBusyRef.current && timestamp - lastScanTime > 35) {
+                if (!isBusyRef.current && timestamp - lastScanTime > 30) {
                   lastScanTime = timestamp;
                   isBusyRef.current = true;
                   cycleCount++;
 
-                  const currentZoom = zoomLevelRef.current || 1.0;
-                  // Enterprise Viewfinder Crop: Perfectly synchronizes what the user sees inside the green reticle
-                  // with the canvas pixels (accounting for hardware optical zoom vs software zoom)
-                  const z = isHardwareZoomRef.current ? 1.0 : (zoomLevelRef.current || 1.0);
-                  const cropW = Math.min(vw, Math.round((vw * 0.92) / z));
-                  const cropH = Math.min(vh, Math.round((vh * 0.76) / z));
-                  const cropX = Math.max(0, Math.round((vw - cropW) / 2));
-                  const cropY = Math.max(0, Math.round((vh - cropH) / 2));
-
-                  const targetW = Math.min(1280, Math.max(640, cropW));
-                  const targetH = Math.round((cropH * targetW) / cropW);
-
-                  if (canvas.width !== targetW || canvas.height !== targetH) {
-                    canvas.width = targetW;
-                    canvas.height = targetH;
-                  }
-
-                  ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, targetW, targetH);
-
                   try {
                     // Engine 1: Native Android BarcodeDetector (Chrome ML Kit GPU vision)
-                    // Google ML Kit neural network handles 360-degree rotation and perspective skew on GPU!
+                    // Google ML Kit neural network processes HTMLVideoElement directly on GPU in ~15ms!
+                    if (detector) {
+                      try {
+                        const nativeResults = await detector.detect(video);
+                        if (nativeResults && nativeResults.length > 0) {
+                          for (const item of nativeResults) {
+                            const validProduct = extractProductCode(item.rawValue);
+                            if (validProduct) {
+                              triggerScanSuccess(validProduct);
+                              return;
+                            }
+                          }
+                        }
+                      } catch (_) {}
+                    }
+
+                    // Viewfinder Reticle Crop: Synchronizes the green frame with canvas pixels
+                    // Reticle occupies ~90% width and ~48% height of the portrait viewport
+                    const z = isHardwareZoomRef.current ? 1.0 : (zoomLevelRef.current || 1.0);
+                    const cropW = Math.min(vw, Math.round((vw * 0.90) / z));
+                    const cropH = Math.min(vh, Math.round((vh * 0.48) / z));
+                    const cropX = Math.max(0, Math.round((vw - cropW) / 2));
+                    const cropY = Math.max(0, Math.round((vh - cropH) / 2));
+
+                    const targetW = 960;
+                    const targetH = Math.round((cropH * targetW) / cropW);
+
+                    if (canvas.width !== targetW || canvas.height !== targetH) {
+                      canvas.width = targetW;
+                      canvas.height = targetH;
+                    }
+
+                    ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, targetW, targetH);
+
+                    // If detect(video) was not supported on this browser version, test canvas:
                     if (detector) {
                       try {
                         const nativeResults = await detector.detect(canvas);
@@ -485,17 +499,15 @@ export function BarcodeScannerModal({
                     }
 
                     // Engine 2: Scandit-Grade 1D Sub-Pixel Continuous Waveform Engine
-                    // Directly decodes small, blurry barcodes from 1.5m away using 2nd derivative zero-crossings
-                    // and T-distance (similar-edge) blur cancellation in < 1.5ms across 36 scanlines
+                    // Samples 64 high-density scanlines spaced only 4-8px apart directly over the reticle
                     const scanditCode = decodeScanditWaveform(ctx, targetW, targetH);
                     if (scanditCode) {
                       triggerScanSuccess(scanditCode);
                       return;
                     }
 
-                    // Engine 3: Deep Fallback (ZBar WASM with Contrast Sharpening)
-                    // Throttled to ~6 FPS (every 160ms) to ensure zero main-thread CPU blocking and smooth UI animation
-                    if (timestamp - lastZBarTime > 160) {
+                    // Engine 3: ZBar WASM on Raw Pixels (checked every 80ms)
+                    if (timestamp - lastZBarTime > 80) {
                       lastZBarTime = timestamp;
                       const validProduct = await scanWithPartialFallback(ctx, targetW, targetH);
                       if (validProduct) {
