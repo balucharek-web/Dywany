@@ -428,7 +428,7 @@ function decodeCode128Sequence(widths: number[]): string | null {
       for (let k = 0; k < 6; k++) {
         diff += Math.abs(widths[start + k] - pat[k] * m);
       }
-      if (diff / startCharWidth < 0.30) {
+      if (diff / startCharWidth < 0.16) {
         codeType = type;
         startVal = val;
         break;
@@ -441,6 +441,7 @@ function decodeCode128Sequence(widths: number[]): string | null {
     const decodedValues: number[] = [startVal];
     let currIdx = start + 6;
     let foundStop = false;
+    let totalCharDiff = 0;
 
     while (currIdx + 6 <= widths.length) {
       // Check if Stop Character (7 elements: 2 3 3 1 1 1 2, 13 modules)
@@ -452,9 +453,9 @@ function decodeCode128Sequence(widths: number[]): string | null {
         for (let k = 0; k < 7; k++) {
           stopDiff += Math.abs(widths[currIdx + k] - stopPat[k] * stopM);
         }
-        if (stopDiff / stopTotal < 0.32) {
+        if (stopDiff / stopTotal < 0.18) {
           // Quiet zone after stop
-          if (currIdx + 7 < widths.length && widths[currIdx + 7] < stopM * 1.4) {
+          if (currIdx + 7 < widths.length && widths[currIdx + 7] < stopM * 1.5) {
             // insufficient quiet zone
           } else {
             foundStop = true;
@@ -481,15 +482,17 @@ function decodeCode128Sequence(widths: number[]): string | null {
         }
       }
 
-      if (bestVal !== -1 && minDiff / charTotal < 0.32) {
+      if (bestVal !== -1 && minDiff / charTotal < 0.16) {
         decodedValues.push(bestVal);
+        totalCharDiff += minDiff / charTotal;
         currIdx += 6;
       } else {
         break;
       }
     }
 
-    if (!foundStop || decodedValues.length < 3) continue;
+    if (!foundStop || decodedValues.length < 5) continue;
+    if (totalCharDiff / (decodedValues.length - 1) > 0.14) continue;
 
     // Modulo-103 Checksum verification
     const checkValue = decodedValues[decodedValues.length - 1];

@@ -327,15 +327,18 @@ export function BarcodeScannerModal({
               ...(selectedDeviceId
                 ? { deviceId: { exact: selectedDeviceId } }
                 : { facingMode: { ideal: 'environment' } }),
-              width: { ideal: 3840, min: 1920 },
-              height: { ideal: 2160, min: 1080 }
+              width: { ideal: 4096 },
+              height: { ideal: 2160 },
+              frameRate: { ideal: 60, min: 30 }
             },
             audio: false
           });
         } catch (_) {
           stream = await navigator.mediaDevices.getUserMedia({
             video: {
-              facingMode: { ideal: 'environment' }
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 }
             },
             audio: false
           });
@@ -411,18 +414,6 @@ export function BarcodeScannerModal({
           }
         }
 
-        // Periodic continuous autofocus pulse (every 2.5s) to prevent camera driver focus lock
-        focusIntervalRef.current = setInterval(async () => {
-          if (!streamRef.current || isScannedRef.current) return;
-          try {
-            const tr = streamRef.current.getVideoTracks()[0];
-            if (tr && (tr as any).applyConstraints) {
-              await (tr as any).applyConstraints({
-                advanced: [{ focusMode: 'continuous', pointsOfInterest: [{ x: 0.5, y: 0.5 }] }]
-              });
-            }
-          } catch (_) {}
-        }, 2500);
 
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -465,7 +456,7 @@ export function BarcodeScannerModal({
                   const cropX = Math.max(0, Math.round((vw - cropW) / 2));
                   const cropY = Math.max(0, Math.round((vh - cropH) / 2));
 
-                  const targetW = Math.min(840, Math.max(540, cropW));
+                  const targetW = Math.min(1280, Math.max(640, cropW));
                   const targetH = Math.round((cropH * targetW) / cropW);
 
                   if (canvas.width !== targetW || canvas.height !== targetH) {
