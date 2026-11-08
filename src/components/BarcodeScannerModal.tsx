@@ -457,46 +457,23 @@ export function BarcodeScannerModal({
                   cycleCount++;
 
                   const currentZoom = zoomLevelRef.current || 1.0;
-                  const isTelephotoPass = currentZoom > 1.2 || cycleCount % 2 === 1;
+                  // Enterprise Viewfinder Crop: Captures the entire green reticle window
+                  // Ensures barcodes positioned at the bottom of shelf tags (under large price numbers)
+                  // are never cropped out of the detection frame
+                  const cropW = Math.min(vw, Math.round(vw * 0.92));
+                  const cropH = Math.min(vh, Math.round(vh * 0.75));
+                  const cropX = Math.max(0, Math.round((vw - cropW) / 2));
+                  const cropY = Math.max(0, Math.round((vh - cropH) / 2));
 
-                  let targetW: number;
-                  let targetH: number;
+                  const targetW = Math.min(840, Math.max(540, cropW));
+                  const targetH = Math.round((cropH * targetW) / cropW);
 
-                  if (isTelephotoPass) {
-                    // PASS 1: Angle-Tolerant Telephoto Center ROI (for 1.0m - 1.5m shelf ESL labels)
-                    // High-resolution crop with generous vertical headroom (0.44) so barcodes tilted up to ±35° fit without corner clipping
-                    const z = Math.max(1.0, currentZoom);
-                    const cropW = Math.max(240, Math.min(vw, Math.round(vw * (0.80 / z))));
-                    const cropH = Math.max(140, Math.min(vh, Math.round(vh * (0.44 / z))));
-                    const cropX = Math.round((vw - cropW) / 2);
-                    const cropY = Math.round((vh - cropH) / 2);
-
-                    targetW = Math.min(840, Math.max(540, cropW));
-                    targetH = Math.round((cropH * targetW) / cropW);
-
-                    if (canvas.width !== targetW || canvas.height !== targetH) {
-                      canvas.width = targetW;
-                      canvas.height = targetH;
-                    }
-
-                    ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, targetW, targetH);
-                  } else {
-                    // PASS 2: Full Viewfinder Window (for close-up labels & large carpet tags)
-                    const cropW = Math.round(vw * 0.88);
-                    const cropH = Math.round(vh * 0.72);
-                    const cropX = Math.round((vw - cropW) / 2);
-                    const cropY = Math.round((vh - cropH) / 2);
-
-                    targetW = Math.min(840, Math.max(540, cropW));
-                    targetH = Math.round((cropH * targetW) / cropW);
-
-                    if (canvas.width !== targetW || canvas.height !== targetH) {
-                      canvas.width = targetW;
-                      canvas.height = targetH;
-                    }
-
-                    ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, targetW, targetH);
+                  if (canvas.width !== targetW || canvas.height !== targetH) {
+                    canvas.width = targetW;
+                    canvas.height = targetH;
                   }
+
+                  ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, targetW, targetH);
 
                   try {
                     // Engine 1: Native Android BarcodeDetector (Chrome ML Kit GPU vision)
