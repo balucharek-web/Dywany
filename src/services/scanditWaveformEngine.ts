@@ -86,6 +86,13 @@ interface Edge {
   isFalling: boolean; // true = Falling (white->black, start of bar), false = Rising (black->white, start of space)
 }
 
+// Pre-allocated static buffers to avoid GC pauses and frame dropping
+const MAX_SCANLINE_SAMPLES = 2048;
+const staticY = new Float32Array(MAX_SCANLINE_SAMPLES);
+const staticS = new Float32Array(MAX_SCANLINE_SAMPLES);
+const staticD1 = new Float32Array(MAX_SCANLINE_SAMPLES);
+const staticD2 = new Float32Array(MAX_SCANLINE_SAMPLES);
+
 /**
  * Extracts sub-pixel continuous luminance edges along a 1D scanline segment
  */
@@ -97,13 +104,14 @@ function extractSubpixelEdges(
   y0: number,
   x1: number,
   y1: number,
-  samples: number
+  rawSamples: number
 ): Edge[] {
+  const samples = Math.min(MAX_SCANLINE_SAMPLES, rawSamples);
   const dx = (x1 - x0) / (samples - 1);
   const dy = (y1 - y0) / (samples - 1);
 
-  // 1. Extract raw analog luminance waveform Y[x]
-  const Y = new Float32Array(samples);
+  // 1. Extract raw analog luminance waveform Y[x] into pre-allocated buffer
+  const Y = staticY;
   for (let i = 0; i < samples; i++) {
     const px = Math.min(width - 1, Math.max(0, Math.round(x0 + i * dx)));
     const py = Math.min(height - 1, Math.max(0, Math.round(y0 + i * dy)));
@@ -113,7 +121,7 @@ function extractSubpixelEdges(
   }
 
   // 2. Optical Gaussian Smoothing Filter: S[i] = (Y[i-1] + 2Y[i] + Y[i+1]) / 4
-  const S = new Float32Array(samples);
+  const S = staticS;
   S[0] = Y[0];
   S[samples - 1] = Y[samples - 1];
   for (let i = 1; i < samples - 1; i++) {
@@ -121,13 +129,13 @@ function extractSubpixelEdges(
   }
 
   // 3. First Derivative (Gradient): D1[i] = S[i+1] - S[i-1]
-  const D1 = new Float32Array(samples);
+  const D1 = staticD1;
   for (let i = 1; i < samples - 1; i++) {
     D1[i] = S[i + 1] - S[i - 1];
   }
 
   // 4. Second Derivative (Laplacian): D2[i] = S[i+1] - 2*S[i] + S[i-1]
-  const D2 = new Float32Array(samples);
+  const D2 = staticD2;
   for (let i = 1; i < samples - 1; i++) {
     D2[i] = S[i + 1] - 2 * S[i] + S[i - 1];
   }

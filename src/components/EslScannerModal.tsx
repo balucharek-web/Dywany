@@ -233,7 +233,7 @@ export function EslScannerModal({
                   }
 
                   // 3. High-contrast ZBar WASM fallback
-                  if (!isZBarBusyRef.current && timestamp - lastZBarTime > 80) {
+                  if (!isZBarBusyRef.current && timestamp - lastZBarTime > 160) {
                     lastZBarTime = timestamp;
                     isZBarBusyRef.current = true;
 

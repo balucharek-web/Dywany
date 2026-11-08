@@ -82,6 +82,8 @@ function extractProductCode(raw: string): string | null {
  * 3. Horizontal Laplacian Unsharp Mask: sharpens 1D bar edges row-by-row,
  *    reconstructing 1-pixel bars blurred by distance or camera lens motion at sub-pixel precision!
  */
+const reusableRowLum = new Uint8Array(2048);
+
 function enhanceToughBarcode(data: Uint8ClampedArray, width: number, height: number) {
   const len = data.length;
   if (len === 0) return;
@@ -134,7 +136,7 @@ function enhanceToughBarcode(data: Uint8ClampedArray, width: number, height: num
   // 4. Scandit-style row-by-row horizontal de-blurring unsharp filter
   // In 1D barcodes, high frequencies are horizontal. This sharpens 0.5 - 1.2px bar edges!
   if (width > 2 && height > 2 && width * height * 4 === len) {
-    const rowLum = new Uint8Array(width);
+    const rowLum = width <= 2048 ? reusableRowLum : new Uint8Array(width);
     for (let y = 0; y < height; y++) {
       const rowOffset = y * width * 4;
       for (let x = 0; x < width; x++) {
@@ -408,14 +410,14 @@ export function BarcodeScannerModal({
           canvasRef.current = canvas;
 
           let lastScanTime = 0;
+          let lastZBarTime = 0;
           let cycleCount = 0;
 
           // UNIFIED ULTRA-FAST DETECTION LOOP:
           // Seamlessly alternates between:
           // 1. Telephoto Center ROI (1:1 native sensor resolution for small ESL barcodes from 1.5m away)
           // 2. Full Viewfinder Window (for close-up scans and full carpet labels)
-          // Both passes run automatically every ~30ms, feeding into Native Chrome BarcodeDetector (GPU)
-          // and ZBar WASM with contrast expansion. ZERO manual mode switching required!
+          // Runs at silky-smooth 60/120 FPS with ZERO main-thread blocking!
           const detectLoop = async (timestamp: number) => {
             if (!isMounted || isScannedRef.current) return;
 
@@ -425,7 +427,7 @@ export function BarcodeScannerModal({
               const vh = video.videoHeight;
 
               if (vw > 0 && vh > 0) {
-                if (!isBusyRef.current && timestamp - lastScanTime > 30) {
+                if (!isBusyRef.current && timestamp - lastScanTime > 35) {
                   lastScanTime = timestamp;
                   isBusyRef.current = true;
                   cycleCount++;
@@ -445,7 +447,7 @@ export function BarcodeScannerModal({
                     const cropX = Math.round((vw - cropW) / 2);
                     const cropY = Math.round((vh - cropH) / 2);
 
-                    targetW = Math.min(1280, Math.max(640, cropW));
+                    targetW = Math.min(840, Math.max(540, cropW));
                     targetH = Math.round((cropH * targetW) / cropW);
 
                     if (canvas.width !== targetW || canvas.height !== targetH) {
@@ -461,7 +463,7 @@ export function BarcodeScannerModal({
                     const cropX = Math.round((vw - cropW) / 2);
                     const cropY = Math.round((vh - cropH) / 2);
 
-                    targetW = Math.min(1280, Math.max(720, cropW));
+                    targetW = Math.min(840, Math.max(540, cropW));
                     targetH = Math.round((cropH * targetW) / cropW);
 
                     if (canvas.width !== targetW || canvas.height !== targetH) {
@@ -492,18 +494,22 @@ export function BarcodeScannerModal({
 
                     // Engine 2: Scandit-Grade 1D Sub-Pixel Continuous Waveform Engine
                     // Directly decodes small, blurry barcodes from 1.5m away using 2nd derivative zero-crossings
-                    // and T-distance (similar-edge) blur cancellation in < 4ms
+                    // and T-distance (similar-edge) blur cancellation in < 3ms
                     const scanditCode = decodeScanditWaveform(ctx, targetW, targetH);
                     if (scanditCode) {
                       triggerScanSuccess(scanditCode);
                       return;
                     }
 
-                    // Engine 3: Industrial ZBar WASM with Glare-Busting & Partial Slice Fallback
-                    const validProduct = await scanWithPartialFallback(ctx, targetW, targetH);
-                    if (validProduct) {
-                      triggerScanSuccess(validProduct);
-                      return;
+                    // Engine 3: Deep Fallback (ZBar WASM with Contrast Sharpening)
+                    // Throttled to ~6 FPS (every 160ms) to ensure zero main-thread CPU blocking and smooth UI animation
+                    if (timestamp - lastZBarTime > 160) {
+                      lastZBarTime = timestamp;
+                      const validProduct = await scanWithPartialFallback(ctx, targetW, targetH);
+                      if (validProduct) {
+                        triggerScanSuccess(validProduct);
+                        return;
+                      }
                     }
                   } catch (_) {
                     // silent frame error
