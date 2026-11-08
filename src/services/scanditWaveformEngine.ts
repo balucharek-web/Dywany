@@ -352,48 +352,6 @@ function decodeEan13Sequence(widths: number[]): string | null {
   return null;
 }
 
-/**
- * Attempts to decode EAN-8 from sub-pixel element widths
- */
-function decodeEan8Sequence(widths: number[]): string | null {
-  // EAN-8 requires: 3 start + 16 left + 5 center + 16 right + 3 end = 43 elements
-  if (widths.length < 43) return null;
-
-  for (let start = 0; start <= widths.length - 43; start++) {
-    const gModule = (widths[start] + widths[start + 1] + widths[start + 2]) / 3;
-    if (gModule < 0.5) continue;
-
-    // Decode 4 left digits (L-patterns)
-    const left: number[] = [];
-    let ok = true;
-    for (let i = 0; i < 4; i++) {
-      const idx = start + 3 + i * 4;
-      const e = [widths[idx], widths[idx + 1], widths[idx + 2], widths[idx + 3]];
-      const res = decodeEanDigit(e, L_PATTERNS);
-      if (res.error > 2.2) { ok = false; break; }
-      left.push(res.digit);
-    }
-    if (!ok) continue;
-
-    // Decode 4 right digits (R-patterns)
-    const right: number[] = [];
-    for (let i = 0; i < 4; i++) {
-      const idx = start + 24 + i * 4;
-      const e = [widths[idx], widths[idx + 1], widths[idx + 2], widths[idx + 3]];
-      const res = decodeEanDigit(e, L_PATTERNS);
-      if (res.error > 2.2) { ok = false; break; }
-      right.push(res.digit);
-    }
-    if (!ok) continue;
-
-    const fullDigits = [...left, ...right];
-    if (verifyEanChecksum(fullDigits)) {
-      return fullDigits.join('');
-    }
-  }
-
-  return null;
-}
 
 /**
  * Decodes Code 128 (Sets A, B, and C) with strict Modulo-103 checksum
@@ -626,14 +584,7 @@ export function decodeScanditWaveform(
         if (prod) return prod;
       }
 
-      // Try EAN-8
-      code = decodeEan8Sequence(widths) || decodeEan8Sequence(reversedWidths);
-      if (code) {
-        const prod = extractProductCode(code);
-        if (prod) return prod;
-      }
-
-      // Try Code 128
+      // Try Code 128 (8-digit REF LM or store code with Modulo-103 check)
       code = decodeCode128Sequence(widths) || decodeCode128Sequence(reversedWidths);
       if (code) {
         const prod = extractProductCode(code);
@@ -664,12 +615,6 @@ export function decodeScanditWaveform(
 
       const rev = [...widths].reverse();
       code = decodeEan13Sequence(rev);
-      if (code) {
-        const prod = extractProductCode(code);
-        if (prod) return prod;
-      }
-
-      code = decodeEan8Sequence(widths) || decodeEan8Sequence(rev);
       if (code) {
         const prod = extractProductCode(code);
         if (prod) return prod;

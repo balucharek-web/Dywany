@@ -58,16 +58,28 @@ function extractProductCode(raw: string): string | null {
 
   // 1. Pure digits check
   if (/^\d+$/.test(clean)) {
-    // Standard product barcodes: 7 to 14 digits (REF 8-digit, EAN-13, GTIN-14)
-    // Rejects 16-24 digit ESL tag hardware serial numbers
-    if (clean.length >= 7 && clean.length <= 14) {
+    // 13-digit EAN-13 (Standard retail product barcode: 590..., 3276..., etc.)
+    if (clean.length === 13) {
+      return clean;
+    }
+    // 12-digit UPC-A (Standard retail barcode)
+    if (clean.length === 12) {
+      return clean;
+    }
+    // 8-digit Ref LM (Leroy Merlin catalog reference: starts with 4, 5, 6, 7, 8, 9)
+    // Rejects phantom 8-digit slice codes starting with 0, 1, 2, 3 (e.g. 28188322)
+    if (clean.length === 8 && /^[4-9]/.test(clean)) {
+      return clean;
+    }
+    // GTIN-14 case packaging
+    if (clean.length === 14) {
       return clean;
     }
     return null;
   }
 
   // 2. If it's a URL or text containing an 8-digit Ref LM or 13-digit EAN
-  const match = raw.match(/\b(59\d{11}|32\d{11}|40\d{11}|\d{8})\b/);
+  const match = raw.match(/\b(59\d{11}|32\d{11}|40\d{11}|[4-9]\d{7})\b/);
   if (match) {
     return match[1];
   }
@@ -292,7 +304,7 @@ export function BarcodeScannerModal({
         if (hasNativeBarcodeDetector) {
           try {
             const supportedFormats = await (window as any).BarcodeDetector.getSupportedFormats();
-            const targetFormats = ['code_128', 'ean_13', 'ean_8', 'upc_a', 'code_39', 'itf'].filter((f) =>
+            const targetFormats = ['code_128', 'ean_13', 'upc_a', 'code_39', 'itf'].filter((f) =>
               supportedFormats.includes(f)
             );
             detector = new (window as any).BarcodeDetector({

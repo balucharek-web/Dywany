@@ -31,9 +31,12 @@ export function extractProductCode(raw: string): string | null {
   const clean = raw.trim();
   if (/[a-zA-Z]/.test(clean)) return null;
   if (!/^\d+$/.test(clean)) return null;
-  if (clean.length === 13 || clean.length === 8 || clean.length === 12) {
-    return clean;
-  }
+  // 13-digit EAN-13
+  if (clean.length === 13) return clean;
+  // 12-digit UPC-A
+  if (clean.length === 12) return clean;
+  // 8-digit Ref LM (strictly starts with 4-9; rejects phantom slices like 28188322)
+  if (clean.length === 8 && /^[4-9]/.test(clean)) return clean;
   return null;
 }
 
