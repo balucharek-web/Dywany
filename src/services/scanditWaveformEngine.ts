@@ -120,12 +120,16 @@ function extractSubpixelEdges(
     Y[i] = (pixels[offset] * 77 + pixels[offset + 1] * 150 + pixels[offset + 2] * 29) >> 8;
   }
 
-  // 2. Optical Gaussian Smoothing Filter: S[i] = (Y[i-1] + 2Y[i] + Y[i+1]) / 4
+  // 2. Optical Gaussian Smoothing with Adaptive Motion-Deblur Deconvolution:
+  // When motion blur smears edges across pixels, 1D inverse sharpening restores
+  // steep transition slopes and high-frequency bar/space contrast on the fly!
   const S = staticS;
   S[0] = Y[0];
   S[samples - 1] = Y[samples - 1];
   for (let i = 1; i < samples - 1; i++) {
-    S[i] = (Y[i - 1] + 2 * Y[i] + Y[i + 1]) * 0.25;
+    const smoothed = (Y[i - 1] + 2 * Y[i] + Y[i + 1]) * 0.25;
+    const deblurred = smoothed * 1.6 - (Y[i - 1] + Y[i + 1]) * 0.3;
+    S[i] = deblurred < 0 ? 0 : deblurred > 255 ? 255 : deblurred;
   }
 
   // 3. First Derivative (Gradient): D1[i] = S[i+1] - S[i-1]

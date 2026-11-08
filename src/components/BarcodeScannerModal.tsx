@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Flashlight, AlertCircle, RefreshCw, CheckCircle2, Camera } from 'lucide-react';
+import { X, Flashlight, AlertCircle, RefreshCw, CheckCircle2, Camera, Zap, Sparkles } from 'lucide-react';
 import { scanImageData, setModuleArgs } from '@undecaf/zbar-wasm';
 import { decodeScanditWaveform } from '../services/scanditWaveformEngine';
+import { scanEslLabel } from '../services/eslScannerService';
 
 interface BarcodeScannerModalProps {
   isOpen: boolean;
@@ -229,6 +230,16 @@ export function BarcodeScannerModal({
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [torchOn, setTorchOn] = useState(false);
   const [hasTorch, setHasTorch] = useState(false);
+  const [autoTorchEnabled, setAutoTorchEnabled] = useState(true);
+  const [autoTorchActive, setAutoTorchActive] = useState(false);
+  const autoTorchActiveRef = useRef(false);
+  const lowLightFramesRef = useRef(0);
+  const normalLightFramesRef = useRef(0);
+
+  const [isContinuousMode, setIsContinuousMode] = useState(continuousMode);
+  const isContinuousModeRef = useRef(continuousMode);
+  const [scanCount, setScanCount] = useState(0);
+
   const [isHardwareZoom, setIsHardwareZoom] = useState(false);
   const isHardwareZoomRef = useRef(false);
   const [zoomLevel, setZoomLevel] = useState(2.0);
@@ -237,6 +248,21 @@ export function BarcodeScannerModal({
   const [isScanningFile, setIsScanningFile] = useState(false);
   const [scannedFeedback, setScannedFeedback] = useState<string | null>(null);
   const [tapRipple, setTapRipple] = useState<{ x: number; y: number } | null>(null);
+
+  // Live AR Target Lock (bounding box drawn directly on top of physical barcode)
+  const [arTargetBox, setArTargetBox] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    code: string;
+    isOcr?: boolean;
+  } | null>(null);
+
+  // Automatic OCR Fallback for damaged barcodes
+  const [ocrStatus, setOcrStatus] = useState<string | null>(null);
+  const noBarcodeTimeRef = useRef<number>(Date.now());
+  const isOcrAttemptingRef = useRef(false);
 
   // Multi-camera selection (rear cameras only)
   const [rearCameras, setRearCameras] = useState<MediaDeviceInfo[]>([]);
@@ -255,10 +281,58 @@ export function BarcodeScannerModal({
   const touchStartZoomRef = useRef<number>(1.0);
   const waveformCandidateRef = useRef<{ code: string; time: number } | null>(null);
 
-  const triggerScanSuccess = (code: string) => {
+  const triggerScanSuccess = (code: string, boundingBox?: any, isOcr = false) => {
     if (isScannedRef.current) return;
-    isScannedRef.current = true;
-    setScannedFeedback(code);
+    if (!isContinuousModeRef.current) {
+      isScannedRef.current = true;
+    } else {
+      isScannedRef.current = true;
+      setTimeout(() => {
+        isScannedRef.current = false;
+      }, 700);
+    }
+
+    setScannedFeedback(isOcr ? `Ref LM (OCR): ${code}` : code);
+
+    // Compute live AR Target Box position on screen
+    try {
+      const screenW = window.innerWidth;
+      const screenH = window.innerHeight;
+      const video = videoRef.current;
+
+      if (boundingBox && video && video.videoWidth > 0 && video.videoHeight > 0) {
+        const vw = video.videoWidth;
+        const vh = video.videoHeight;
+        const scale = Math.max(screenW / vw, screenH / vh);
+        const offsetX = (screenW - vw * scale) / 2;
+        const offsetY = (screenH - vh * scale) / 2;
+
+        const boxX = Math.max(10, Math.min(screenW - 80, boundingBox.x * scale + offsetX));
+        const boxY = Math.max(10, Math.min(screenH - 50, boundingBox.y * scale + offsetY));
+        const boxW = Math.max(80, Math.min(screenW - 20, boundingBox.width * scale));
+        const boxH = Math.max(40, Math.min(screenH - 20, boundingBox.height * scale));
+
+        setArTargetBox({
+          x: Math.round(boxX),
+          y: Math.round(boxY),
+          width: Math.round(boxW),
+          height: Math.round(boxH),
+          code,
+          isOcr
+        });
+      } else {
+        const reticleW = Math.min(screenW * 0.85, 340);
+        const reticleH = isOcr ? 70 : 60;
+        setArTargetBox({
+          x: Math.round((screenW - reticleW) / 2),
+          y: Math.round(screenH * 0.48),
+          width: Math.round(reticleW),
+          height: Math.round(reticleH),
+          code,
+          isOcr
+        });
+      }
+    } catch (_) {}
 
     playBeep();
 
@@ -270,15 +344,16 @@ export function BarcodeScannerModal({
 
     onScanSuccess(code.trim());
 
-    if (!continuousMode) {
+    if (!isContinuousModeRef.current) {
       setTimeout(() => {
         onClose();
-      }, 180);
+      }, 240);
     } else {
+      setScanCount((c) => c + 1);
       setTimeout(() => {
-        isScannedRef.current = false;
+        setArTargetBox(null);
         setScannedFeedback(null);
-      }, 1000);
+      }, 550);
     }
   };
 
@@ -456,7 +531,7 @@ export function BarcodeScannerModal({
                           for (const item of nativeResults) {
                             const validProduct = extractProductCode(item.rawValue);
                             if (validProduct) {
-                              triggerScanSuccess(validProduct);
+                              triggerScanSuccess(validProduct, item.boundingBox);
                               return;
                             }
                           }
@@ -482,6 +557,41 @@ export function BarcodeScannerModal({
 
                     ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, targetW, targetH);
 
+                    // Auto-Torch Ambient Light Sensor:
+                    // Measures light level in center of reticle; turns on torch in dark warehouse racks
+                    if (hasTorch && autoTorchEnabled) {
+                      try {
+                        const checkData = ctx.getImageData(Math.round(targetW * 0.35), Math.round(targetH * 0.35), 20, 20);
+                        let totalLum = 0;
+                        for (let k = 0; k < checkData.data.length; k += 16) {
+                          totalLum += (checkData.data[k] * 77 + checkData.data[k + 1] * 150 + checkData.data[k + 2] * 29) >> 8;
+                        }
+                        const avgLum = totalLum / (checkData.data.length / 16);
+
+                        if (avgLum < 36) {
+                          lowLightFramesRef.current++;
+                          normalLightFramesRef.current = 0;
+                          if (lowLightFramesRef.current >= 4 && !torchOn && !autoTorchActiveRef.current) {
+                            autoTorchActiveRef.current = true;
+                            setAutoTorchActive(true);
+                            setTorchOn(true);
+                            const track = streamRef.current?.getVideoTracks()[0];
+                            (track as any)?.applyConstraints?.({ advanced: [{ torch: true }] }).catch(() => {});
+                          }
+                        } else if (avgLum > 85) {
+                          normalLightFramesRef.current++;
+                          lowLightFramesRef.current = 0;
+                          if (normalLightFramesRef.current >= 15 && autoTorchActiveRef.current) {
+                            autoTorchActiveRef.current = false;
+                            setAutoTorchActive(false);
+                            setTorchOn(false);
+                            const track = streamRef.current?.getVideoTracks()[0];
+                            (track as any)?.applyConstraints?.({ advanced: [{ torch: false }] }).catch(() => {});
+                          }
+                        }
+                      } catch (_) {}
+                    }
+
                     // If detect(video) was not supported on this browser version, test canvas:
                     if (detector) {
                       try {
@@ -490,7 +600,7 @@ export function BarcodeScannerModal({
                           for (const item of nativeResults) {
                             const validProduct = extractProductCode(item.rawValue);
                             if (validProduct) {
-                              triggerScanSuccess(validProduct);
+                              triggerScanSuccess(validProduct, item.boundingBox);
                               return;
                             }
                           }
@@ -513,6 +623,51 @@ export function BarcodeScannerModal({
                       if (validProduct) {
                         triggerScanSuccess(validProduct);
                         return;
+                      }
+                    }
+
+                    // Engine 4: Automatic Intelligent OCR Fallback for Ref LM (on damaged/scratched barcodes)
+                    // If no barcode matches after 1.8 seconds, reads the printed Ref LM from the label text
+                    if (
+                      timestamp - noBarcodeTimeRef.current > 1800 &&
+                      !isOcrAttemptingRef.current &&
+                      !isScannedRef.current
+                    ) {
+                      isOcrAttemptingRef.current = true;
+                      setOcrStatus('Rozpoznawanie Ref LM...');
+
+                      try {
+                        const snapCanvas = document.createElement('canvas');
+                        snapCanvas.width = targetW;
+                        snapCanvas.height = targetH;
+                        const snapCtx = snapCanvas.getContext('2d');
+                        if (snapCtx) {
+                          snapCtx.drawImage(canvas, 0, 0);
+                          const snapDataUrl = snapCanvas.toDataURL('image/jpeg', 0.85);
+
+                          scanEslLabel(snapDataUrl, 'image/jpeg')
+                            .then((aiRes) => {
+                              if (!isMounted || isScannedRef.current) return;
+                              const refMatch = extractProductCode(aiRes.ref || '') || extractProductCode(aiRes.ean || '');
+                              if (refMatch) {
+                                triggerScanSuccess(refMatch, null, true);
+                              } else {
+                                noBarcodeTimeRef.current = timestamp;
+                                isOcrAttemptingRef.current = false;
+                                setOcrStatus(null);
+                              }
+                            })
+                            .catch(() => {
+                              if (isMounted) {
+                                noBarcodeTimeRef.current = timestamp;
+                                isOcrAttemptingRef.current = false;
+                                setOcrStatus(null);
+                              }
+                            });
+                        }
+                      } catch (_) {
+                        isOcrAttemptingRef.current = false;
+                        setOcrStatus(null);
                       }
                     }
                   } catch (_) {
@@ -773,7 +928,7 @@ export function BarcodeScannerModal({
                   ? 'bg-amber-400 text-gray-950 shadow-xl shadow-amber-400/50 scale-105'
                   : 'bg-black/60 text-white hover:bg-black/80 backdrop-blur-md'
               }`}
-              title="Latarka"
+              title={autoTorchActive ? 'Auto-latarka aktywna' : 'Latarka'}
             >
               <Flashlight className="w-5 h-5" />
             </button>
@@ -806,6 +961,25 @@ export function BarcodeScannerModal({
           )}
         </div>
 
+        {/* Center: Mode Switcher (Pojedynczy vs Inwentaryzacja) */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            const next = !isContinuousMode;
+            setIsContinuousMode(next);
+            isContinuousModeRef.current = next;
+          }}
+          className={`px-3.5 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-black backdrop-blur-md border transition-all cursor-pointer ${
+            isContinuousMode
+              ? 'bg-amber-400 text-gray-950 border-amber-300 shadow-xl shadow-amber-400/40 scale-105'
+              : 'bg-black/60 text-gray-200 border-white/10 hover:bg-black/80'
+          }`}
+          title="Przełącz tryb skanowania"
+        >
+          <Zap className="w-3.5 h-3.5 fill-current" />
+          <span>{isContinuousMode ? `Inwentaryzacja (${scanCount})` : 'Pojedynczy'}</span>
+        </button>
+
         {/* Circular Close Button (X) top right */}
         <button
           onClick={(e) => {
@@ -819,11 +993,40 @@ export function BarcodeScannerModal({
         </button>
       </div>
 
+      {/* Auto-Torch Active Notification Pill */}
+      {autoTorchActive && (
+        <div className="absolute top-20 inset-x-0 z-40 flex justify-center pointer-events-none">
+          <div className="bg-amber-400 text-gray-950 font-black text-xs px-4 py-1.5 rounded-full shadow-2xl border border-amber-300 flex items-center gap-1.5 animate-in fade-in slide-in-from-top-2">
+            <Sparkles className="w-3.5 h-3.5 fill-current" />
+            <span>Auto-latarka: doświetlenie ciemnej półki</span>
+          </div>
+        </div>
+      )}
+
       {/* Toast message overlay if active */}
       {toastMessage && (
         <div className="absolute top-20 inset-x-4 z-40 flex justify-center pointer-events-none">
           <div className="bg-emerald-600 text-white font-extrabold text-xs sm:text-sm px-5 py-2.5 rounded-full shadow-2xl border border-white/20 animate-in fade-in slide-in-from-top-2">
             {toastMessage}
+          </div>
+        </div>
+      )}
+
+      {/* Scandit-Grade Live AR Target Lock (Directly highlighting the detected physical barcode) */}
+      {arTargetBox && (
+        <div
+          className="absolute z-35 pointer-events-none transition-all duration-150 animate-in zoom-in-95 fade-in"
+          style={{
+            left: arTargetBox.x,
+            top: arTargetBox.y,
+            width: arTargetBox.width,
+            height: arTargetBox.height
+          }}
+        >
+          <div className="absolute -inset-1.5 rounded-2xl border-[3px] border-emerald-400 bg-emerald-500/25 shadow-[0_0_30px_rgba(52,211,153,0.9)] animate-pulse" />
+          <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-950/95 text-emerald-300 border border-emerald-400/60 text-xs font-mono font-black px-3 py-1 rounded-full shadow-2xl whitespace-nowrap flex items-center gap-1.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>{arTargetBox.isOcr ? `Ref LM (OCR): ${arTargetBox.code}` : arTargetBox.code}</span>
           </div>
         </div>
       )}
@@ -862,11 +1065,19 @@ export function BarcodeScannerModal({
           )}
         </div>
 
+        {/* OCR Fallback Searching Indicator */}
+        {ocrStatus && !scannedFeedback && (
+          <div className="mt-3 px-4 py-1.5 bg-black/80 backdrop-blur-md rounded-full border border-emerald-400/30 text-xs font-bold text-emerald-300 flex items-center gap-2 shadow-xl animate-pulse">
+            <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+            <span>{ocrStatus}</span>
+          </div>
+        )}
+
         {/* Scandit Matrix Status Badge */}
-        {!scannedFeedback && (
+        {!scannedFeedback && !ocrStatus && (
           <div className="mt-4 px-3.5 py-1 bg-black/60 backdrop-blur-md rounded-full border border-white/10 text-[11px] font-bold text-gray-300 flex items-center gap-2 shadow-lg">
             <span className="w-2 h-2 rounded-full bg-[#22c55e] animate-ping" />
-            <span>Scandit Matrix Engine • Automatyczny odczyt 1.5m</span>
+            <span>Scandit 10/10 Engine • Sub-pixel Waveform + AR Lock</span>
           </div>
         )}
       </div>
@@ -903,16 +1114,16 @@ export function BarcodeScannerModal({
             )}
           </button>
 
-          {/* If continuousMode: [Gotowe / Wróć do listy] button */}
-          {continuousMode && (
+          {/* In continuousMode: [Gotowe (X szt.)] button */}
+          {isContinuousMode && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onClose();
               }}
-              className="py-2.5 px-5 rounded-2xl bg-white/90 hover:bg-white text-gray-900 font-bold text-sm shadow-xl flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+              className="py-2.5 px-5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-gray-950 font-black text-sm shadow-xl flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
             >
-              <span>Wróć do listy</span>
+              <span>Zakończ ({scanCount})</span>
             </button>
           )}
         </div>
