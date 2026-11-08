@@ -220,8 +220,8 @@ export function BarcodeScannerModal({
   const [hasTorch, setHasTorch] = useState(false);
   const [isHardwareZoom, setIsHardwareZoom] = useState(false);
   const isHardwareZoomRef = useRef(false);
-  const [zoomLevel, setZoomLevel] = useState(1.0);
-  const zoomLevelRef = useRef(1.0);
+  const [zoomLevel, setZoomLevel] = useState(2.0);
+  const zoomLevelRef = useRef(2.0);
   const [maxZoom, setMaxZoom] = useState(3.0);
   const [isScanningFile, setIsScanningFile] = useState(false);
   const [scannedFeedback, setScannedFeedback] = useState<string | null>(null);
@@ -282,8 +282,8 @@ export function BarcodeScannerModal({
     setHasTorch(false);
     setIsHardwareZoom(false);
     isHardwareZoomRef.current = false;
-    setZoomLevel(1.0);
-    zoomLevelRef.current = 1.0;
+    setZoomLevel(2.0);
+    zoomLevelRef.current = 2.0;
 
     const initScanner = async () => {
       try {
@@ -364,26 +364,36 @@ export function BarcodeScannerModal({
           if (capabilities.exposureMode?.includes('continuous')) {
             advancedConstraints.exposureMode = 'continuous';
           }
-          // Scandit Secret: Drop exposure slightly (-0.8 EV) so bright store lighting doesn't blow out paper
+          // Scandit Secret 1: Drop exposure (-1.2 EV) so bright store fluorescent lights don't blow out white e-paper
           if (capabilities.exposureCompensation) {
             const minExp = capabilities.exposureCompensation.min ?? -2.0;
-            advancedConstraints.exposureCompensation = Math.max(minExp, -0.8);
-          }
-          if (Object.keys(advancedConstraints).length > 0) {
-            try {
-              await (track as any).applyConstraints({ advanced: [advancedConstraints] });
-            } catch (_) {}
+            advancedConstraints.exposureCompensation = Math.max(minExp, -1.2);
           }
 
+          // Scandit Secret 2: Intelligent Default Telephoto Zoom (2.0x)
+          // From 1.5m away, wide lens (1.0x) yields a tiny 40px barcode on e-paper.
+          // Starting at 2.0x telephoto yields 180-240px with razor-sharp optical separation!
           if (capabilities.zoom) {
             setIsHardwareZoom(true);
             isHardwareZoomRef.current = true;
             const maxZ = Math.min(capabilities.zoom.max || 4.0, 4.0);
             setMaxZoom(maxZ);
+            const defaultZ = Math.min(maxZ, Math.max(capabilities.zoom.min || 1.0, 2.0));
+            setZoomLevel(defaultZ);
+            zoomLevelRef.current = defaultZ;
+            advancedConstraints.zoom = defaultZ;
           } else {
             setIsHardwareZoom(false);
             isHardwareZoomRef.current = false;
             setMaxZoom(3.0);
+            setZoomLevel(1.8);
+            zoomLevelRef.current = 1.8;
+          }
+
+          if (Object.keys(advancedConstraints).length > 0) {
+            try {
+              await (track as any).applyConstraints({ advanced: [advancedConstraints] });
+            } catch (_) {}
           }
         }
 

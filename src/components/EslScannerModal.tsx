@@ -164,15 +164,23 @@ export function EslScannerModal({
         if (track) {
           const capabilities = (track.getCapabilities ? track.getCapabilities() : {}) as any;
           if (capabilities.torch) setHasTorch(true);
+          const advancedConstraints: any = {};
+          if (capabilities.exposureCompensation) {
+            const minExp = capabilities.exposureCompensation.min ?? -2.0;
+            advancedConstraints.exposureCompensation = Math.max(minExp, -1.2);
+          }
           if (capabilities.zoom) {
             setHasZoom(true);
             const maxZ = Math.min(capabilities.zoom.max || 3.0, 3.0);
-            const defaultZ = Math.min(1.8, maxZ);
+            const defaultZ = Math.min(2.0, maxZ);
             setMaxZoom(maxZ);
             setZoomLevel(defaultZ);
+            advancedConstraints.zoom = defaultZ;
+          }
+          if (Object.keys(advancedConstraints).length > 0) {
             try {
               await (track as any).applyConstraints({
-                advanced: [{ zoom: defaultZ }]
+                advanced: [advancedConstraints]
               });
             } catch (_) {}
           }
