@@ -327,40 +327,35 @@ export function WarehousePanel({
 
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 flex flex-col gap-4 pb-12 sm:pb-8">
-      {/* Sleek, Modern Control Bar: Takes ~80px max on mobile, looks gorgeous on desktop */}
+      {/* Sleek, Modern Control Bar: Works seamlessly on mobile and desktop without wrapping */}
       <div className="flex flex-col gap-2.5 print:hidden">
-        {/* Row 1: Title + Info badge + Quick action pills */}
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
-            <h1 className="text-base sm:text-lg font-bold text-gray-900 tracking-tight">
-              Magazyn {STORE_NUMBER}
+        {/* Row 1: Header + Action group */}
+        <div className="flex items-center justify-between gap-2">
+          {/* Title & metadata */}
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-lg font-black text-gray-900 tracking-tight flex items-center gap-1.5 truncate">
+              <span>Magazyn {STORE_NUMBER}</span>
+              <span className="text-[11px] font-semibold text-gray-500 font-sans hidden xs:inline">
+                • {activeBays.length} reg. • {carpets.length} {carpets.length === 1 ? 'dywan' : 'dywanów'}
+              </span>
             </h1>
-            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 text-[11px] font-semibold border border-blue-200/60">
-              {activeBays.length} regałów • {carpets.length} {carpets.length === 1 ? 'dywan' : 'dywanów'}
-            </span>
+            <div className="text-[10px] text-gray-500 font-medium xs:hidden">
+              {activeBays.length} regałów • {carpets.length} dywanów
+            </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            {/* Quick action: Stock expo */}
-            <button
-              onClick={onOpenStockExpo}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer"
-              title="Zajętość i wolne miejsca na regałach"
-            >
-              <BarChart2 className="w-3.5 h-3.5 text-amber-700" />
-              <span className="hidden sm:inline">Stock expo</span>
-            </button>
-
+          {/* Quick action buttons */}
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             {/* Quick action: Audyt Power BI */}
             {onOpenPowerBiAudit && (
               <button
                 onClick={onOpenPowerBiAudit}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-950 border border-amber-300 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer"
+                className="inline-flex items-center gap-1 sm:gap-1.5 h-8 sm:h-9 px-2 sm:px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-950 border border-amber-300 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer shrink-0"
                 title="Porównaj ekspozycję sklepu z oficjalnym raportem Stock Expo w Power BI"
               >
-                <BarChart3 className="w-3.5 h-3.5 text-amber-700" />
+                <BarChart3 className="w-3.5 h-3.5 text-amber-700 shrink-0" />
                 <span className="hidden sm:inline">Audyt Power BI</span>
-                <span className="sm:hidden">PBI</span>
+                <span className="sm:hidden font-extrabold text-[11px]">PBI</span>
                 {typeof pbiCount === 'number' && pbiCount > 0 && (
                   <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-amber-200 text-amber-900 font-mono font-bold">
                     {pbiCount}
@@ -369,44 +364,54 @@ export function WarehousePanel({
               </button>
             )}
 
-            {/* Quick action: Historia zmian (audyt) */}
+            {/* Quick action: Stock expo */}
+            <button
+              onClick={onOpenStockExpo}
+              className="inline-flex items-center gap-1 sm:gap-1.5 h-8 sm:h-9 px-2 sm:px-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer shrink-0"
+              title="Zajętość i wolne miejsca na regałach"
+            >
+              <BarChart2 className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+              <span className="hidden sm:inline">Stock expo</span>
+            </button>
+
+            {/* Quick action: Historia zmian (audyt - visible on sm+) */}
             <button
               onClick={onOpenActivityLogs}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer"
-              title="Zobacz kto dodał, zmienił lub zdjął dywan"
+              className="hidden sm:inline-flex items-center gap-1.5 h-9 px-3 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer shrink-0"
+              title="Zobacz historię zmian magazynu"
             >
-              <History className="w-3.5 h-3.5 text-purple-700" />
-              <span className="hidden sm:inline">Historia</span>
+              <History className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+              <span>Historia</span>
             </button>
 
             {/* Main Tools button: opens WarehouseToolsModal */}
             <button
               onClick={() => setIsToolsOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
+              className="inline-flex items-center gap-1 sm:gap-1.5 h-8 sm:h-9 px-2.5 sm:px-3 rounded-xl bg-gray-900 hover:bg-black text-white text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer shrink-0"
               title="Wszystkie opcje magazynu (import, eksport, kopia, zarządzanie)"
             >
-              <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
-              <span>Narzędzia</span>
+              <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="hidden xs:inline">Narzędzia</span>
             </button>
           </div>
         </div>
 
-        {/* Row 2: Compact Search & Filter Strip */}
-        <div className="bg-white border border-gray-200 rounded-xl p-2 sm:p-2.5 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 text-xs">
+        {/* Row 2: Search & Filter Toolbar */}
+        <div className="bg-white border border-gray-200 rounded-2xl p-2 sm:p-2.5 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 text-xs">
           {/* Search box */}
           <div className="relative flex-1">
-            <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={filterQuery}
               onChange={(e) => setFilterQuery(e.target.value)}
-              placeholder="Szukaj magazynu, ref, EAN, nazwy..."
-              className="w-full pl-8 pr-7 py-1.5 text-xs sm:text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-hidden"
+              placeholder="Szukaj regału, ref, EAN, nazwy..."
+              className="w-full pl-9 pr-8 py-2 text-xs sm:text-sm border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-hidden"
             />
             {filterQuery && (
               <button
                 onClick={() => setFilterQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 text-xs font-bold p-0.5 cursor-pointer"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 text-xs font-bold p-1 cursor-pointer"
               >
                 ✕
               </button>
@@ -415,26 +420,45 @@ export function WarehousePanel({
 
           {/* Filter chips & Sort dropdown */}
           <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1 bg-gray-100 p-0.5 rounded-xl border border-gray-200">
               <button
                 type="button"
-                onClick={() => setOnlyEmpty(!onlyEmpty)}
-                className={`px-2 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer select-none border ${
-                  onlyEmpty
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-200'
+                onClick={() => {
+                  setOnlyEmpty(false);
+                  setOnlyNew(false);
+                }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  !onlyEmpty && !onlyNew
+                    ? 'bg-white text-gray-900 shadow-2xs'
+                    : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                Tylko puste
+                Wszystkie
               </button>
-
               <button
                 type="button"
-                onClick={() => setOnlyNew(!onlyNew)}
-                className={`px-2 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer select-none border ${
+                onClick={() => {
+                  setOnlyEmpty(!onlyEmpty);
+                  if (!onlyEmpty) setOnlyNew(false);
+                }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  onlyEmpty
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Puste
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOnlyNew(!onlyNew);
+                  if (!onlyNew) setOnlyEmpty(false);
+                }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   onlyNew
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-200'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 Nowe &lt;30d
@@ -444,13 +468,48 @@ export function WarehousePanel({
             <select
               value={sortOrder}
               onChange={(e) => setSortOrder(e.target.value as any)}
-              className="px-2 py-1 border border-gray-200 rounded-md text-xs font-medium bg-gray-50 text-gray-700 hover:bg-white focus:outline-hidden cursor-pointer"
+              className="h-8 px-2 border border-gray-200 rounded-xl text-xs font-bold bg-gray-50 text-gray-700 hover:bg-white focus:outline-hidden cursor-pointer shrink-0"
             >
               <option value="asc">1 → {activeBays.length}</option>
               <option value="desc">{activeBays.length} → 1</option>
             </select>
           </div>
         </div>
+
+        {/* Row 3: Quick Rack Navigator (Jump to rack) */}
+        {activeBays.length > 0 && (
+          <div className="flex items-center gap-1 overflow-x-auto py-1 px-0.5 text-xs">
+            <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider shrink-0 pr-1">
+              Regał:
+            </span>
+            {baysList.map((bayNum) => {
+              const count = carpetsByBay.get(bayNum)?.length || 0;
+              return (
+                <button
+                  key={`jump-${bayNum}`}
+                  onClick={() => {
+                    const el = document.getElementById(`bay-card-${bayNum}`);
+                    if (el) {
+                      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      el.classList.add('ring-4', 'ring-blue-400');
+                      setTimeout(() => el.classList.remove('ring-4', 'ring-blue-400'), 1500);
+                    }
+                  }}
+                  className={`min-w-[28px] h-7 px-1.5 rounded-lg font-mono font-bold text-xs shrink-0 transition-all cursor-pointer flex items-center justify-center border ${
+                    count === 2
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                      : count === 1
+                      ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                      : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                  }`}
+                  title={`Magazyn ${bayNum} (${count}/2 dywany)`}
+                >
+                  {bayNum}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Warehouse Tools Modal */}
@@ -545,7 +604,8 @@ export function WarehousePanel({
           return (
             <div
               key={bayNum}
-              className={`${theme.cardBg} border ${theme.cardBorder} rounded-2xl shadow-xs overflow-hidden flex flex-col transition-all hover:shadow-md`}
+              id={`bay-card-${bayNum}`}
+              className={`${theme.cardBg} border ${theme.cardBorder} rounded-2xl shadow-xs overflow-hidden flex flex-col transition-all hover:shadow-md scroll-mt-18`}
             >
               {/* Bay Header: "Magazyn X" with distinct color strip + badges + [Super Admin: Usuń Magazyn] */}
               <div className={`px-4 sm:px-5 py-3 ${theme.headerBg} border-b ${theme.headerBorder} flex items-center justify-between gap-2`}>
