@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
 @media screen {
-  #stock-expo-report-printable {
+  #stock-expo-report-printable,
+  #pbi-audit-printable {
     position: absolute !important;
     left: -9999px !important;
     top: -9999px !important;
@@ -22,7 +23,7 @@
   }
 
   /* Hide app navigation, main warehouse cards, and buttons */
-  header, nav, main, button, .print\:hidden, .stock-expo-screen-only {
+  header, nav, main, button, .print\:hidden, .stock-expo-screen-only, .pbi-screen-only {
     display: none !important;
   }
 
@@ -34,7 +35,8 @@
   }
   
   /* Modal print unwrap */
-  .stock-expo-modal-backdrop {
+  .stock-expo-modal-backdrop,
+  .pbi-modal-backdrop {
     position: static !important;
     inset: auto !important;
     background: transparent !important;
@@ -44,7 +46,8 @@
     display: block !important;
   }
 
-  .stock-expo-modal-container {
+  .stock-expo-modal-container,
+  .pbi-modal-container {
     position: static !important;
     max-width: 100% !important;
     max-height: none !important;
@@ -59,7 +62,8 @@
   }
 
   /* Show ONLY the printable table */
-  #stock-expo-report-printable {
+  #stock-expo-report-printable,
+  #pbi-audit-printable {
     position: static !important;
     left: auto !important;
     top: auto !important;
@@ -72,7 +76,8 @@
     padding: 0 !important;
   }
 
-  .print-rack-group {
+  .print-rack-group,
+  .pbi-print-row {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }

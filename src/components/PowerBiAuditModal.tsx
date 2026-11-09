@@ -158,7 +158,7 @@ export function PowerBiAuditModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-hidden animate-in fade-in">
+    <div className="pbi-modal-backdrop fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-hidden animate-in fade-in">
       {/* Hidden file input */}
       <input
         type="file"
@@ -168,60 +168,62 @@ export function PowerBiAuditModal({
         className="hidden"
       />
 
-      <div className="bg-white rounded-3xl sm:rounded-2xl w-full max-w-5xl h-[94vh] flex flex-col shadow-2xl overflow-hidden border border-gray-200">
-        {/* Header */}
-        <div className="px-4 py-3.5 sm:px-6 sm:py-4 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3 bg-gray-50/80 shrink-0">
-          <div className="flex items-center gap-3">
-            <LeroyMerlinLogo className="h-9 sm:h-10" />
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-black text-gray-900 tracking-tight">
-                  Audyt Stock Expo (Power BI)
-                </h2>
-                <span className="px-2 py-0.5 text-[11px] font-extrabold bg-blue-100 text-blue-700 rounded-md">
-                  Sklep {STORE_NUMBER} {STORE_CITY}
-                </span>
+      <div className="pbi-modal-container bg-white rounded-3xl sm:rounded-2xl w-full max-w-5xl h-[94vh] flex flex-col shadow-2xl overflow-hidden border border-gray-200">
+        {/* =========================================================================
+            1. ON-SCREEN MODAL UI (HIDDEN ON PRINT via pbi-screen-only)
+           ========================================================================= */}
+        <div className="pbi-screen-only flex flex-col h-full overflow-hidden">
+          {/* Header */}
+          <div className="px-4 py-3.5 sm:px-6 sm:py-4 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3 bg-gray-50/80 shrink-0">
+            <div className="flex items-center gap-3">
+              <LeroyMerlinLogo className="h-9 sm:h-10" />
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base sm:text-lg font-black text-gray-900 tracking-tight">
+                    Audyt Stock Expo (Power BI)
+                  </h2>
+                  <span className="px-2 py-0.5 text-[11px] font-extrabold bg-blue-100 text-blue-700 rounded-md">
+                    Sklep {STORE_NUMBER} {STORE_CITY}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 font-medium hidden sm:block">
+                  Porównanie oficjalnego stanu ekspozycji Power BI z fizycznymi regałami w sklepie
+                </p>
               </div>
-              <p className="text-xs text-gray-500 font-medium hidden sm:block">
-                Porównanie oficjalnego stanu ekspozycji Power BI z fizycznymi regałami w sklepie
-              </p>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2">
-            {/* Open direct in Power BI button */}
-            <a
-              href={POWER_BI_STOCK_EXPO_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-gray-950 font-black text-xs shadow-xs transition-all cursor-pointer"
-              title="Otwórz raport bezpośrednio w Power BI (w nowej karcie z Twoim logowaniem służbowym)"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span>Otwórz w Power BI</span>
-            </a>
+            <div className="flex items-center gap-2">
+              {/* Open direct in Power BI button */}
+              <a
+                href={POWER_BI_STOCK_EXPO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-gray-950 font-black text-xs shadow-xs transition-all cursor-pointer"
+                title="Otwórz raport bezpośrednio w Power BI (w nowej karcie z Twoim logowaniem służbowym)"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span className="hidden xs:inline">Otwórz w Power BI</span>
+              </a>
 
-            {/* Print button */}
-            {comparison.missingOnShelf.length > 0 && (
+              {/* Print button */}
               <button
                 onClick={handlePrintMissing}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-900 hover:bg-black text-white font-bold text-xs transition-all shadow-xs cursor-pointer active:scale-95"
                 title="Wydrukuj listę brakujących dywanów do powieszenia (A4)"
               >
-                <Printer className="w-3.5 h-3.5" />
-                <span>Drukuj listę</span>
+                <Printer className="w-3.5 h-3.5 text-amber-400" />
+                <span>Drukuj listę ({comparison.missingOnShelf.length})</span>
               </button>
-            )}
 
-            {/* Close button */}
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
+              {/* Close button */}
+              <button
+                onClick={onClose}
+                className="p-1.5 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
-        </div>
 
         {/* Top summary card */}
         <div className="p-3 sm:p-5 border-b border-gray-100 bg-white shrink-0 flex flex-col gap-3">
@@ -576,12 +578,23 @@ export function PowerBiAuditModal({
             /* Table of items */
             <div className="flex flex-col gap-2">
               {activeTab === 'missing' && (
-                <div className="mb-2 p-2.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-900 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
-                  <span>
-                    Poniższe dywany figurują w Power BI jako <strong>wpisane na ekspozycję (stock = 1,00)</strong>, lecz nie są przypisane do żadnego regału w sklepie.
-                    Kliknij <strong>„Zawieś na regale”</strong>, aby natychmiast przypisać im miejsce.
-                  </span>
+                <div className="mb-2 p-2.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-900 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 max-w-xl">
+                    <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                    <span>
+                      Poniższe dywany figurują w Power BI jako <strong>wpisane na ekspozycję (stock = 1,00)</strong>, lecz nie są przypisane do żadnego regału w sklepie.
+                      Kliknij <strong>„Zawieś na regale”</strong>, aby natychmiast przypisać im miejsce.
+                    </span>
+                  </div>
+                  {comparison.missingOnShelf.length > 0 && (
+                    <button
+                      onClick={handlePrintMissing}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-xs transition-all cursor-pointer active:scale-95 shrink-0"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Drukuj listę braków A4 ({comparison.missingOnShelf.length})</span>
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -710,6 +723,89 @@ export function PowerBiAuditModal({
               </div>
             </div>
           )}
+        </div>
+        </div>
+
+        {/* =========================================================================
+            2. PRINTABLE DOCUMENT (ONLY VISIBLE ON PRINT)
+            A4 sheet for store team: Missing carpets to hang on the racks
+           ========================================================================= */}
+        <div id="pbi-audit-printable">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b-2 border-black pb-3 mb-3">
+            <div className="flex items-center gap-3">
+              <LeroyMerlinLogo className="h-9" />
+              <div>
+                <h1 className="text-base font-black text-black uppercase tracking-tight">
+                  Audyt Stock Expo Power BI — Lista braków do powieszenia
+                </h1>
+                <div className="text-[11px] text-gray-700 font-bold">
+                  LEROY MERLIN • Sklep {STORE_NUMBER} {STORE_CITY} • Dział 12 Dywany (Poddział 05)
+                </div>
+              </div>
+            </div>
+
+            <div className="text-right text-[11px] leading-tight">
+              <div>Wydruk: <strong className="font-mono">{new Date().toLocaleDateString('pl-PL')} {new Date().toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}</strong></div>
+              <div>Raport Power BI: <strong>{comparison.totalPbi} pozycji</strong></div>
+              <div>Na regale: <strong>{comparison.matched.length}</strong> ({comparison.complianceRate}%) | Braki: <strong className="text-red-700 font-black">{comparison.missingOnShelf.length}</strong></div>
+            </div>
+          </div>
+
+          {/* Table */}
+          {comparison.missingOnShelf.length === 0 ? (
+            <div className="py-8 text-center border border-black p-4">
+              <div className="text-sm font-black text-black">Wszystkie dywany z raportu Power BI wiszą na regałach! (Pokrycie 100%)</div>
+              <div className="text-xs text-gray-600 mt-1">Brak pozycji do powieszenia.</div>
+            </div>
+          ) : (
+            <table className="w-full border-collapse border border-black text-[11px]">
+              <thead>
+                <tr className="bg-gray-100 border-b-2 border-black text-black uppercase text-[10px] tracking-wider font-black">
+                  <th className="p-1.5 border border-black w-[35px] text-center">LP</th>
+                  <th className="p-1.5 border border-black w-[95px] text-center">REF LM</th>
+                  <th className="p-1.5 border border-black">Nazwa / Opis dywanu (Power BI)</th>
+                  <th className="p-1.5 border border-black w-[60px] text-center">Stock</th>
+                  <th className="p-1.5 border border-black w-[130px] text-center">Zawieś na regale</th>
+                  <th className="p-1.5 border border-black w-[110px] text-center">Powieszono [ ✓ ]</th>
+                </tr>
+              </thead>
+              <tbody>
+                {comparison.missingOnShelf.map((item, idx) => (
+                  <tr key={item.ref} className="pbi-print-row border-b border-gray-400">
+                    <td className="p-1.5 border border-black text-center font-bold font-mono text-[10px] bg-gray-50">
+                      {idx + 1}
+                    </td>
+                    <td className="p-1.5 border border-black text-center font-black font-mono text-xs">
+                      {item.ref}
+                    </td>
+                    <td className="p-1.5 border border-black font-bold text-black text-[11px] leading-tight">
+                      {item.opis}
+                    </td>
+                    <td className="p-1.5 border border-black text-center font-mono font-bold text-xs">
+                      {item.stock.toFixed(2).replace('.', ',')}
+                    </td>
+                    <td className="p-1.5 border border-black text-center text-[10px] text-gray-500 font-mono">
+                      Regał: ____ Slot: [A/B]
+                    </td>
+                    <td className="p-1.5 border border-black text-center">
+                      <div className="inline-block w-4 h-4 border-2 border-black rounded-xs"></div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {/* Footer instructions */}
+          <div className="mt-3 pt-2 border-t border-gray-400 flex items-center justify-between text-[10px] text-gray-600">
+            <div>
+              Instrukcja: Odszukaj dywan w strefie zaplecza/dostaw, zawieś na wolnym ramieniu ekspozytora, a następnie dodaj w aplikacji.
+            </div>
+            <div className="font-bold">
+              Strona wydruku A4 • System Zarządzania Ekspozycją Dywanów
+            </div>
+          </div>
         </div>
       </div>
     </div>
