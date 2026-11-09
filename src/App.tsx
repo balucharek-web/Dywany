@@ -20,7 +20,7 @@ import {
   User
 } from 'firebase/auth';
 import { db, auth, googleProvider, handleFirestoreError, OperationType } from './firebase';
-import { Carpet, AdminUser, Warehouse, ActivityLog, ActivityAction, SUPER_ADMIN_EMAIL, STORE_NUMBER, STORE_CITY } from './types';
+import { Carpet, AdminUser, Warehouse, ActivityLog, ActivityAction, SUPER_ADMIN_EMAIL, STORE_NUMBER, STORE_CITY, PowerBiStockExpoItem } from './types';
 import { initialCarpets } from './data/seedData';
 import { initProductCatalog, saveProductToCatalog, batchSaveToCatalog } from './services/catalogService';
 import { Header } from './components/Header';
@@ -31,6 +31,7 @@ import { BarcodeScannerModal } from './components/BarcodeScannerModal';
 import { FiszkaModal } from './components/FiszkaModal';
 import { FiszkiBatchModal, FiszkaItem } from './components/FiszkiBatchModal';
 import { StockExpoModal } from './components/StockExpoModal';
+import { PowerBiAuditModal } from './components/PowerBiAuditModal';
 import { ImportModal } from './components/ImportModal';
 import { EditCarpetModal } from './components/EditCarpetModal';
 import { AdminManagementModal } from './components/AdminManagementModal';
@@ -110,6 +111,10 @@ export default function App() {
   const [isFiszkiBatchModalOpen, setIsFiszkiBatchModalOpen] = useState(false);
   const [batchFiszkiItems, setBatchFiszkiItems] = useState<FiszkaItem[]>([]);
   const [isStockExpoOpen, setIsStockExpoOpen] = useState(false);
+  const [isPowerBiAuditOpen, setIsPowerBiAuditOpen] = useState(false);
+  const [powerBiItems, setPowerBiItems] = useState<PowerBiStockExpoItem[]>([]);
+  const [powerBiUpdatedAt, setPowerBiUpdatedAt] = useState<string | undefined>(undefined);
+  const [powerBiUpdatedBy, setPowerBiUpdatedBy] = useState<string | undefined>(undefined);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isAdminManagementOpen, setIsAdminManagementOpen] = useState(false);
@@ -351,6 +356,31 @@ export default function App() {
 
     return () => unsubscribeLogs();
   }, [currentUser]);
+
+  // Real-time synchronization of Power BI Stock Expo from Firestore
+  useEffect(() => {
+    const docRef = doc(db, 'powerbi_stock_expo', `store_${STORE_NUMBER}`);
+    const unsubscribePbi = onSnapshot(
+      docRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setPowerBiItems(Array.isArray(data.items) ? data.items : []);
+          setPowerBiUpdatedAt(data.updatedAt);
+          setPowerBiUpdatedBy(data.updatedBy);
+        } else {
+          setPowerBiItems([]);
+          setPowerBiUpdatedAt(undefined);
+          setPowerBiUpdatedBy(undefined);
+        }
+      },
+      (error) => {
+        console.warn('Power BI stock expo listener notice:', error.message);
+      }
+    );
+
+    return () => unsubscribePbi();
+  }, []);
 
   // Security: Auto-logout after 20 minutes of inactivity to protect shared store terminals
   useEffect(() => {
@@ -889,6 +919,71 @@ export default function App() {
     }
   };
 
+  // Save or clear Power BI Stock Expo items in Firestore
+  const handleSavePowerBiItems = async (items: PowerBiStockExpoItem[]) => {
+    try {
+      const docRef = doc(db, 'powerbi_stock_expo', `store_${STORE_NUMBER}`);
+      const userEmail = currentUser?.email || 'admin@leroymerlin.pl';
+      const timestamp = new Date().toISOString();
+
+      if (items.length === 0) {
+        await deleteDoc(docRef);
+        await logActivity(
+          'delete',
+          'Power BI Stock Expo',
+          `Wyczyścił bazę Power BI Stock Expo dla Sklepu ${STORE_NUMBER}`
+        );
+      } else {
+        await setDoc(docRef, {
+          items,
+          totalCount: items.length,
+          updatedAt: timestamp,
+          updatedBy: userEmail,
+          store: STORE_NUMBER
+        });
+        await logActivity(
+          'edit',
+          `Power BI Stock Expo (${items.length} pozycji)`,
+          `Zaktualizował bazę Stock Expo z Power BI: ${items.length} pozycji dla Sklepu ${STORE_NUMBER}`
+        );
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `powerbi_stock_expo/store_${STORE_NUMBER}`);
+    }
+  };
+
+  // Quick assign a missing Power BI carpet to a free rack
+  const handleAssignPowerBiItemToRack = (ref: string, nazwa: string) => {
+    const occupiedKeys = new Set(
+      carpets.map((c) => `${c.magazyn}_${(c.podmagazyn || 'A').toUpperCase()}`)
+    );
+    let suggestedBay = activeBays[0] || 1;
+    let suggestedSub = 'A';
+
+    for (const b of activeBays) {
+      if (!occupiedKeys.has(`${b}_A`)) {
+        suggestedBay = b;
+        suggestedSub = 'A';
+        break;
+      }
+      if (!occupiedKeys.has(`${b}_B`)) {
+        suggestedBay = b;
+        suggestedSub = 'B';
+        break;
+      }
+    }
+
+    setCarpetToEdit({
+      magazyn: suggestedBay,
+      podmagazyn: suggestedSub,
+      miejsce: `${suggestedBay} ${suggestedSub}`,
+      nazwa: nazwa || `Dywan ${ref}`,
+      ref: ref,
+      dodano: new Date().toISOString().split('T')[0]
+    });
+    setIsEditCarpetOpen(true);
+  };
+
   // Super Admin: Add Admin Email with selected role
   const handleAddAdminEmail = async (email: string, role: 'admin' | 'superadmin' = 'admin') => {
     if (!isSuperAdmin) {
@@ -1252,6 +1347,8 @@ export default function App() {
               onDeleteWarehouse={handleDeleteWarehouse}
               onAddWarehouses={handleAddWarehouses}
               onMoveProduct={handleOpenMoveModal}
+              onOpenPowerBiAudit={() => setIsPowerBiAuditOpen(true)}
+              pbiCount={powerBiItems.length}
             />
           </div>
         )}
@@ -1305,6 +1402,17 @@ export default function App() {
           setCurrentView('warehouse');
           handleOpenAdd(bay, sub);
         }}
+      />
+
+      <PowerBiAuditModal
+        isOpen={isPowerBiAuditOpen}
+        onClose={() => setIsPowerBiAuditOpen(false)}
+        carpets={carpets}
+        pbiItems={powerBiItems}
+        pbiUpdatedAt={powerBiUpdatedAt}
+        pbiUpdatedBy={powerBiUpdatedBy}
+        onSavePbiItems={handleSavePowerBiItems}
+        onAssignToRack={handleAssignPowerBiItemToRack}
       />
 
       <ImportModal

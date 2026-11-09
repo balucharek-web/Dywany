@@ -13,7 +13,8 @@ import {
   ShieldCheck,
   Package,
   ArrowLeftRight,
-  RefreshCw
+  RefreshCw,
+  BarChart3
 } from 'lucide-react';
 import { STORE_NUMBER } from '../types';
 import { downloadCbaPackage } from '../utils/downloadCbaPackage';
@@ -23,6 +24,8 @@ interface WarehouseToolsModalProps {
   onClose: () => void;
   onOpenImport: () => void;
   onOpenStockExpo: () => void;
+  onOpenPowerBiAudit: () => void;
+  pbiCount?: number;
   onExportJSON: () => void;
   onExportXLSX: () => void;
   onOpenActivityLogs: () => void;
@@ -40,6 +43,8 @@ export function WarehouseToolsModal({
   onClose,
   onOpenImport,
   onOpenStockExpo,
+  onOpenPowerBiAudit,
+  pbiCount,
   onExportJSON,
   onExportXLSX,
   onOpenActivityLogs,
@@ -96,6 +101,29 @@ export function WarehouseToolsModal({
                 <div>
                   <div className="text-xs sm:text-sm font-bold">Stock expo</div>
                   <div className="text-[10px] text-amber-800 font-normal">Zajętość i wolne miejsca</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenPowerBiAudit();
+                }}
+                className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-950 font-bold border border-amber-300 transition-all text-left cursor-pointer active:scale-98"
+              >
+                <div className="w-8 h-8 rounded-lg bg-amber-500 text-gray-950 flex items-center justify-center shrink-0 font-black shadow-2xs">
+                  <BarChart3 className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs sm:text-sm font-bold flex items-center gap-1.5">
+                    <span>Audyt Power BI</span>
+                    {typeof pbiCount === 'number' && pbiCount > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-amber-200 text-amber-900 font-mono font-bold">
+                        {pbiCount}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-amber-800 font-normal">Porównaj ze Stock Expo</div>
                 </div>
               </button>
 

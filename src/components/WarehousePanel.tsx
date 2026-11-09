@@ -21,7 +21,8 @@ import {
   Clock,
   SlidersHorizontal,
   ArrowLeftRight,
-  ExternalLink
+  ExternalLink,
+  BarChart3
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { formatDateTime, formatRelativeTime, getLeroyMerlinSearchUrl } from '../utils/formatters';
@@ -144,6 +145,8 @@ interface WarehousePanelProps {
   onDeleteWarehouse: (bayNumber: number, deleteCarpets: boolean) => Promise<void>;
   onAddWarehouses: (numbers: number[]) => Promise<void>;
   onMoveProduct?: (carpet: Carpet) => void;
+  onOpenPowerBiAudit?: () => void;
+  pbiCount?: number;
 }
 
 export function WarehousePanel({
@@ -162,7 +165,9 @@ export function WarehousePanel({
   onOpenSuperAdminModal,
   onDeleteWarehouse,
   onAddWarehouses,
-  onMoveProduct
+  onMoveProduct,
+  onOpenPowerBiAudit,
+  pbiCount
 }: WarehousePanelProps) {
   const [filterQuery, setFilterQuery] = useState('');
   const [onlyEmpty, setOnlyEmpty] = useState(false);
@@ -346,6 +351,24 @@ export function WarehousePanel({
               <span className="hidden sm:inline">Stock expo</span>
             </button>
 
+            {/* Quick action: Audyt Power BI */}
+            {onOpenPowerBiAudit && (
+              <button
+                onClick={onOpenPowerBiAudit}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-950 border border-amber-300 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer"
+                title="Porównaj ekspozycję sklepu z oficjalnym raportem Stock Expo w Power BI"
+              >
+                <BarChart3 className="w-3.5 h-3.5 text-amber-700" />
+                <span className="hidden sm:inline">Audyt Power BI</span>
+                <span className="sm:hidden">PBI</span>
+                {typeof pbiCount === 'number' && pbiCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-amber-200 text-amber-900 font-mono font-bold">
+                    {pbiCount}
+                  </span>
+                )}
+              </button>
+            )}
+
             {/* Quick action: Historia zmian (audyt) */}
             <button
               onClick={onOpenActivityLogs}
@@ -436,6 +459,8 @@ export function WarehousePanel({
         onClose={() => setIsToolsOpen(false)}
         onOpenImport={onOpenImport}
         onOpenStockExpo={onOpenStockExpo}
+        onOpenPowerBiAudit={onOpenPowerBiAudit || (() => {})}
+        pbiCount={pbiCount}
         onExportJSON={handleExportJSON}
         onExportXLSX={handleExportXLSX}
         onOpenActivityLogs={onOpenActivityLogs}

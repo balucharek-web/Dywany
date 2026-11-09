@@ -83,5 +83,13 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isValidId(catalogId) && isAdmin();
     }
+
+    // Power BI Stock Expo Audit:
+    // Readable by store team to see stock reconciliation.
+    // Admin can update or clear the Power BI audit dataset.
+    match /powerbi_stock_expo/{storeId} {
+      allow read: if true;
+      allow write: if isValidId(storeId) && isAdmin();
+    }
   }
 }

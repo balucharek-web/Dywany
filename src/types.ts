@@ -67,3 +67,25 @@ export const SUPER_ADMIN_EMAIL = 'baluch.arek@gmail.com';
 export const STORE_NUMBER = '038';
 export const STORE_CITY = 'MIKOŁÓW';
 export const STORE_NAME = 'Sklep 038 MIKOŁÓW';
+
+export interface PowerBiStockExpoItem {
+  id: string; // ref LM
+  ref: string;
+  opis: string;
+  stock: number;
+  sklep?: string;
+  dzial?: string;
+  poddzial?: string;
+  typ?: string;
+  podtyp?: string;
+}
+
+export interface PowerBiSyncState {
+  items: PowerBiStockExpoItem[];
+  updatedAt: string;
+  updatedBy: string;
+  totalCount: number;
+}
+
+export const POWER_BI_STOCK_EXPO_URL = 'https://app.powerbi.com/groups/e90c2306-1d07-41e2-861c-0d2af37d4e43/reports/5a86aebb-49ef-424c-a32e-03dc0fb96aa3/ReportSection?ctid=9f1db594-b8ab-4e59-b56b-4a3c145eaf07&pbi_source=shareVisual&visual=fcac75d2e8822d0a0519&height=613.30&width=739.08&bookmarkGuid=4274b0fd-cc1c-4b66-96b9-50b7be54a021';
+export const POWER_BI_EMBED_URL = 'https://app.powerbi.com/reportEmbed?reportId=5a86aebb-49ef-424c-a32e-03dc0fb96aa3&groupId=e90c2306-1d07-41e2-861c-0d2af37d4e43&ctid=9f1db594-b8ab-4e59-b56b-4a3c145eaf07&bookmarkGuid=4274b0fd-cc1c-4b66-96b9-50b7be54a021&autoAuth=true';
