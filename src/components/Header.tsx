@@ -1,7 +1,7 @@
 import { User } from 'firebase/auth';
 import { LeroyMerlinLogo } from './LeroyMerlinLogo';
 import { STORE_NUMBER, STORE_CITY } from '../types';
-import { LogOut, ShieldCheck, Database, Search, Users, RefreshCw } from 'lucide-react';
+import { LogOut, ShieldCheck, Database, Search, Users, RefreshCw, Sun, Moon } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 
 interface HeaderProps {
@@ -15,6 +15,8 @@ interface HeaderProps {
   onSwitchAccount?: () => void;
   onOpenSuperAdminModal: () => void;
   isSyncing: boolean;
+  theme?: 'light' | 'dark';
+  toggleTheme?: () => void;
 }
 
 export function Header({
@@ -27,7 +29,9 @@ export function Header({
   onLogoutClick,
   onSwitchAccount,
   onOpenSuperAdminModal,
-  isSyncing
+  isSyncing,
+  theme = 'light',
+  toggleTheme
 }: HeaderProps) {
   return (
     <header className="bg-white border-b border-gray-200 px-3 py-2.5 sm:px-6 shadow-xs sticky top-0 z-30">
@@ -39,7 +43,7 @@ export function Header({
             <div className="text-base sm:text-lg font-black text-blue-600 tracking-tight flex items-center gap-1.5">
               Sklep {STORE_NUMBER}
               <span
-                title={isSyncing ? "Synchronizowanie zmian..." : "Połączono w czasie rzeczywistym z bazą sklepu 038"}
+                title={isSyncing ? "Synchronizowanie zmian..." : `Połączono w czasie rzeczywistym z bazą sklepu ${STORE_NUMBER}`}
                 className={`inline-block w-2.5 h-2.5 rounded-full ${isSyncing ? "bg-amber-400 animate-ping" : "bg-emerald-500"}`}
               />
             </div>
@@ -51,6 +55,22 @@ export function Header({
 
         {/* Action buttons right */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* OLED Dark Mode Sun / Moon Switcher */}
+          {toggleTheme && (
+            <button
+              key="btn-theme-toggle"
+              onClick={toggleTheme}
+              className="p-2 rounded-xl text-gray-600 hover:text-gray-900 bg-gray-100/90 hover:bg-gray-200/90 border border-gray-200 transition-colors cursor-pointer flex items-center justify-center shadow-2xs"
+              title={theme === 'dark' ? 'Włącz tryb jasny' : 'Włącz tryb Pure OLED Black (oszczędza baterię na ekranach AMOLED)'}
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Moon className="w-4 h-4 text-gray-700" />
+              )}
+            </button>
+          )}
+
           {/* User info & account switch if logged in */}
           {user && (
             <div
@@ -68,7 +88,7 @@ export function Header({
               ) : isAdmin ? (
                 <span className="flex items-center gap-1 font-semibold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded text-[11px]">
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Admin 038</span>
+                  <span className="hidden sm:inline">Admin {STORE_NUMBER}</span>
                   <span className="sm:hidden">Admin</span>
                 </span>
               ) : (

@@ -7,6 +7,7 @@ import {
   updateDoc,
   deleteDoc,
   writeBatch,
+  runTransaction,
   getDoc,
   getDocs,
   query,
@@ -55,6 +56,43 @@ export default function App() {
 
   const handleSetCurrentView = (view: 'search' | 'warehouse') => {
     setCurrentView(view);
+  };
+
+  // Pure OLED Black Dark Mode (Opcja 4: saves 35-40% battery on AMOLED screens)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    try {
+      const saved = localStorage.getItem('lm_theme');
+      if (saved === 'dark' || saved === 'light') return saved;
+      if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        return 'dark';
+      }
+    } catch (_) {}
+    return 'light';
+  });
+
+  useEffect(() => {
+    try {
+      const root = document.documentElement;
+      if (theme === 'dark') {
+        root.classList.add('dark');
+      } else {
+        root.classList.remove('dark');
+      }
+      localStorage.setItem('lm_theme', theme);
+
+      // Dynamically update mobile browser address bar / status bar color
+      let metaThemeColor = document.querySelector('meta[name="theme-color"]');
+      if (!metaThemeColor) {
+        metaThemeColor = document.createElement('meta');
+        metaThemeColor.setAttribute('name', 'theme-color');
+        document.head.appendChild(metaThemeColor);
+      }
+      metaThemeColor.setAttribute('content', theme === 'dark' ? '#000000' : '#22c55e');
+    } catch (_) {}
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   };
 
   const [carpets, setCarpets] = useState<Carpet[]>([]);
@@ -332,7 +370,7 @@ export default function App() {
           setCurrentUser(null);
           handleSetCurrentView('search');
           setAuthRejectionError(
-            'Zostałeś automatycznie wylogowany z powodu 20 minut braku aktywności (ochrona sesji pracownika Sklepu 038).'
+            `Zostałeś automatycznie wylogowany z powodu 20 minut braku aktywności (ochrona sesji pracownika Sklepu ${STORE_NUMBER}).`
           );
         } catch {
           // ignore
@@ -535,7 +573,7 @@ export default function App() {
   // Add / Edit Carpet
   const handleSaveCarpet = async (data: Partial<Carpet>) => {
     if (!isAdmin) {
-      alert('Tylko uprawnieni administratorzy sklepu 038 mogą edytować magazyn.');
+      alert(`Tylko uprawnieni administratorzy sklepu ${STORE_NUMBER} mogą edytować magazyn.`);
       return;
     }
 
@@ -557,7 +595,12 @@ export default function App() {
     };
 
     try {
-      await setDoc(doc(db, 'carpets', docId), payload, { merge: true });
+      // Transactional integrity: prevents race conditions between multiple store associates
+      const carpetRef = doc(db, 'carpets', docId);
+      await runTransaction(db, async (transaction) => {
+        await transaction.get(carpetRef);
+        transaction.set(carpetRef, payload, { merge: true });
+      });
 
       // Permanently remember carpet product in Master Catalog (retained even after shelf deletion)
       if (payload.nazwa && (payload.ean || payload.ref)) {
@@ -649,7 +692,7 @@ export default function App() {
     mode: 'move' | 'swap' | 'overwrite'
   ) => {
     if (!isAdmin) {
-      alert('Tylko uprawnieni administratorzy sklepu 038 mogą przenosić dywany.');
+      alert(`Tylko uprawnieni administratorzy sklepu ${STORE_NUMBER} mogą przenosić dywany.`);
       return;
     }
 
@@ -669,32 +712,93 @@ export default function App() {
     const targetDocId = `mag_${targetBay}_${targetSub.trim().toUpperCase()}`;
     const sourceDocId = `mag_${sourceCarpet.magazyn}_${sourceCarpet.podmagazyn.trim().toUpperCase()}`;
 
-    const batch = writeBatch(db);
-
     try {
-      if (!targetCarpet || mode === 'move') {
-        // 1. Move to empty slot
-        const targetRef = doc(db, 'carpets', targetDocId);
-        batch.set(targetRef, {
-          magazyn: targetBay,
-          podmagazyn: targetSub.trim().toUpperCase(),
-          miejsce: targetPlace,
-          nazwa: sourceCarpet.nazwa || '',
-          ref: sourceCarpet.ref || '',
-          ean: sourceCarpet.ean || '',
-          dodano: sourceCarpet.dodano || timestamp.split('T')[0],
-          updatedAt: timestamp,
-          updatedBy: userEmail
-        });
+      await runTransaction(db, async (transaction) => {
+        if (!targetCarpet || mode === 'move') {
+          // 1. Move to empty slot
+          const targetRef = doc(db, 'carpets', targetDocId);
+          await transaction.get(targetRef);
+          transaction.set(targetRef, {
+            magazyn: targetBay,
+            podmagazyn: targetSub.trim().toUpperCase(),
+            miejsce: targetPlace,
+            nazwa: sourceCarpet.nazwa || '',
+            ref: sourceCarpet.ref || '',
+            ean: sourceCarpet.ean || '',
+            dodano: sourceCarpet.dodano || timestamp.split('T')[0],
+            updatedAt: timestamp,
+            updatedBy: userEmail
+          });
 
-        // Delete old location document
-        batch.delete(doc(db, 'carpets', sourceCarpet.id));
-        if (sourceCarpet.id !== sourceDocId) {
-          batch.delete(doc(db, 'carpets', sourceDocId));
+          // Delete old location document
+          transaction.delete(doc(db, 'carpets', sourceCarpet.id));
+          if (sourceCarpet.id !== sourceDocId) {
+            transaction.delete(doc(db, 'carpets', sourceDocId));
+          }
+        } else if (mode === 'swap') {
+          // 2. SWAP: Both carpets exchange places
+          const targetRef = doc(db, 'carpets', targetDocId);
+          const sourceRef = doc(db, 'carpets', sourceDocId);
+          await transaction.get(targetRef);
+          await transaction.get(sourceRef);
+
+          // Put source carpet in target slot
+          transaction.set(targetRef, {
+            magazyn: targetBay,
+            podmagazyn: targetSub.trim().toUpperCase(),
+            miejsce: targetPlace,
+            nazwa: sourceCarpet.nazwa || '',
+            ref: sourceCarpet.ref || '',
+            ean: sourceCarpet.ean || '',
+            dodano: sourceCarpet.dodano || timestamp.split('T')[0],
+            updatedAt: timestamp,
+            updatedBy: userEmail
+          });
+
+          // Put target carpet in source slot
+          transaction.set(sourceRef, {
+            magazyn: sourceCarpet.magazyn,
+            podmagazyn: sourceCarpet.podmagazyn.trim().toUpperCase(),
+            miejsce: sourcePlace,
+            nazwa: targetCarpet.nazwa || '',
+            ref: targetCarpet.ref || '',
+            ean: targetCarpet.ean || '',
+            dodano: targetCarpet.dodano || timestamp.split('T')[0],
+            updatedAt: timestamp,
+            updatedBy: userEmail
+          });
+
+          // Delete old non-standard doc IDs if different
+          if (sourceCarpet.id !== targetDocId && sourceCarpet.id !== sourceDocId) {
+            transaction.delete(doc(db, 'carpets', sourceCarpet.id));
+          }
+          if (targetCarpet.id !== targetDocId && targetCarpet.id !== sourceDocId) {
+            transaction.delete(doc(db, 'carpets', targetCarpet.id));
+          }
+        } else if (mode === 'overwrite') {
+          // 3. Overwrite
+          const targetRef = doc(db, 'carpets', targetDocId);
+          await transaction.get(targetRef);
+          transaction.set(targetRef, {
+            magazyn: targetBay,
+            podmagazyn: targetSub.trim().toUpperCase(),
+            miejsce: targetPlace,
+            nazwa: sourceCarpet.nazwa || '',
+            ref: sourceCarpet.ref || '',
+            ean: sourceCarpet.ean || '',
+            dodano: sourceCarpet.dodano || timestamp.split('T')[0],
+            updatedAt: timestamp,
+            updatedBy: userEmail
+          });
+
+          transaction.delete(doc(db, 'carpets', sourceCarpet.id));
+          if (targetCarpet && targetCarpet.id !== targetDocId) {
+            transaction.delete(doc(db, 'carpets', targetCarpet.id));
+          }
         }
+      });
 
-        await batch.commit();
-
+      if (!targetCarpet || mode === 'move') {
         await logActivity(
           'edit',
           sourceCarpet.nazwa,
@@ -702,46 +806,6 @@ export default function App() {
           { miejsce: targetPlace, ref: sourceCarpet.ref, ean: sourceCarpet.ean }
         );
       } else if (mode === 'swap') {
-        // 2. SWAP: Both carpets exchange places
-        const targetRef = doc(db, 'carpets', targetDocId);
-        const sourceRef = doc(db, 'carpets', sourceDocId);
-
-        // Put source carpet in target slot
-        batch.set(targetRef, {
-          magazyn: targetBay,
-          podmagazyn: targetSub.trim().toUpperCase(),
-          miejsce: targetPlace,
-          nazwa: sourceCarpet.nazwa || '',
-          ref: sourceCarpet.ref || '',
-          ean: sourceCarpet.ean || '',
-          dodano: sourceCarpet.dodano || timestamp.split('T')[0],
-          updatedAt: timestamp,
-          updatedBy: userEmail
-        });
-
-        // Put target carpet in source slot
-        batch.set(sourceRef, {
-          magazyn: sourceCarpet.magazyn,
-          podmagazyn: sourceCarpet.podmagazyn.trim().toUpperCase(),
-          miejsce: sourcePlace,
-          nazwa: targetCarpet.nazwa || '',
-          ref: targetCarpet.ref || '',
-          ean: targetCarpet.ean || '',
-          dodano: targetCarpet.dodano || timestamp.split('T')[0],
-          updatedAt: timestamp,
-          updatedBy: userEmail
-        });
-
-        // Delete old non-standard doc IDs if different
-        if (sourceCarpet.id !== targetDocId && sourceCarpet.id !== sourceDocId) {
-          batch.delete(doc(db, 'carpets', sourceCarpet.id));
-        }
-        if (targetCarpet.id !== targetDocId && targetCarpet.id !== sourceDocId) {
-          batch.delete(doc(db, 'carpets', targetCarpet.id));
-        }
-
-        await batch.commit();
-
         await logActivity(
           'edit',
           `${sourceCarpet.nazwa} ⇄ ${targetCarpet.nazwa}`,
@@ -749,27 +813,6 @@ export default function App() {
           { miejsce: `${sourcePlace} ⇄ ${targetPlace}` }
         );
       } else if (mode === 'overwrite') {
-        // 3. Overwrite
-        const targetRef = doc(db, 'carpets', targetDocId);
-        batch.set(targetRef, {
-          magazyn: targetBay,
-          podmagazyn: targetSub.trim().toUpperCase(),
-          miejsce: targetPlace,
-          nazwa: sourceCarpet.nazwa || '',
-          ref: sourceCarpet.ref || '',
-          ean: sourceCarpet.ean || '',
-          dodano: sourceCarpet.dodano || timestamp.split('T')[0],
-          updatedAt: timestamp,
-          updatedBy: userEmail
-        });
-
-        batch.delete(doc(db, 'carpets', sourceCarpet.id));
-        if (targetCarpet && targetCarpet.id !== targetDocId) {
-          batch.delete(doc(db, 'carpets', targetCarpet.id));
-        }
-
-        await batch.commit();
-
         await logActivity(
           'edit',
           sourceCarpet.nazwa,
@@ -1146,6 +1189,8 @@ export default function App() {
         onSwitchAccount={handleSwitchAccount}
         onOpenSuperAdminModal={() => setIsAdminManagementOpen(true)}
         isSyncing={isSyncing}
+        theme={theme}
+        toggleTheme={toggleTheme}
       />
 
       {/* Unauthorized Warning Banner slot - persistent container keeps root DOM hierarchy unchanged */}
@@ -1186,7 +1231,7 @@ export default function App() {
           <div key="view-loading-wrapper" className="max-w-md mx-auto py-24 px-4 text-center flex flex-col items-center justify-center">
             <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4" />
             <h3 className="text-base font-bold text-gray-800">Sprawdzanie uprawnień administratora...</h3>
-            <p className="text-xs text-gray-500 mt-1">Łączenie z bazą sklepu 038 w czasie rzeczywistym</p>
+            <p className="text-xs text-gray-500 mt-1">Łączenie z bazą sklepu {STORE_NUMBER} w czasie rzeczywistym</p>
           </div>
         ) : (
           <div key="view-warehouse-wrapper">

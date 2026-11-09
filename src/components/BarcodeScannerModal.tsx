@@ -3,6 +3,7 @@ import { X, Flashlight, AlertCircle, RefreshCw, CheckCircle2, Camera, Zap, Spark
 import { scanImageData, setModuleArgs } from '@undecaf/zbar-wasm';
 import { decodeScanditWaveform } from '../services/scanditWaveformEngine';
 import { scanEslLabel } from '../services/eslScannerService';
+import { playSuccessChime, playWarningAlert } from '../services/soundService';
 
 interface BarcodeScannerModalProps {
   isOpen: boolean;
@@ -25,27 +26,6 @@ if (typeof window !== 'undefined') {
 
 // Native BarcodeDetector API (built-in hardware ML vision in Google Chrome on Android)
 const hasNativeBarcodeDetector = typeof window !== 'undefined' && 'BarcodeDetector' in window;
-
-/**
- * Pleasant retail warehouse confirmation chime (Web Audio API)
- */
-function playBeep() {
-  try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const audioCtx = new AudioContextClass();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(1760, audioCtx.currentTime); // 1760Hz crisp warehouse chime
-    gain.gain.setValueAtTime(0.20, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.13);
-  } catch (_) {}
-}
 
 /**
  * Validates and extracts true product barcode from ESL shelf labels and carpets:
@@ -280,9 +260,13 @@ export function BarcodeScannerModal({
   const touchStartDistRef = useRef<number | null>(null);
   const touchStartZoomRef = useRef<number>(1.0);
   const waveformCandidateRef = useRef<{ code: string; time: number } | null>(null);
+  const scannedCodesSessionRef = useRef<Set<string>>(new Set());
 
   const triggerScanSuccess = (code: string, boundingBox?: any, isOcr = false) => {
     if (isScannedRef.current) return;
+    const cleanCode = code.trim();
+    const isDuplicate = isContinuousModeRef.current && scannedCodesSessionRef.current.has(cleanCode);
+
     if (!isContinuousModeRef.current) {
       isScannedRef.current = true;
     } else {
@@ -292,7 +276,14 @@ export function BarcodeScannerModal({
       }, 700);
     }
 
-    setScannedFeedback(isOcr ? `Ref LM (OCR): ${code}` : code);
+    if (isDuplicate) {
+      setScannedFeedback(`⚠️ Duplikat: ${cleanCode}`);
+      playWarningAlert();
+    } else {
+      scannedCodesSessionRef.current.add(cleanCode);
+      setScannedFeedback(isOcr ? `Ref LM (OCR): ${cleanCode}` : cleanCode);
+      playSuccessChime();
+    }
 
     // Compute live AR Target Box position on screen
     try {
@@ -317,7 +308,7 @@ export function BarcodeScannerModal({
           y: Math.round(boxY),
           width: Math.round(boxW),
           height: Math.round(boxH),
-          code,
+          code: cleanCode,
           isOcr
         });
       } else {
@@ -328,28 +319,22 @@ export function BarcodeScannerModal({
           y: Math.round(screenH * 0.48),
           width: Math.round(reticleW),
           height: Math.round(reticleH),
-          code,
+          code: cleanCode,
           isOcr
         });
       }
     } catch (_) {}
 
-    playBeep();
-
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      try {
-        navigator.vibrate([60, 40, 60]);
-      } catch (_) {}
-    }
-
-    onScanSuccess(code.trim());
+    onScanSuccess(cleanCode);
 
     if (!isContinuousModeRef.current) {
       setTimeout(() => {
         onClose();
       }, 240);
     } else {
-      setScanCount((c) => c + 1);
+      if (!isDuplicate) {
+        setScanCount((c) => c + 1);
+      }
       setTimeout(() => {
         setArTargetBox(null);
         setScannedFeedback(null);
@@ -364,6 +349,7 @@ export function BarcodeScannerModal({
     isScannedRef.current = false;
     isBusyRef.current = false;
     waveformCandidateRef.current = null;
+    scannedCodesSessionRef.current.clear();
     setScannedFeedback(null);
     setCameraError(null);
     setTorchOn(false);
