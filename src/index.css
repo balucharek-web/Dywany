@@ -244,3 +244,18 @@ html.dark .shadow-2xl {
   box-shadow: 0 4px 24px -2px rgba(0, 0, 0, 0.95), 0 0 0 1px #27272a !important;
 }
 
+/* Leroy Merlin Logo: High-contrast white badge on dark backgrounds so black brand typography remains 100% visible */
+.lm-logo-container {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  transition: all 0.2s ease-in-out;
+}
+
+html.dark .lm-logo-container {
+  background-color: #ffffff !important;
+  padding: 3px 7px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.15) !important;
+}
+

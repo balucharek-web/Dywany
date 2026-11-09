@@ -7,12 +7,14 @@ interface LeroyMerlinLogoProps {
 
 export function LeroyMerlinLogo({ className = "h-11", alt = "Leroy Merlin" }: LeroyMerlinLogoProps) {
   return (
-    <img
-      src={lmLogo}
-      alt={alt}
-      className={`w-auto object-contain select-none shrink-0 ${className}`}
-      loading="eager"
-      decoding="async"
-    />
+    <div className="lm-logo-container inline-flex items-center justify-center shrink-0">
+      <img
+        src={lmLogo}
+        alt={alt}
+        className={`w-auto object-contain select-none shrink-0 ${className}`}
+        loading="eager"
+        decoding="async"
+      />
+    </div>
   );
 }

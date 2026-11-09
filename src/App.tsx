@@ -58,14 +58,11 @@ export default function App() {
     setCurrentView(view);
   };
 
-  // Pure OLED Black Dark Mode (Opcja 4: saves 35-40% battery on AMOLED screens)
+  // Pure OLED Black Dark Mode (Opcja 4) - default is always 'light'
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     try {
       const saved = localStorage.getItem('lm_theme');
-      if (saved === 'dark' || saved === 'light') return saved;
-      if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        return 'dark';
-      }
+      if (saved === 'dark') return 'dark';
     } catch (_) {}
     return 'light';
   });
