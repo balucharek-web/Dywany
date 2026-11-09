@@ -58,8 +58,6 @@ export function PowerBiAuditModal({
     return comparePowerBiWithCarpets(pbiItems, carpets);
   }, [pbiItems, carpets]);
 
-  if (!isOpen) return null;
-
   // Filter items based on active tab & search query
   const filteredList = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -89,6 +87,8 @@ export function PowerBiAuditModal({
     }
     return [];
   }, [activeTab, comparison, searchQuery]);
+
+  if (!isOpen) return null;
 
   // Handle Paste parsing
   const handleProcessPastedText = async () => {
