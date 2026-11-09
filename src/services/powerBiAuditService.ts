@@ -281,3 +281,176 @@ export function comparePowerBiWithCarpets(
     complianceRate
   };
 }
+
+/**
+ * Robust A4 print engine using isolated iframe to guarantee print dialog works across all browsers
+ */
+export function printMissingRugsDocument(
+  items: PowerBiStockExpoItem[],
+  storeNumber: string,
+  storeCity: string,
+  totalPbi: number,
+  matchedCount: number,
+  complianceRate: number
+) {
+  const dateStr = new Date().toLocaleDateString('pl-PL');
+  const timeStr = new Date().toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+
+  const rowsHtml = items
+    .map(
+      (item, idx) => `
+    <tr style="border-bottom: 1px solid #999; page-break-inside: avoid;">
+      <td style="padding: 5px; text-align: center; font-weight: bold; background: #f9fafb; font-family: monospace; font-size: 10px; width: 35px; border: 1px solid #000;">${idx + 1}</td>
+      <td style="padding: 5px; text-align: center; font-weight: 900; font-family: monospace; font-size: 12px; width: 95px; border: 1px solid #000;">${item.ref}</td>
+      <td style="padding: 5px; font-weight: bold; font-size: 11px; line-height: 1.2; border: 1px solid #000;">${item.opis}</td>
+      <td style="padding: 5px; text-align: center; font-family: monospace; font-weight: bold; font-size: 11px; width: 55px; border: 1px solid #000;">${item.stock.toFixed(2).replace('.', ',')}</td>
+      <td style="padding: 5px; text-align: center; font-size: 10px; color: #4b5563; font-family: monospace; width: 130px; border: 1px solid #000;">Regał: ____ Slot: [A/B]</td>
+      <td style="padding: 5px; text-align: center; width: 90px; border: 1px solid #000;"><div style="display: inline-block; width: 14px; height: 14px; border: 2px solid #000; border-radius: 2px;"></div></td>
+    </tr>
+  `
+    )
+    .join('');
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Braki Stock Expo - Sklep ${storeNumber}</title>
+  <style>
+    @page { size: A4 portrait; margin: 8mm 6mm; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #000; margin: 0; padding: 0; background: #fff; font-size: 11px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; border: 1px solid #000; }
+    th { background: #f3f4f6; font-weight: 900; font-size: 10px; text-transform: uppercase; padding: 6px 4px; border: 1px solid #000; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 8px; }
+    .footer { margin-top: 10px; padding-top: 6px; border-top: 1px solid #999; display: flex; justify-content: space-between; font-size: 9px; color: #555; }
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div style="font-size: 15px; font-weight: 900; text-transform: uppercase; letter-spacing: -0.5px;">
+        Audyt Stock Expo Power BI — Lista braków do powieszenia
+      </div>
+      <div style="font-size: 11px; font-weight: bold; color: #374151; margin-top: 2px;">
+        LEROY MERLIN • Sklep ${storeNumber} ${storeCity} • Dział 12 Dywany (Poddział 05)
+      </div>
+    </div>
+    <div style="text-align: right; font-size: 10px; line-height: 1.3;">
+      <div>Wydruk: <strong>${dateStr} ${timeStr}</strong></div>
+      <div>Power BI: <strong>${totalPbi} poz.</strong> | Na regale: <strong>${matchedCount}</strong> (${complianceRate}%)</div>
+      <div>Do powieszenia (Braki): <strong style="color: #b91c1c; font-size: 12px;">${items.length}</strong></div>
+    </div>
+  </div>
+
+  ${
+    items.length === 0
+      ? `
+    <div style="padding: 30px; text-align: center; border: 1px solid #000;">
+      <div style="font-size: 14px; font-weight: bold;">Wszystkie dywany z raportu Power BI wiszą na regałach! (100% zgodności)</div>
+    </div>
+  `
+      : `
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 35px; text-align: center;">LP</th>
+          <th style="width: 95px; text-align: center;">REF LM</th>
+          <th style="text-align: left;">Nazwa / Opis dywanu (Power BI)</th>
+          <th style="width: 55px; text-align: center;">Stock</th>
+          <th style="width: 130px; text-align: center;">Zawieś na regale</th>
+          <th style="width: 90px; text-align: center;">Powieszono</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+  `
+  }
+
+  <div class="footer">
+    <div>Instrukcja: Odszukaj dywan w strefie zaplecza/dostaw, zawieś na wolnym ramieniu ekspozytora i zewidencjonuj w aplikacji.</div>
+    <div style="font-weight: bold;">Arkusz A4 • System Zarządzania Ekspozycją Dywanów</div>
+  </div>
+</body>
+</html>`;
+
+  // Method 1: Hidden iframe print
+  try {
+    let iframe = document.getElementById('pbi-print-iframe') as HTMLIFrameElement;
+    if (iframe) {
+      iframe.remove();
+    }
+    iframe = document.createElement('iframe');
+    iframe.id = 'pbi-print-iframe';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.style.visibility = 'hidden';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (doc) {
+      doc.open();
+      doc.write(html);
+      doc.close();
+      setTimeout(() => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        } catch {
+          window.print();
+        }
+      }, 300);
+      return;
+    }
+  } catch (e) {
+    console.warn('Iframe print failed, falling back to window.print()', e);
+  }
+
+  // Method 2: Standard window.print() fallback
+  window.print();
+}
+
+/**
+ * Exports missing rugs to formatted Excel workbook (.xlsx)
+ */
+export function exportMissingRugsToExcel(items: PowerBiStockExpoItem[], storeNumber: string) {
+  const exportData = items.map((item, idx) => ({
+    LP: idx + 1,
+    Sklep: storeNumber,
+    'REF LM': item.ref,
+    'Opis dywanu': item.opis,
+    'Stock Power BI': item.stock,
+    Dział: '12',
+    Poddział: '05',
+    'Zaproponowany regał': '',
+    Powieszono: ''
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(exportData);
+  worksheet['!cols'] = [
+    { wch: 6 },
+    { wch: 8 },
+    { wch: 12 },
+    { wch: 45 },
+    { wch: 14 },
+    { wch: 8 },
+    { wch: 10 },
+    { wch: 22 },
+    { wch: 14 }
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Braki do powieszenia');
+
+  const today = new Date().toISOString().split('T')[0];
+  XLSX.writeFile(workbook, `Braki_Stock_Expo_Sklep_${storeNumber}_${today}.xlsx`);
+}

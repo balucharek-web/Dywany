@@ -44,6 +44,10 @@
     padding: 0 !important;
     margin: 0 !important;
     display: block !important;
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    width: 100% !important;
   }
 
   .stock-expo-modal-container,
@@ -55,6 +59,7 @@
     border: none !important;
     box-shadow: none !important;
     width: 100% !important;
+    height: auto !important;
     border-radius: 0 !important;
     display: block !important;
     padding: 0 !important;
