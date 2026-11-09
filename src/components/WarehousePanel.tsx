@@ -22,7 +22,9 @@ import {
   SlidersHorizontal,
   ArrowLeftRight,
   ExternalLink,
-  BarChart3
+  BarChart3,
+  LayoutList,
+  LayoutGrid
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { formatDateTime, formatRelativeTime, getLeroyMerlinSearchUrl } from '../utils/formatters';
@@ -174,6 +176,26 @@ export function WarehousePanel({
   const [onlyNew, setOnlyNew] = useState(false);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | 'name' | 'date'>('asc');
   const [isToolsOpen, setIsToolsOpen] = useState(false);
+
+  // Desktop view mode: 'horizontal' (slim wide row with Slot A and B side-by-side) or 'cards' (2-column bays)
+  const [desktopViewMode, setDesktopViewMode] = useState<'horizontal' | 'cards'>(() => {
+    try {
+      const saved = localStorage.getItem('lm_warehouse_desktop_view');
+      if (saved === 'cards') return 'cards';
+    } catch {
+      // ignore
+    }
+    return 'horizontal';
+  });
+
+  const handleSetDesktopViewMode = (mode: 'horizontal' | 'cards') => {
+    setDesktopViewMode(mode);
+    try {
+      localStorage.setItem('lm_warehouse_desktop_view', mode);
+    } catch {
+      // ignore
+    }
+  };
 
   // Quick warehouse deletion state
   const [deletingBayModal, setDeletingBayModal] = useState<{
@@ -473,6 +495,36 @@ export function WarehousePanel({
               <option value="asc">1 → {activeBays.length}</option>
               <option value="desc">{activeBays.length} → 1</option>
             </select>
+
+            {/* Desktop View Mode Switcher: Poziomy (paski) vs Kafelki */}
+            <div className="hidden lg:flex items-center gap-1 bg-gray-100 p-0.5 rounded-xl border border-gray-200">
+              <button
+                type="button"
+                onClick={() => handleSetDesktopViewMode('horizontal')}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  desktopViewMode === 'horizontal'
+                    ? 'bg-white text-blue-700 shadow-2xs'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+                title="Widok poziomy (wąskie pasy, Slot A i B obok siebie, minimalne przewijanie na PC)"
+              >
+                <LayoutList className="w-3.5 h-3.5" />
+                <span>Pasy (A | B)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetDesktopViewMode('cards')}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  desktopViewMode === 'cards'
+                    ? 'bg-white text-gray-900 shadow-2xs'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+                title="Tradycyjny widok kafelkowy (kolumny)"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>Kafelki</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -532,8 +584,14 @@ export function WarehousePanel({
         totalCarpets={carpets.length}
       />
 
-      {/* Racks / Bays listing: 1 column on mobile, 2 columns on desktop PC */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 mt-2">
+      {/* Racks / Bays listing */}
+      <div
+        className={
+          desktopViewMode === 'horizontal'
+            ? 'flex flex-col gap-3 sm:gap-4 mt-2'
+            : 'grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 mt-2'
+        }
+      >
         {baysList.map((bayNum) => {
           let bayCarpets = carpetsByBay.get(bayNum) || [];
 
@@ -608,7 +666,11 @@ export function WarehousePanel({
               className={`${theme.cardBg} border ${theme.cardBorder} rounded-2xl shadow-xs overflow-hidden flex flex-col transition-all hover:shadow-md scroll-mt-18`}
             >
               {/* Bay Header: "Magazyn X" with distinct color strip + badges + [Super Admin: Usuń Magazyn] */}
-              <div className={`px-4 sm:px-5 py-3 ${theme.headerBg} border-b ${theme.headerBorder} flex items-center justify-between gap-2`}>
+              <div
+                className={`px-4 sm:px-5 ${
+                  desktopViewMode === 'horizontal' ? 'py-2 sm:py-2.5' : 'py-3'
+                } ${theme.headerBg} border-b ${theme.headerBorder} flex items-center justify-between gap-2`}
+              >
                 <div className="flex items-center gap-2.5">
                   <div className={`w-2.5 h-6 rounded-full ${theme.accentBar}`} />
                   <h2 className={`text-lg sm:text-xl font-black ${theme.titleText} tracking-tight`}>
@@ -642,7 +704,13 @@ export function WarehousePanel({
               </div>
 
               {/* Sub-bay slots: strictly 2 places per bay - Podmagazyn A and Podmagazyn B */}
-              <div className="p-4 sm:p-5 flex flex-col gap-3">
+              <div
+                className={
+                  desktopViewMode === 'horizontal'
+                    ? 'p-3 sm:p-4 grid grid-cols-1 lg:grid-cols-2 gap-3 items-stretch'
+                    : 'p-4 sm:p-5 flex flex-col gap-3'
+                }
+              >
                 {/* Podmagazyn A */}
                 {carpetA ? (
                   <SlotCard
@@ -967,18 +1035,22 @@ function EmptySlotCard({
   onAdd: () => void;
 }) {
   return (
-    <div className={`border border-dashed border-gray-300 bg-white ${theme?.emptyHoverBg || 'hover:bg-blue-50/20'} rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-3 text-xs sm:text-sm transition-colors`}>
-      <div className="flex items-center gap-2 flex-wrap">
+    <div
+      className={`border-2 border-dashed border-gray-300 bg-white/80 ${
+        theme?.emptyHoverBg || 'hover:bg-blue-50/20'
+      } rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs sm:text-sm transition-all h-full min-h-[120px]`}
+    >
+      <div className="flex items-center gap-2 flex-wrap text-center sm:text-left">
         <span className="font-extrabold text-xs text-gray-700 bg-gray-100 px-2.5 py-1 rounded-md border border-gray-200">
           Podmagazyn {subBay}
         </span>
         <span className="text-gray-400 italic text-xs">
-          Wolne miejsce ({bay} {subBay})
+          Wolne ramię ekspozytora ({bay} {subBay})
         </span>
       </div>
       <button
         onClick={onAdd}
-        className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-xs sm:text-sm shadow-xs transition-transform active:scale-95 cursor-pointer shrink-0"
+        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-bold text-xs sm:text-sm shadow-xs transition-transform active:scale-95 cursor-pointer shrink-0"
       >
         <Plus className="w-3.5 h-3.5" />
         <span>Przypisz dywan</span>
