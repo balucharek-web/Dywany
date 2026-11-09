@@ -73,11 +73,12 @@
     left: auto !important;
     top: auto !important;
     width: 100% !important;
+    max-width: 186mm !important;
     height: auto !important;
     overflow: visible !important;
     opacity: 1 !important;
     display: block !important;
-    margin: 0 !important;
+    margin: 0 auto !important;
     padding: 0 !important;
   }
 
@@ -89,7 +90,7 @@
 
   @page {
     size: A4 portrait;
-    margin: 8mm 6mm;
+    margin: 12mm 12mm;
   }
 }
 

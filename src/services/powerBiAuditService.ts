@@ -299,13 +299,13 @@ export function printMissingRugsDocument(
   const rowsHtml = items
     .map(
       (item, idx) => `
-    <tr style="border-bottom: 1px solid #999; page-break-inside: avoid;">
-      <td style="padding: 5px; text-align: center; font-weight: bold; background: #f9fafb; font-family: monospace; font-size: 10px; width: 35px; border: 1px solid #000;">${idx + 1}</td>
-      <td style="padding: 5px; text-align: center; font-weight: 900; font-family: monospace; font-size: 12px; width: 95px; border: 1px solid #000;">${item.ref}</td>
-      <td style="padding: 5px; font-weight: bold; font-size: 11px; line-height: 1.2; border: 1px solid #000;">${item.opis}</td>
-      <td style="padding: 5px; text-align: center; font-family: monospace; font-weight: bold; font-size: 11px; width: 55px; border: 1px solid #000;">${item.stock.toFixed(2).replace('.', ',')}</td>
-      <td style="padding: 5px; text-align: center; font-size: 10px; color: #4b5563; font-family: monospace; width: 130px; border: 1px solid #000;">Regał: ____ Slot: [A/B]</td>
-      <td style="padding: 5px; text-align: center; width: 90px; border: 1px solid #000;"><div style="display: inline-block; width: 14px; height: 14px; border: 2px solid #000; border-radius: 2px;"></div></td>
+    <tr style="border-bottom: 1px solid #777; page-break-inside: avoid;">
+      <td style="padding: 5px 4px; text-align: center; font-weight: bold; background: #f9fafb; font-family: monospace; font-size: 10px; width: 32px; border: 1px solid #000;">${idx + 1}</td>
+      <td style="padding: 5px 6px; text-align: center; font-weight: 900; font-family: monospace; font-size: 12px; width: 85px; border: 1px solid #000;">${item.ref}</td>
+      <td style="padding: 5px 8px; font-weight: bold; font-size: 11px; line-height: 1.25; border: 1px solid #000; word-break: break-word;">${item.opis}</td>
+      <td style="padding: 5px 4px; text-align: center; font-family: monospace; font-weight: bold; font-size: 11px; width: 55px; border: 1px solid #000;">${item.stock.toFixed(2).replace('.', ',')}</td>
+      <td style="padding: 5px 4px; text-align: center; font-size: 10px; color: #4b5563; font-family: monospace; width: 125px; border: 1px solid #000;">Regał: ____ Slot: [A/B]</td>
+      <td style="padding: 5px 4px; text-align: center; width: 75px; border: 1px solid #000;"><div style="display: inline-block; width: 14px; height: 14px; border: 2px solid #000; border-radius: 2px; margin-top: 1px;"></div></td>
     </tr>
   `
     )
@@ -317,64 +317,67 @@ export function printMissingRugsDocument(
   <meta charset="utf-8">
   <title>Braki Stock Expo - Sklep ${storeNumber}</title>
   <style>
-    @page { size: A4 portrait; margin: 8mm 6mm; }
+    @page { size: A4 portrait; margin: 12mm 12mm 12mm 12mm; }
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #000; margin: 0; padding: 0; background: #fff; font-size: 11px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 8px; border: 1px solid #000; }
+    .page-container { width: 100%; max-width: 186mm; margin: 0 auto; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; border: 1.5px solid #000; table-layout: fixed; }
     th { background: #f3f4f6; font-weight: 900; font-size: 10px; text-transform: uppercase; padding: 6px 4px; border: 1px solid #000; }
-    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 8px; }
-    .footer { margin-top: 10px; padding-top: 6px; border-top: 1px solid #999; display: flex; justify-content: space-between; font-size: 9px; color: #555; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 10px; }
+    .footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #777; display: flex; justify-content: space-between; font-size: 9px; color: #444; }
     @media print {
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div>
-      <div style="font-size: 15px; font-weight: 900; text-transform: uppercase; letter-spacing: -0.5px;">
-        Audyt Stock Expo Power BI — Lista braków do powieszenia
+  <div class="page-container">
+    <div class="header">
+      <div style="flex: 1; min-width: 0; padding-right: 20px;">
+        <div style="font-size: 15px; font-weight: 900; text-transform: uppercase; letter-spacing: -0.5px; line-height: 1.2;">
+          Audyt Stock Expo Power BI — Lista braków do powieszenia
+        </div>
+        <div style="font-size: 11px; font-weight: bold; color: #374151; margin-top: 3px;">
+          LEROY MERLIN • Sklep ${storeNumber} ${storeCity} • Dział 12 Dywany (Poddział 05)
+        </div>
       </div>
-      <div style="font-size: 11px; font-weight: bold; color: #374151; margin-top: 2px;">
-        LEROY MERLIN • Sklep ${storeNumber} ${storeCity} • Dział 12 Dywany (Poddział 05)
+      <div style="text-align: right; font-size: 10px; line-height: 1.35; white-space: nowrap; flex-shrink: 0;">
+        <div>Wydruk: <strong>${dateStr} ${timeStr}</strong></div>
+        <div>Power BI: <strong>${totalPbi} poz.</strong> | Na regale: <strong>${matchedCount}</strong> (${complianceRate}%)</div>
+        <div>Do powieszenia (Braki): <strong style="color: #b91c1c; font-size: 12px;">${items.length}</strong></div>
       </div>
     </div>
-    <div style="text-align: right; font-size: 10px; line-height: 1.3;">
-      <div>Wydruk: <strong>${dateStr} ${timeStr}</strong></div>
-      <div>Power BI: <strong>${totalPbi} poz.</strong> | Na regale: <strong>${matchedCount}</strong> (${complianceRate}%)</div>
-      <div>Do powieszenia (Braki): <strong style="color: #b91c1c; font-size: 12px;">${items.length}</strong></div>
-    </div>
-  </div>
 
-  ${
-    items.length === 0
-      ? `
-    <div style="padding: 30px; text-align: center; border: 1px solid #000;">
-      <div style="font-size: 14px; font-weight: bold;">Wszystkie dywany z raportu Power BI wiszą na regałach! (100% zgodności)</div>
-    </div>
-  `
-      : `
-    <table>
-      <thead>
-        <tr>
-          <th style="width: 35px; text-align: center;">LP</th>
-          <th style="width: 95px; text-align: center;">REF LM</th>
-          <th style="text-align: left;">Nazwa / Opis dywanu (Power BI)</th>
-          <th style="width: 55px; text-align: center;">Stock</th>
-          <th style="width: 130px; text-align: center;">Zawieś na regale</th>
-          <th style="width: 90px; text-align: center;">Powieszono</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rowsHtml}
-      </tbody>
-    </table>
-  `
-  }
+    ${
+      items.length === 0
+        ? `
+      <div style="padding: 30px; text-align: center; border: 1px solid #000;">
+        <div style="font-size: 14px; font-weight: bold;">Wszystkie dywany z raportu Power BI wiszą na regałach! (100% zgodności)</div>
+      </div>
+    `
+        : `
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 32px; text-align: center;">LP</th>
+            <th style="width: 85px; text-align: center;">REF LM</th>
+            <th style="text-align: left; padding-left: 8px;">Nazwa / Opis dywanu (Power BI)</th>
+            <th style="width: 55px; text-align: center;">Stock</th>
+            <th style="width: 125px; text-align: center;">Zawieś na regale</th>
+            <th style="width: 75px; text-align: center;">Powieszono</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+    `
+    }
 
-  <div class="footer">
-    <div>Instrukcja: Odszukaj dywan w strefie zaplecza/dostaw, zawieś na wolnym ramieniu ekspozytora i zewidencjonuj w aplikacji.</div>
-    <div style="font-weight: bold;">Arkusz A4 • System Zarządzania Ekspozycją Dywanów</div>
+    <div class="footer">
+      <div>Instrukcja: Odszukaj dywan w strefie zaplecza/dostaw, zawieś na wolnym ramieniu ekspozytora i zewidencjonuj w aplikacji.</div>
+      <div style="font-weight: bold;">Arkusz A4 • System Zarządzania Ekspozycją Dywanów</div>
+    </div>
   </div>
 </body>
 </html>`;

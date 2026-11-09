@@ -906,22 +906,22 @@ export function PowerBiAuditModal({
             2. PRINTABLE DOCUMENT (ONLY VISIBLE ON PRINT)
             A4 sheet for store team: Missing carpets to hang on the racks
            ========================================================================= */}
-        <div id="pbi-audit-printable">
+        <div id="pbi-audit-printable" className="p-4 max-w-[186mm] mx-auto text-black">
           {/* Header */}
-          <div className="flex items-center justify-between border-b-2 border-black pb-3 mb-3">
-            <div className="flex items-center gap-3">
-              <LeroyMerlinLogo className="h-9" />
+          <div className="flex items-start justify-between border-b-2 border-black pb-3 mb-3">
+            <div className="flex items-center gap-3 pr-4 min-w-0">
+              <LeroyMerlinLogo className="h-9 shrink-0" />
               <div>
-                <h1 className="text-base font-black text-black uppercase tracking-tight">
+                <h1 className="text-base font-black text-black uppercase tracking-tight leading-tight">
                   Audyt Stock Expo Power BI — Lista braków do powieszenia
                 </h1>
-                <div className="text-[11px] text-gray-700 font-bold">
+                <div className="text-[11px] text-gray-700 font-bold mt-0.5">
                   LEROY MERLIN • Sklep {STORE_NUMBER} {STORE_CITY} • Dział 12 Dywany (Poddział 05)
                 </div>
               </div>
             </div>
 
-            <div className="text-right text-[11px] leading-tight">
+            <div className="text-right text-[10px] leading-snug shrink-0 whitespace-nowrap">
               <div>Wydruk: <strong className="font-mono">{new Date().toLocaleDateString('pl-PL')} {new Date().toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}</strong></div>
               <div>Raport Power BI: <strong>{comparison.totalPbi} pozycji</strong></div>
               <div>Na regale: <strong>{comparison.matched.length}</strong> ({comparison.complianceRate}%) | Braki: <strong className="text-red-700 font-black">{comparison.missingOnShelf.length}</strong></div>
@@ -935,15 +935,15 @@ export function PowerBiAuditModal({
               <div className="text-xs text-gray-600 mt-1">Brak pozycji do powieszenia.</div>
             </div>
           ) : (
-            <table className="w-full border-collapse border border-black text-[11px]">
+            <table className="w-full border-collapse border border-black text-[11px] table-fixed">
               <thead>
                 <tr className="bg-gray-100 border-b-2 border-black text-black uppercase text-[10px] tracking-wider font-black">
-                  <th className="p-1.5 border border-black w-[35px] text-center">LP</th>
-                  <th className="p-1.5 border border-black w-[95px] text-center">REF LM</th>
-                  <th className="p-1.5 border border-black">Nazwa / Opis dywanu (Power BI)</th>
-                  <th className="p-1.5 border border-black w-[60px] text-center">Stock</th>
-                  <th className="p-1.5 border border-black w-[130px] text-center">Zawieś na regale</th>
-                  <th className="p-1.5 border border-black w-[110px] text-center">Powieszono [ ✓ ]</th>
+                  <th className="p-1.5 border border-black w-8 text-center">LP</th>
+                  <th className="p-1.5 border border-black w-24 text-center">REF LM</th>
+                  <th className="p-1.5 border border-black text-left px-2">Nazwa / Opis dywanu (Power BI)</th>
+                  <th className="p-1.5 border border-black w-14 text-center">Stock</th>
+                  <th className="p-1.5 border border-black w-32 text-center">Zawieś na regale</th>
+                  <th className="p-1.5 border border-black w-20 text-center">Powieszono</th>
                 </tr>
               </thead>
               <tbody>
@@ -955,7 +955,7 @@ export function PowerBiAuditModal({
                     <td className="p-1.5 border border-black text-center font-black font-mono text-xs">
                       {item.ref}
                     </td>
-                    <td className="p-1.5 border border-black font-bold text-black text-[11px] leading-tight">
+                    <td className="p-1.5 border border-black font-bold text-black text-[11px] leading-tight px-2 break-words">
                       {item.opis}
                     </td>
                     <td className="p-1.5 border border-black text-center font-mono font-bold text-xs">
@@ -965,7 +965,7 @@ export function PowerBiAuditModal({
                       Regał: ____ Slot: [A/B]
                     </td>
                     <td className="p-1.5 border border-black text-center">
-                      <div className="inline-block w-4 h-4 border-2 border-black rounded-xs"></div>
+                      <div className="inline-block w-3.5 h-3.5 border-2 border-black rounded-xs"></div>
                     </td>
                   </tr>
                 ))}
