@@ -14,7 +14,7 @@ export function normalizeRefLM(raw: unknown): string {
 }
 
 /**
- * Parses pasted text (from Power BI table copy - TSV or CSV)
+ * Parses pasted text (from Power BI table copy - TSV, CSV, space-delimited or mouse-selected lines)
  */
 export function parsePastedPowerBiText(text: string): PowerBiStockExpoItem[] {
   if (!text || !text.trim()) return [];
@@ -23,23 +23,30 @@ export function parsePastedPowerBiText(text: string): PowerBiStockExpoItem[] {
   if (lines.length === 0) return [];
 
   const results: PowerBiStockExpoItem[] = [];
+  const seenRefs = new Set<string>();
 
   // Determine delimiter: tab (\t), semicolon (;), comma (,)
   const firstLine = lines[0];
-  const delim = firstLine.includes('\t') ? '\t' : firstLine.includes(';') ? ';' : ',';
+  const delim = firstLine.includes('\t') ? '\t' : firstLine.includes(';') ? ';' : firstLine.includes(',') ? ',' : null;
 
   // Check if first line is a header
-  const headerParts = firstLine.split(delim).map((h) => h.trim().toLowerCase());
-  let refColIdx = headerParts.findIndex((h) => h.includes('ref') || h.includes('referencj'));
-  let opisColIdx = headerParts.findIndex((h) => h.includes('opis') || h.includes('nazwa') || h.includes('produkt'));
-  let stockColIdx = headerParts.findIndex((h) => h.includes('stock') || h.includes('stan') || h.includes('ilo'));
-  let sklepColIdx = headerParts.findIndex((h) => h.includes('sklep'));
+  let refColIdx = -1;
+  let opisColIdx = -1;
+  let stockColIdx = -1;
+  let sklepColIdx = -1;
+
+  if (delim) {
+    const headerParts = firstLine.split(delim).map((h) => h.trim().toLowerCase());
+    refColIdx = headerParts.findIndex((h) => h.includes('ref') || h.includes('referencj'));
+    opisColIdx = headerParts.findIndex((h) => h.includes('opis') || h.includes('nazwa') || h.includes('produkt'));
+    stockColIdx = headerParts.findIndex((h) => h.includes('stock') || h.includes('stan') || h.includes('ilo'));
+    sklepColIdx = headerParts.findIndex((h) => h.includes('sklep'));
+  }
 
   let startIndex = 0;
   if (refColIdx !== -1) {
-    // Has header line
     startIndex = 1;
-  } else {
+  } else if (delim) {
     // Default Power BI layout if no header or direct copy:
     // sklep (0), ref LM (1), stock (2), dział (3), poddział (4), typ (5), podtyp (6), opis (7)
     sklepColIdx = 0;
@@ -53,33 +60,76 @@ export function parsePastedPowerBiText(text: string): PowerBiStockExpoItem[] {
     const line = lines[i].trim();
     if (!line) continue;
 
-    const parts = line.split(delim).map((p) => p.trim());
-    if (parts.length < 2) continue;
+    let cleanRef = '';
+    let rawOpis = '';
+    let parsedStock = 1.0;
+    let rawSklep = '';
 
-    // If default indexes out of bounds, try smart fallback detection
-    let rawRef = parts[refColIdx] || '';
-    let rawOpis = parts[opisColIdx] || '';
-    let rawStock = parts[stockColIdx] || '1';
-    let rawSklep = parts[sklepColIdx] || '';
+    // Strategy A: Delimited split if delimiter exists
+    if (delim) {
+      const parts = line.split(delim).map((p) => p.trim());
+      if (parts.length >= 2) {
+        let rawRef = parts[refColIdx] || '';
+        rawOpis = parts[opisColIdx] || '';
+        const rawStock = parts[stockColIdx] || '1';
+        rawSklep = parts[sklepColIdx] || '';
 
-    // If ref column doesn't match an 8-digit number, look across parts
-    if (!/^\d{7,8}$/.test(rawRef.replace(/\s+/g, ''))) {
-      const foundIdx = parts.findIndex((p) => /^\d{8}$/.test(p.replace(/\s+/g, '')));
-      if (foundIdx !== -1) {
-        rawRef = parts[foundIdx];
+        // If ref column doesn't match an 8-digit number, look across parts
+        if (!/^\d{7,8}$/.test(rawRef.replace(/\s+/g, ''))) {
+          const foundIdx = parts.findIndex((p) => /^\d{8}$/.test(p.replace(/\s+/g, '')));
+          if (foundIdx !== -1) {
+            rawRef = parts[foundIdx];
+          }
+        }
+
+        cleanRef = normalizeRefLM(rawRef);
+        parsedStock = parseFloat(String(rawStock).replace(',', '.')) || 1.0;
+
+        if (!rawOpis) {
+          const longest = parts.reduce((a, b) => (b.length > a.length && !/^\d+$/.test(b) ? b : a), '');
+          rawOpis = longest;
+        }
       }
     }
 
-    const cleanRef = normalizeRefLM(rawRef);
-    if (!cleanRef) continue;
+    // Strategy B: Fallback regex extraction for mouse-copied / space-separated / unstructured text
+    if (!cleanRef) {
+      // Find 8-digit Leroy Merlin ref (starts with 4-9 typically, e.g. 74820198, 85248017, 96821517)
+      const refMatch = line.match(/\b([4-9]\d{7})\b/) || line.match(/\b(\d{8})\b/);
+      if (refMatch) {
+        cleanRef = refMatch[1];
 
-    // If opis was empty, look for the longest text element
-    if (!rawOpis) {
-      const longest = parts.reduce((a, b) => (b.length > a.length && !/^\d+$/.test(b) ? b : a), '');
-      rawOpis = longest || `Dywan REF ${cleanRef}`;
+        // Try extracting stock (e.g. 1,00 or 1.00)
+        const stockMatch = line.match(/\b(\d+[,.]\d{2})\b/);
+        if (stockMatch) {
+          parsedStock = parseFloat(stockMatch[1].replace(',', '.')) || 1.0;
+        }
+
+        // Try extracting store number (e.g. 038 or 54)
+        const storeMatch = line.match(/\b(0\d{2}|\d{2,3})\b/);
+        if (storeMatch && storeMatch[1] !== cleanRef) {
+          rawSklep = storeMatch[1];
+        }
+
+        // Extract description by removing metadata tokens
+        const cleanedLine = line
+          .replace(cleanRef, '')
+          .replace(/\b(038|054|54|38)\b/g, '')
+          .replace(/\b\d+[,.]\d{2}\b/g, '') // remove 1,00
+          .replace(/\b(12|05|5|1|2)\b/g, '') // remove dział / poddział / typ
+          .trim();
+
+        rawOpis = cleanedLine.replace(/\s{2,}/g, ' ').trim();
+      }
     }
 
-    const parsedStock = parseFloat(String(rawStock).replace(',', '.')) || 1.0;
+    if (!cleanRef) continue;
+    if (seenRefs.has(cleanRef)) continue;
+    seenRefs.add(cleanRef);
+
+    if (!rawOpis) {
+      rawOpis = `Dywan REF ${cleanRef}`;
+    }
 
     results.push({
       id: cleanRef,

@@ -373,19 +373,24 @@ export function PowerBiAuditModal({
           {/* Paste Input Container */}
           {isPastingOpen && (
             <div className="p-3 bg-gray-50 rounded-2xl border border-gray-200 flex flex-col gap-2 animate-in fade-in">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-1">
                 <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
                   <ClipboardPaste className="w-4 h-4 text-blue-600" />
-                  Wklej skopiowaną tabelę z raportu Power BI (sklep, ref LM, stock, opis):
+                  Wklej skopiowaną tabelę lub wiersze z Power BI:
                 </span>
-                <span className="text-[11px] text-gray-500">
-                  W Power BI: Prawy przycisk myszy na tabeli ➔ <strong>Kopiuj tabelę</strong>
-                </span>
+                <div className="p-2 rounded-xl bg-blue-50/70 border border-blue-200 text-[11px] text-blue-900 flex flex-col gap-1 leading-relaxed">
+                  <p><strong>Jak pobrać dane z Power BI:</strong></p>
+                  <ul className="list-disc list-inside space-y-0.5 text-blue-800">
+                    <li><strong>Sposób 1 (Zalecany):</strong> W prawym górnym rogu tabeli w Power BI kliknij <strong>trzy kropki (...)</strong> ➔ <strong>Eksportuj dane</strong> ➔ wybierz format Excel/CSV i kliknij przycisk <em>„Wgraj Excel / CSV”</em> obok.</li>
+                    <li><strong>Sposób 2 (Zaznaczenie myszką):</strong> Zaznacz wiersze tabeli myszką (od góry do dołu), wciśnij <strong>Ctrl + C</strong> na klawiaturze i wklej poniżej (<strong>Ctrl + V</strong>).</li>
+                    <li><strong>Sposób 3 (Pokaż jako tabelę):</strong> W menu kontekstowym kliknij <strong>„Pokaż jako tabelę”</strong> (tryb pełnoekranowy), zaznacz dane i wciśnij <strong>Ctrl + C</strong>.</li>
+                  </ul>
+                </div>
               </div>
               <textarea
                 value={pasteInput}
                 onChange={(e) => setPasteInput(e.target.value)}
-                placeholder="Wklej tutaj zawartość tabeli Power BI (np. 038	74820198	1,00	12	5	1	2	dyw century new 160x230cm...)"
+                placeholder="Wklej tutaj zawartość skopiowaną z Power BI (lub zaznaczony tekst z tabeli)..."
                 rows={4}
                 className="w-full text-xs font-mono p-2.5 rounded-xl border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
