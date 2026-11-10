@@ -35,7 +35,7 @@ export function Header({
 }: HeaderProps) {
   return (
     <header className="bg-white border-b border-gray-200 px-3 py-2 sm:px-6 sm:py-2.5 shadow-xs sticky top-0 z-30 transition-colors">
-      <div className="max-w-6xl mx-auto flex items-center justify-between gap-2 flex-nowrap">
+      <div className="max-w-6xl xl:max-w-7xl mx-auto flex items-center justify-between gap-2 flex-nowrap">
         {/* Brand left */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <LeroyMerlinLogo className="h-8 sm:h-11 shrink-0" />

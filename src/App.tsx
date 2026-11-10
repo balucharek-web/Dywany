@@ -1435,6 +1435,7 @@ export default function App() {
               onMoveProduct={handleOpenMoveModal}
               onOpenPowerBiAudit={() => setIsPowerBiAuditOpen(true)}
               pbiCount={powerBiItems.length}
+              onOpenScanner={() => setIsScannerModalOpen(true)}
             />
           </div>
         )}

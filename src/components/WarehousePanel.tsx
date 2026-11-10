@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Carpet, STORE_NUMBER, STORE_CITY } from '../types';
 import {
   Upload,
@@ -24,7 +24,9 @@ import {
   ExternalLink,
   BarChart3,
   LayoutList,
-  LayoutGrid
+  LayoutGrid,
+  Camera,
+  ArrowUp
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { formatDateTime, formatRelativeTime, getLeroyMerlinSearchUrl } from '../utils/formatters';
@@ -150,6 +152,7 @@ interface WarehousePanelProps {
   onMoveProduct?: (carpet: Carpet) => void;
   onOpenPowerBiAudit?: () => void;
   pbiCount?: number;
+  onOpenScanner?: () => void;
 }
 
 export function WarehousePanel({
@@ -170,13 +173,23 @@ export function WarehousePanel({
   onAddWarehouses,
   onMoveProduct,
   onOpenPowerBiAudit,
-  pbiCount
+  pbiCount,
+  onOpenScanner
 }: WarehousePanelProps) {
   const [filterQuery, setFilterQuery] = useState('');
   const [onlyEmpty, setOnlyEmpty] = useState(false);
   const [onlyNew, setOnlyNew] = useState(false);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | 'name' | 'date'>('asc');
   const [isToolsOpen, setIsToolsOpen] = useState(false);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 350);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Desktop view mode: 'horizontal' (slim wide row with Slot A and B side-by-side) or 'cards' (2-column bays)
   const [desktopViewMode, setDesktopViewMode] = useState<'horizontal' | 'cards'>(() => {
@@ -349,7 +362,7 @@ export function WarehousePanel({
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 flex flex-col gap-4 pb-12 sm:pb-8">
+    <div className="max-w-6xl xl:max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 flex flex-col gap-4 pb-20 sm:pb-12">
       {/* Sleek, Modern Control Bar: Works seamlessly on mobile and desktop without wrapping */}
       <div className="flex flex-col gap-2.5 print:hidden">
         {/* Row 1: Header + Action group */}
@@ -672,7 +685,7 @@ export function WarehousePanel({
                   desktopViewMode === 'horizontal' ? 'py-2 sm:py-2.5' : 'py-3'
                 } ${theme.headerBg} border-b ${theme.headerBorder} flex items-center justify-between gap-2`}
               >
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
                   <div className={`w-2.5 h-6 rounded-full ${theme.accentBar}`} />
                   <h2 className={`text-lg sm:text-xl font-black ${theme.titleText} tracking-tight`}>
                     Magazyn {bayNum}
@@ -684,6 +697,42 @@ export function WarehousePanel({
                   ) : (
                     <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200">
                       pusty
+                    </span>
+                  )}
+
+                  {/* Visual Capacity Gauge */}
+                  {bayCarpets.length >= 2 ? (
+                    <span
+                      className="hidden xs:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-100/90 text-emerald-800 border border-emerald-200 text-[10px] font-bold tracking-tight shadow-2xs"
+                      title="Regał w 100% zapełniony (oba ramiona A i B zajęte)"
+                    >
+                      <span className="flex items-center gap-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 inline-block" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 inline-block" />
+                      </span>
+                      <span>2/2 Pełny</span>
+                    </span>
+                  ) : bayCarpets.length === 1 ? (
+                    <span
+                      className="hidden xs:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-100/90 text-amber-900 border border-amber-300 text-[10px] font-bold tracking-tight shadow-2xs"
+                      title={`Wolny slot ${carpetA ? 'B' : 'A'} do zagospodarowania`}
+                    >
+                      <span className="flex items-center gap-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
+                        <span className="w-1.5 h-1.5 rounded-full border border-amber-500 bg-white inline-block" />
+                      </span>
+                      <span>1/2 Wolny {carpetA ? 'B' : 'A'}</span>
+                    </span>
+                  ) : (
+                    <span
+                      className="hidden xs:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 border border-gray-300 text-[10px] font-semibold tracking-tight shadow-2xs"
+                      title="Regał całkowicie pusty (wolne A i B)"
+                    >
+                      <span className="flex items-center gap-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full border border-gray-400 bg-white inline-block" />
+                        <span className="w-1.5 h-1.5 rounded-full border border-gray-400 bg-white inline-block" />
+                      </span>
+                      <span>0/2 Pusty</span>
                     </span>
                   )}
                 </div>
@@ -873,6 +922,32 @@ export function WarehousePanel({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Mobile Floating Action Button: Quick Barcode / Ref Scanner */}
+      {onOpenScanner && (
+        <button
+          onClick={onOpenScanner}
+          className="sm:hidden fixed bottom-5 right-4 z-30 flex items-center gap-2 px-4 py-3 rounded-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-black text-sm shadow-xl shadow-blue-600/35 active:scale-95 transition-all border-2 border-white cursor-pointer"
+          title="Szybki skaner kodów kreskowych"
+        >
+          <Camera className="w-5 h-5 text-white" />
+          <span>Skanuj</span>
+        </button>
+      )}
+
+      {/* Floating Back to Top Button */}
+      {showScrollTop && (
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          className={`fixed z-30 flex items-center justify-center rounded-full bg-gray-900/90 hover:bg-black text-white shadow-lg backdrop-blur-xs transition-all active:scale-95 cursor-pointer border border-gray-700 ${
+            onOpenScanner ? 'bottom-20 right-4 sm:bottom-6 sm:right-6 w-10 h-10' : 'bottom-6 right-6 w-10 h-10'
+          }`}
+          title="Przewiń do góry"
+          aria-label="Przewiń do góry"
+        >
+          <ArrowUp className="w-5 h-5" />
+        </button>
       )}
     </div>
   );

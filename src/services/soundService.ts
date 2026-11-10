@@ -1,59 +1,66 @@
-/**
- * Centralized Industrial Audio & Haptic Feedback Engine
- * Optimized for retail warehouse and sales floor acoustics.
- */
+let globalAudioCtx: AudioContext | null = null;
+
+function getAudioContext(): AudioContext | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    if (!globalAudioCtx) {
+      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (AudioContextClass) {
+        globalAudioCtx = new AudioContextClass();
+      }
+    }
+    if (globalAudioCtx && globalAudioCtx.state === 'suspended') {
+      globalAudioCtx.resume().catch(() => {});
+    }
+    return globalAudioCtx;
+  } catch {
+    return null;
+  }
+}
 
 // Success Chime: 1760 Hz crisp resonant chime (penetrates store background noise)
 export function playSuccessChime() {
   try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const ctx = new AudioContextClass();
+    const ctx = getAudioContext();
+    if (!ctx) return;
 
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
     osc.type = 'sine';
     osc.frequency.setValueAtTime(1760, ctx.currentTime);
-    gain.gain.setValueAtTime(0.22, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.14);
+    osc.frequency.exponentialRampToValueAtTime(1980, ctx.currentTime + 0.08);
+
+    gain.gain.setValueAtTime(0.24, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
 
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start();
-    osc.stop(ctx.currentTime + 0.15);
-
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate([60, 40, 60]);
-    }
+    osc.stop(ctx.currentTime + 0.13);
   } catch (_) {}
 }
 
-// Warning / Error Alert: 440 Hz -> 330 Hz descending alert tone + distinct dual buzz
-// Used when: duplicate scan in inventory, out-of-stock item, move conflict, permission rejected
+// Warning / Error Alert: 440 Hz -> 310 Hz descending alert tone
 export function playWarningAlert() {
   try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const ctx = new AudioContextClass();
+    const ctx = getAudioContext();
+    if (!ctx) return;
 
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(440, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(310, ctx.currentTime + 0.22);
+    osc.frequency.exponentialRampToValueAtTime(310, ctx.currentTime + 0.20);
 
-    gain.gain.setValueAtTime(0.30, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.24);
+    gain.gain.setValueAtTime(0.28, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
 
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start();
-    osc.stop(ctx.currentTime + 0.25);
-
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate([120, 80, 120]);
-    }
+    osc.stop(ctx.currentTime + 0.23);
   } catch (_) {}
 }
+
