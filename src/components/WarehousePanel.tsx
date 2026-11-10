@@ -29,6 +29,7 @@ import {
 import * as XLSX from 'xlsx';
 import { formatDateTime, formatRelativeTime, getLeroyMerlinSearchUrl } from '../utils/formatters';
 import { WarehouseToolsModal } from './WarehouseToolsModal';
+import { Haptics } from '../utils/haptics';
 
 interface BayTheme {
   id: string;
@@ -898,6 +899,7 @@ function SlotCard({
 
   const handleCopy = (text: string, isEan: boolean) => {
     navigator.clipboard.writeText(text);
+    Haptics.copy();
     if (isEan) {
       setCopiedEan(true);
       setTimeout(() => setCopiedEan(false), 1500);

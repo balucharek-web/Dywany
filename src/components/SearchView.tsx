@@ -3,6 +3,7 @@ import { Carpet } from '../types';
 import { Search, Camera, FileText, MapPin, Tag, Barcode, Calendar, Copy, Check, Sparkles, HelpCircle, Database, CheckCircle2, ArrowLeftRight, ExternalLink } from 'lucide-react';
 import { formatRelativeTime, getLeroyMerlinSearchUrl } from '../utils/formatters';
 import { searchCatalog } from '../services/catalogService';
+import { Haptics } from '../utils/haptics';
 
 interface SearchViewProps {
   carpets: Carpet[];
@@ -173,6 +174,7 @@ export function SearchView({
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
+    Haptics.copy();
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 1500);
   };
@@ -206,13 +208,17 @@ export function SearchView({
           className="w-full pl-4 pr-20 py-3 sm:py-3.5 text-base sm:text-lg border-2 border-gray-900 rounded-2xl bg-white shadow-xs focus:ring-2 focus:ring-blue-600 focus:outline-hidden transition-all placeholder:text-gray-400 font-medium"
           autoFocus
         />
-        {searchQuery && (
+        {searchQuery ? (
           <button
             onClick={() => setSearchQuery('')}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 text-xs bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer"
           >
             Wyczyść
           </button>
+        ) : (
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[11px] font-mono font-semibold px-2 py-1 rounded-lg bg-gray-100 text-gray-500 border border-gray-200 pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+            Ctrl+K
+          </kbd>
         )}
       </div>
 

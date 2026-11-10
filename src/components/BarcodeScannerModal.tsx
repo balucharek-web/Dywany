@@ -4,6 +4,7 @@ import { scanImageData, setModuleArgs } from '@undecaf/zbar-wasm';
 import { decodeScanditWaveform } from '../services/scanditWaveformEngine';
 import { scanEslLabel } from '../services/eslScannerService';
 import { playSuccessChime, playWarningAlert } from '../services/soundService';
+import { Haptics } from '../utils/haptics';
 
 interface BarcodeScannerModalProps {
   isOpen: boolean;
@@ -325,6 +326,7 @@ export function BarcodeScannerModal({
       }
     } catch (_) {}
 
+    Haptics.success();
     onScanSuccess(cleanCode);
 
     if (!isContinuousModeRef.current) {
