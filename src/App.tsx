@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
 import {
   collection,
   onSnapshot,
@@ -129,6 +129,7 @@ export default function App() {
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
+  const authActionInProgressRef = useRef(false);
 
   // Modals state
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
@@ -503,6 +504,8 @@ export default function App() {
 
   // Google Sign-In
   const handleGoogleSignIn = async () => {
+    if (authActionInProgressRef.current) return;
+    authActionInProgressRef.current = true;
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
@@ -534,13 +537,16 @@ export default function App() {
         errCode === 'auth/popup-closed-by-user' ||
         errCode === 'auth/cancelled-popup-request' ||
         errMsg.includes('popup-closed-by-user') ||
-        errMsg.includes('cancelled-popup-request')
+        errMsg.includes('cancelled-popup-request') ||
+        errMsg.includes('Pending promise was never set')
       ) {
         // User closed or dismissed popup - graceful cancellation, no error
         return;
       }
       console.error('Google Sign In Error:', err);
       throw err;
+    } finally {
+      authActionInProgressRef.current = false;
     }
   };
 
@@ -554,9 +560,11 @@ export default function App() {
 
   // Switch account (sign out current and prompt account chooser immediately)
   const handleSwitchAccount = async () => {
+    if (authActionInProgressRef.current) return;
+    authActionInProgressRef.current = true;
     try {
-      await signOut(auth);
-      setCurrentUser(null);
+      // Direct call into signInWithPopup without prior async delay,
+      // relying on prompt: 'select_account' to show the Google account chooser immediately.
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
       if (!user || !user.email) {
@@ -586,13 +594,16 @@ export default function App() {
         errCode === 'auth/popup-closed-by-user' ||
         errCode === 'auth/cancelled-popup-request' ||
         errMsg.includes('popup-closed-by-user') ||
-        errMsg.includes('cancelled-popup-request')
+        errMsg.includes('cancelled-popup-request') ||
+        errMsg.includes('Pending promise was never set')
       ) {
-        // User closed popup peacefully
+        // User cancelled popup peacefully
         return;
       }
       console.warn('Switch account issue:', err);
       handleSetCurrentView('search');
+    } finally {
+      authActionInProgressRef.current = false;
     }
   };
 

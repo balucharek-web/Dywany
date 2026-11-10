@@ -93,7 +93,8 @@ export function LoginModal({
         errCode === 'auth/popup-closed-by-user' ||
         errCode === 'auth/cancelled-popup-request' ||
         errMsg.includes('popup-closed-by-user') ||
-        errMsg.includes('cancelled-popup-request')
+        errMsg.includes('cancelled-popup-request') ||
+        errMsg.includes('Pending promise was never set')
       ) {
         // User cancelled or closed the popup - benign action, not an application error
         return;
@@ -139,7 +140,8 @@ export function LoginModal({
         errCode === 'auth/popup-closed-by-user' ||
         errCode === 'auth/cancelled-popup-request' ||
         errMsg.includes('popup-closed-by-user') ||
-        errMsg.includes('cancelled-popup-request')
+        errMsg.includes('cancelled-popup-request') ||
+        errMsg.includes('Pending promise was never set')
       ) {
         return;
       }

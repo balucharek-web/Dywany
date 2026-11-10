@@ -35,6 +35,30 @@ googleProvider.setCustomParameters({
   prompt: 'select_account'
 });
 
+// Suppress known internal Firebase Auth SDK popup race assertions when popups are closed or timed out
+if (typeof window !== 'undefined') {
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason;
+    const msg = reason?.message || String(reason || '');
+    if (
+      msg.includes('Pending promise was never set') ||
+      msg.includes('auth/popup-closed-by-user') ||
+      msg.includes('auth/cancelled-popup-request')
+    ) {
+      event.preventDefault();
+      event.stopImmediatePropagation?.();
+    }
+  });
+
+  window.addEventListener('error', (event) => {
+    const msg = event.message || String((event as any).error?.message || '');
+    if (msg.includes('Pending promise was never set')) {
+      event.preventDefault();
+      event.stopImmediatePropagation?.();
+    }
+  });
+}
+
 export enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
